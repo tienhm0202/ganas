@@ -27,6 +27,13 @@ export const ENFORCEMENT_RULES = [
 ] as const;
 export type EnforcementRule = (typeof ENFORCEMENT_RULES)[number];
 
+/**
+ * Tier model — dùng cho `config.models` (id thật cho từng tier) và
+ * `Task.model` (tier agent gán lúc chẻ task từ plan, xem `task.ts`).
+ */
+export const MODEL_TIER = ["main", "verifier", "scribe"] as const;
+export type ModelTier = (typeof MODEL_TIER)[number];
+
 export const zConfig = z.object({
   /** Phiên bản schema của .ganas/ — dùng cho migrate về sau. */
   version: z.literal(1).default(1),
@@ -37,12 +44,13 @@ export const zConfig = z.object({
   /** Ghi đè theo từng luật. Thiếu key ⇒ dùng `enforcement`. */
   enforcement_rules: z.record(z.enum(ENFORCEMENT_RULES), z.enum(ENFORCEMENT)).default({}),
 
+  /** Ba key phải khớp đúng `MODEL_TIER` — `Task.model` tham chiếu vào đây. */
   models: z
     .object({
       main: z.string().default("claude-opus-5"),
       verifier: z.string().default("claude-sonnet-5"),
       scribe: z.string().default("claude-haiku-4-5"),
-    })
+    } satisfies Record<ModelTier, z.ZodDefault<z.ZodString>>)
     .default({}),
 
   embedder: z

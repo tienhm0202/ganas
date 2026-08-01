@@ -220,12 +220,15 @@ export function renderBrief(input: BriefInput): string {
     );
   }
 
-  /* --- Kỹ năng --------------------------------------------------------- */
+  /* --- Kỹ năng + model gợi ý -------------------------------------------- */
 
-  if (t.skills.length > 0) {
-    parts.push(
-      `## Kỹ năng cần dùng cho task này\n\n${bullet(t.skills.map((s) => `\`/${s}\``))}`,
-    );
+  if (t.skills.length > 0 || t.model) {
+    const modelLine = t.model
+      ? `Gợi ý giao việc: model \`${graph.config.models[t.model]}\` (${t.model})`
+      : "";
+    const skillList = t.skills.length > 0 ? bullet(t.skills.map((s) => `\`/${s}\``)) : "";
+    const body = [modelLine, skillList].filter((s) => s.length > 0).join("\n\n");
+    parts.push(`## Kỹ năng cần dùng cho task này\n\n${body}`);
   }
 
   /* --- Điều kiện hoàn thành -------------------------------------------- */

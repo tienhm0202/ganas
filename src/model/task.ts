@@ -10,6 +10,7 @@ import {
   zNonEmpty,
   zExpect,
 } from "./common.js";
+import { MODEL_TIER } from "./config.js";
 
 export const TASK_STATUS = ["todo", "in_progress", "blocked", "done"] as const;
 
@@ -102,6 +103,14 @@ export const zTask = z
 
     /** Kỹ năng cần cho task — brief liệt kê để phiên mới biết nạp gì. */
     skills: z.array(zNonEmpty).default([]),
+
+    /**
+     * Tier model nên dùng khi giao task này (cho sub-agent hoặc phiên mới).
+     * Gán lúc chẻ task từ plan — quyết định của người/agent thiết kế, KHÔNG
+     * suy tự động từ module.nature (heuristic không đáng tin bằng người biết rõ
+     * việc). Không gán thì brief không gợi ý model nào — không đoán bừa.
+     */
+    model: z.enum(MODEL_TIER).optional(),
 
     /**
      * Khối trong sơ đồ mà task này chạm tới.

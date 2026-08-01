@@ -415,6 +415,89 @@ test("brief không có mục 'Khối chạm tới' khi task không touches gì",
   }
 });
 
+/* --- Task.model → brief gợi ý model (N10) ---------------------------------- */
+
+test("brief gợi ý model đã resolve khi task.model được gán", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        model: "verifier",
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.match(brief, /## Kỹ năng cần dùng cho task này/);
+    assert.match(brief, /Gợi ý giao việc: model `claude-sonnet-5` \(verifier\)/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("brief không nhắc gì tới model khi task.model không được gán", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.doesNotMatch(brief, /Gợi ý giao việc/);
+    assert.doesNotMatch(brief, /Kỹ năng cần dùng cho task này/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("brief vẫn liệt kê skills khi chỉ task.skills được gán, không có model", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        skills: ["gate"],
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.match(brief, /## Kỹ năng cần dùng cho task này/);
+    assert.match(brief, /`\/gate`/);
+    assert.doesNotMatch(brief, /Gợi ý giao việc/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
 test("eval dao động quanh ngưỡng thì brief cho thấy xu hướng điểm", async () => {
   const root = await makeProject({
     ".ganas/modules/M-a.yaml": `id: M-a

@@ -115,9 +115,61 @@ Mặc định dry-run (chỉ in kế hoạch); `--yes` mới thực thi. `--olde
 
 225 test pass (213 cũ + 12 mới, `test/prune.test.ts`).
 
-## Đang làm / tiếp theo
+**P2 N10 — chẻ plan (Claude Code Plan Mode) thành task, gán model ngay lúc
+chẻ.** Deliverable chính là một SKILL, không phải lệnh CLI — Plan Mode là
+tính năng của Claude Code, ganas không đọc file plan
+(`/root/.claude/plans/*.md` là nội bộ harness, không phải API ổn định);
+không cần đọc lại gì vì ngay sau khi duyệt qua `ExitPlanMode`, nội dung plan
+đã nằm sẵn trong context phiên. `plugin/skills/plan-to-tasks/SKILL.md`
+hướng dẫn agent: gắn vào Design có sẵn hoặc tạo mới, chẻ thành Task vừa một
+phiên, mỗi task khai đủ `touches`+`exit_contract` (dùng luật
+`task-missing-verification` đã có từ N7, không viết luật mới), **gán
+`model` NGAY LÚC CHẺ** — quyết định của agent lúc thiết kế, cố ý KHÔNG suy
+tự động từ `module.nature` (agent lúc đó hiểu độ khó rõ hơn heuristic nào
+suy sau), rồi chạy `ganas validate` (validator hiện có đã đủ bắt lỗi chẻ
+ẩu). Field mới `Task.model` (`src/model/task.ts`), optional, enum theo
+đúng 3 tier `config.yaml` đã có sẵn từ P1 nhưng chưa dùng ở đâu
+(`main`/`verifier`/`scribe`, gắn với `MODEL_TIER` export mới trong
+`config.ts` để hai chỗ không lệch nhau). `renderBrief()` resolve tier thành
+model id thật, in dòng "Gợi ý giao việc: model `<id>` (`<tier>`)" — không
+gán thì brief không gợi ý gì, không đoán bừa.
 
-### N10 — tiêu chuẩn code / test / document (chốt dựa trên nghiên cứu ngành)
+Implement bởi sub-agent (theo quy trình mới), review + verify lại ở phiên
+chính: đọc diff, `npm run typecheck`/test/build sạch, smoke test tay xác
+nhận cả hai chiều (model hợp lệ → brief gợi ý đúng; model sai → `ganas
+validate` bắt bằng `schema/invalid_enum_value`).
+
+231 test pass (225 cũ + 6 mới, `test/spine.test.ts` + `test/staleness.test.ts`).
+
+### N11 — skill đóng gói theo module, quyền sửa skill (main session có,
+sub-agent không)
+
+Xác nhận qua tài liệu Claude Code chính thức (2026-08-01):
+- Hook `PreToolUse`/`PostToolUse` chạy y hệt bên trong sub-agent
+  (`hooks.md`).
+- Khi tool call đến từ sub-agent, input hook có thêm `agent_id` (và
+  `agent_type`) — trường này CHỈ xuất hiện khi gọi từ sub-agent, main session
+  không có. Đây chính là móc để phân biệt.
+- Cơ chế khuyến nghị CHÍNH của Claude Code là giới hạn tool lúc spawn
+  (`tools`/`disallowedTools` trên định nghĩa sub-agent) — nhưng ganas không
+  spawn sub-agent nên không kiểm soát được bước đó. Hook-based là lớp phòng
+  vệ ganas TỰ làm được, không phụ thuộc người spawn có nhớ giới hạn tool hay
+  không.
+
+**Việc cần làm:**
+- `src/model/module.ts`: thêm `skills: z.array(zNonEmpty).default([])` —
+  ngang hàng `paths`/`entrypoints`/`contract`/`verify`. Mỗi khối tự khai kỹ
+  năng riêng cho nó (vd khối xử lý luật nội bộ AdFlex có skill mô tả cách
+  chunking riêng).
+- `src/render/brief.ts`: mục "Kỹ năng cần dùng cho task này" hiện chỉ đọc
+  `task.skills` — gộp thêm skill của mọi khối trong `task.touches`, dedupe.
+- `src/hooks/io.ts`: thêm field `agent_id?`/`agent_type?` vào `HookInput`.
+- `src/hooks/handlers.ts`: `preToolUse()` thêm rule — `input.agent_id` có
+  giá trị (tức đang chạy trong sub-agent) VÀ tool là Write/Edit/MultiEdit
+  VÀ file đích nằm dưới `.claude/skills/` → deny, kèm lý do "skill chỉ được
+  sửa bởi phiên chính". Main session (không có `agent_id`) không bị chặn.
+
+### N12 — tiêu chuẩn code / test / document (chốt dựa trên nghiên cứu ngành)
 
 Nghiên cứu: Anthropic "Building Effective Agents" / "Writing effective tools
 for agents" / "Effective context engineering" (đơn giản hơn phức tạp; lỗi
@@ -135,7 +187,7 @@ cụ thể — không suy đoán, để trống.
   `no-floating-promises` (code toàn async) và import order.
 - Chính thức hoá quy ước đang bất thành văn: không comment trừ khi giải
   thích WHY; docstring tiếng Việt; `.strict()` bắt buộc trên mọi zod object
-  mới. Ghi thành checklist trong N11, không chỉ nằm trong đầu người viết.
+  mới. Ghi thành checklist trong N13, không chỉ nằm trong đầu người viết.
 - Liệt kê chính thức bảng tiền tố ID (`G-`, `S-`, `D-`, `T-`, `P-`, `M-`,
   `F-`, `C-`/`LC-`, `V-`) — hiện rải rác trong từng file model.
 
@@ -145,7 +197,7 @@ cụ thể — không suy đoán, để trống.
   kiểm chứng — nơi một lỗ hổng nghĩa là bằng chứng giả lọt qua), KHÔNG bắt
   buộc cho `src/commands/` (I/O nhiều, integration/manual test quan trọng
   hơn coverage số).
-- Ghi nhận, KHÔNG bắt buộc ở N10: mutation testing (Stryker) cho chính bộ
+- Ghi nhận, KHÔNG bắt buộc ở N12: mutation testing (Stryker) cho chính bộ
   test của ganas — `verify/mutate.ts` đã áp triết lý này cho probe của
   NGƯỜI DÙNG ganas, nhưng chưa áp cho test suite của chính ganas.
 
@@ -153,7 +205,7 @@ cụ thể — không suy đoán, để trống.
 - Giữ nguyên triết lý hiện tại (`knowledgeRuleMd()`: không viết tổng kết văn
   xuôi, chỉ spine có cấu trúc) — đây chính là hướng SDD ngành đang hội tụ về,
   không cần đổi.
-- Mở (quyết định lúc thực thi N10, không chốt ở đây): có nên thắt
+- Mở (quyết định lúc thực thi N12, không chốt ở đây): có nên thắt
   `contract.inputs/outputs.shape` từ chuỗi tự do thành JSON Schema không —
   chặt hơn, máy kiểm được, nhưng phải sửa `trace.ts` và tăng độ khó viết YAML
   tay. Đổi ngay bây giờ phá vỡ N6 vừa xong nên KHÔNG làm trong đợt này.
@@ -171,7 +223,7 @@ cụ thể — không suy đoán, để trống.
   chạy, không chỉ kết quả cuối) — không cần đổi gì, chỉ xác nhận hướng đã
   chọn là đúng.
 
-### N11 — hướng dẫn sử dụng chi tiết (người đọc + AI đọc)
+### N13 — hướng dẫn sử dụng chi tiết (người đọc + AI đọc)
 
 Ganas hiện **không có tài liệu cấp cao nào** giải thích cách dùng — chỉ có
 template ngắn sinh cho dự án CONSUMER (`CLAUDE.md`/`AGENTS.md`/`README.md`,
@@ -179,9 +231,9 @@ cố ý ngắn để không tốn context mỗi phiên) và `SKILL.md` rải rá
 Không có nơi nào giải thích toàn cảnh: triết lý, mô hình xương sống, workflow
 đầu-cuối.
 
-Phân biệt rõ với các file đã có: N11 là tài liệu THAM CHIẾU ĐẦY ĐỦ (cho người
+Phân biệt rõ với các file đã có: N13 là tài liệu THAM CHIẾU ĐẦY ĐỦ (cho người
 tò mò đọc sâu, và cho AI cần hiểu toàn bộ hệ thống trước khi thao tác) — khác
-với `CLAUDE.md`/`SKILL.md` (cố ý ngắn, chỉ đường). N11 không thay thế các file
+với `CLAUDE.md`/`SKILL.md` (cố ý ngắn, chỉ đường). N13 không thay thế các file
 ngắn đó.
 
 **Cấu trúc đề xuất** (`docs/` ở gốc repo ganas):
@@ -198,10 +250,10 @@ ngắn đó.
   thẳng, không phải crawl HTML — nhiều tool (Cursor, Copilot, Claude) đã hỗ
   trợ đọc file này.
 - Cân nhắc: `docs/SCHEMA.md` sinh (không viết tay) từ `.describe()` đã có sẵn
-  trên nhiều field zod — tránh đúng rủi ro N10 vừa cảnh báo (doc và schema
+  trên nhiều field zod — tránh đúng rủi ro N12 vừa cảnh báo (doc và schema
   thật lệch nhau). Có thể là script nhỏ chạy trong CI.
 
-Trình tự: N10 nên đi trước N11 (hướng dẫn nên phản ánh tiêu chuẩn đã chốt,
+Trình tự: N12 nên đi trước N13 (hướng dẫn nên phản ánh tiêu chuẩn đã chốt,
 không phải ngược lại), nhưng cả hai độc lập với N7/N8/N9 — có thể xen vào bất
 cứ lúc nào.
 

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { check, validSpine, makeProject, cleanup, goal, sprint, design, task } from "./helpers.js";
 import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
+import { zTask } from "../src/model/index.js";
 
 test("graph hợp lệ không có lỗi", async () => {
   const { diagnostics } = await check(validSpine());
@@ -221,4 +222,35 @@ test(".gitignore thiếu MỘT trong hai dòng → lỗi chỉ nêu đúng dòng
   } finally {
     await cleanup(root);
   }
+});
+
+/* --- Schema của Task.model (N10) ------------------------------------------ */
+
+function minimalTaskInput(extra: Record<string, unknown> = {}) {
+  return {
+    id: "T-001",
+    title: "t",
+    serves: ["G-001"],
+    implements: "D-001",
+    sprint: "S-2026-08",
+    exit_contract: [{ kind: "command", run: "true" }],
+    ...extra,
+  };
+}
+
+test("task.model chấp nhận đúng ba tier main/verifier/scribe", () => {
+  for (const tier of ["main", "verifier", "scribe"] as const) {
+    const t = zTask.parse(minimalTaskInput({ model: tier }));
+    assert.equal(t.model, tier);
+  }
+});
+
+test("task.model từ chối giá trị không phải một trong ba tier", () => {
+  const parsed = zTask.safeParse(minimalTaskInput({ model: "not-a-tier" }));
+  assert.equal(parsed.success, false);
+});
+
+test("task.model vắng mặt vẫn hợp lệ — không gán thì thôi, không bắt buộc", () => {
+  const t = zTask.parse(minimalTaskInput());
+  assert.equal(t.model, undefined);
 });
