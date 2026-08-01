@@ -116,6 +116,14 @@ const LEDGER_REASON =
   `đừng ghi kết quả bằng tay. Nếu probe đang fail thì đó là thông tin cần giữ, không phải ` +
   `thứ cần che đi.`;
 
+const SKILL_DIR = `.claude/skills/`;
+
+const SKILL_WRITE_REASON =
+  `Sub-agent không được sửa skill trong \`${SKILL_DIR}\` — chỉ phiên chính mới được. ` +
+  `Skill định hình CÁCH làm việc; để sub-agent tự đổi nó giữa lúc chạy là mất kiểm soát, ` +
+  `phiên chính không biết nó đã đổi gì.\n\n` +
+  `Nhờ phiên chính sửa hộ nếu skill cần cập nhật.`;
+
 /**
  * Chặn **trước khi** ghi, không phải sau.
  *
@@ -133,6 +141,11 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
     if (typeof raw === "string") {
       const abs = isAbsolute(raw) ? raw : resolve(cwd, raw);
       if (abs === ledgerPath(root)) return denyPreTool(LEDGER_REASON);
+
+      if (input.agent_id) {
+        const rel = relative(root, abs).split("\\").join("/");
+        if (rel.startsWith(SKILL_DIR)) return denyPreTool(SKILL_WRITE_REASON);
+      }
     }
     return ALLOW;
   }

@@ -498,6 +498,129 @@ test("brief vẫn liệt kê skills khi chỉ task.skills được gán, không 
   }
 });
 
+/* --- Module.skills gộp vào brief qua touches (N11) -------------------------- */
+
+test("brief gộp skill của khối chạm tới dù task.skills rỗng", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/modules/M-a.yaml": `id: M-a
+title: "Khối luật nội bộ"
+nature: code
+paths: ["src/a/**"]
+status: implemented
+skills:
+  - adflex-legal-chunking
+verify:
+  - id: V-a-probe
+    kind: probe
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        touches: ["M-a"],
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.match(brief, /## Kỹ năng cần dùng cho task này/);
+    assert.match(brief, /`\/adflex-legal-chunking`/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("brief gộp skill trùng tên giữa task và khối chỉ hiện một lần", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/modules/M-a.yaml": `id: M-a
+title: "Khối luật nội bộ"
+nature: code
+paths: ["src/a/**"]
+status: implemented
+skills:
+  - adflex-legal-chunking
+verify:
+  - id: V-a-probe
+    kind: probe
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        skills: ["adflex-legal-chunking"],
+        touches: ["M-a"],
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    const occurrences = brief.match(/`\/adflex-legal-chunking`/g) ?? [];
+    assert.equal(occurrences.length, 1, "skill trùng giữa task và khối phải dedupe");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("brief không có mục 'Kỹ năng cần dùng' khi task và mọi khối chạm tới đều không có skills, không model", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/modules/M-a.yaml": `id: M-a
+title: "Khối trơn"
+nature: code
+paths: ["src/a/**"]
+status: implemented
+verify:
+  - id: V-a-probe
+    kind: probe
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        touches: ["M-a"],
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.doesNotMatch(brief, /## Kỹ năng cần dùng cho task này/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
 test("eval dao động quanh ngưỡng thì brief cho thấy xu hướng điểm", async () => {
   const root = await makeProject({
     ".ganas/modules/M-a.yaml": `id: M-a

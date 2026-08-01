@@ -141,33 +141,35 @@ validate` bắt bằng `schema/invalid_enum_value`).
 
 231 test pass (225 cũ + 6 mới, `test/spine.test.ts` + `test/staleness.test.ts`).
 
-### N11 — skill đóng gói theo module, quyền sửa skill (main session có,
-sub-agent không)
+**P2 N11 — skill đóng gói theo module, quyền sửa skill (main session có,
+sub-agent không).** Xác nhận qua tài liệu Claude Code chính thức: hook
+`PreToolUse` chạy y hệt bên trong sub-agent, và khi tool call đến từ
+sub-agent, input hook có thêm `agent_id`/`agent_type` — CHỈ xuất hiện khi
+gọi từ sub-agent, main session không có. Cơ chế khuyến nghị chính của
+Claude Code là giới hạn tool lúc spawn (`tools`/`disallowedTools`), nhưng
+ganas không spawn sub-agent nên không kiểm soát được bước đó — hook-based
+là lớp phòng vệ ganas TỰ làm được, không phụ thuộc người spawn có nhớ giới
+hạn tool hay không.
 
-Xác nhận qua tài liệu Claude Code chính thức (2026-08-01):
-- Hook `PreToolUse`/`PostToolUse` chạy y hệt bên trong sub-agent
-  (`hooks.md`).
-- Khi tool call đến từ sub-agent, input hook có thêm `agent_id` (và
-  `agent_type`) — trường này CHỈ xuất hiện khi gọi từ sub-agent, main session
-  không có. Đây chính là móc để phân biệt.
-- Cơ chế khuyến nghị CHÍNH của Claude Code là giới hạn tool lúc spawn
-  (`tools`/`disallowedTools` trên định nghĩa sub-agent) — nhưng ganas không
-  spawn sub-agent nên không kiểm soát được bước đó. Hook-based là lớp phòng
-  vệ ganas TỰ làm được, không phụ thuộc người spawn có nhớ giới hạn tool hay
-  không.
+- `src/model/module.ts`: `skills: z.array(zNonEmpty).default([])` — ngang
+  hàng `paths`/`entrypoints`/`contract`/`verify`. Gán MỘT LẦN lúc
+  khảo sát/định nghĩa khối, không phải lúc chẻ task (khác `task.model` của
+  N10 — đó là quyết định per-task).
+- `src/render/brief.ts`: mục "Kỹ năng cần dùng cho task này" gộp
+  `task.skills` với skill của mọi khối trong `task.touches` (qua `Set`,
+  dedupe — skill trùng tên giữa task và khối chỉ hiện một lần).
+- `src/hooks/io.ts` + `src/hooks/handlers.ts`: `preToolUse()` — có
+  `input.agent_id` (đang chạy trong sub-agent) VÀ tool thuộc `WRITE_TOOLS`
+  VÀ file đích nằm dưới `.claude/skills/` → deny. Main session (không có
+  `agent_id`) không bị chặn.
 
-**Việc cần làm:**
-- `src/model/module.ts`: thêm `skills: z.array(zNonEmpty).default([])` —
-  ngang hàng `paths`/`entrypoints`/`contract`/`verify`. Mỗi khối tự khai kỹ
-  năng riêng cho nó (vd khối xử lý luật nội bộ AdFlex có skill mô tả cách
-  chunking riêng).
-- `src/render/brief.ts`: mục "Kỹ năng cần dùng cho task này" hiện chỉ đọc
-  `task.skills` — gộp thêm skill của mọi khối trong `task.touches`, dedupe.
-- `src/hooks/io.ts`: thêm field `agent_id?`/`agent_type?` vào `HookInput`.
-- `src/hooks/handlers.ts`: `preToolUse()` thêm rule — `input.agent_id` có
-  giá trị (tức đang chạy trong sub-agent) VÀ tool là Write/Edit/MultiEdit
-  VÀ file đích nằm dưới `.claude/skills/` → deny, kèm lý do "skill chỉ được
-  sửa bởi phiên chính". Main session (không có `agent_id`) không bị chặn.
+Implement bởi sub-agent, review + verify lại ở phiên chính: đọc diff,
+typecheck/test/build sạch, smoke test tay xác nhận cả brief gộp đúng skill
+của khối VÀ hook chặn đúng — gọi trực tiếp `ganas hook pre-tool-use` với
+`agent_id` giả lập, xác nhận deny; gọi lại không có `agent_id`, xác nhận
+cho qua.
+
+240 test pass (231 cũ + 9 mới).
 
 ### N12 — tiêu chuẩn code / test / document (chốt dựa trên nghiên cứu ngành)
 

@@ -23,6 +23,9 @@ export interface HookInput {
   stop_hook_active?: boolean;
   last_assistant_message?: string;
   stop_reason?: string;
+  /** Chỉ có khi tool call đến từ sub-agent — main session không có field này. */
+  agent_id?: string;
+  agent_type?: string;
   [key: string]: unknown;
 }
 

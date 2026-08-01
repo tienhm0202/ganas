@@ -64,6 +64,14 @@ export const zModule = z
     /** Rỗng ⇒ khối `unverified` ⇒ mọi luồng đi qua nó đều không tin được. */
     verify: z.array(zVerification).default([]),
 
+    /**
+     * Kỹ năng gắn với khối — mô tả cách làm việc trong vùng code này (quy ước
+     * riêng, cách chunking riêng, v.v.). Gán một lần khi khảo sát/định nghĩa
+     * khối, không phải lúc chẻ task — mọi task chạm khối này tự động thấy skill
+     * qua brief, không cần khai lại.
+     */
+    skills: z.array(zNonEmpty).default([]),
+
     notes: z.string().optional(),
   })
   .strict()

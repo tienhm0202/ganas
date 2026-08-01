@@ -227,6 +227,74 @@ test("ghi vào file .ganas khác thì PreToolUse không đụng vào", async () 
   }
 });
 
+/* --- Hook PreToolUse chặn sub-agent sửa skill (N11) ------------------------ */
+
+test("sub-agent ghi vào .claude/skills/ bằng Write → DENY", async () => {
+  const root = await emptyProject();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: ".claude/skills/foo/SKILL.md" },
+      agent_id: "sub-1",
+    });
+    const h = out.hookSpecificOutput as Record<string, string>;
+    assert.equal(h["permissionDecision"], "deny");
+    assert.match(h["permissionDecisionReason"]!, /sub-agent/i);
+    assert.match(h["permissionDecisionReason"]!, /skill/i);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("main session (không có agent_id) ghi vào .claude/skills/ thì cho qua", async () => {
+  const root = await emptyProject();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: ".claude/skills/foo/SKILL.md" },
+    });
+    assert.deepEqual(out, {}, "chỉ sub-agent bị chặn, phiên chính vẫn sửa skill được");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("sub-agent ghi file NGOÀI .claude/skills/ thì không bị chặn", async () => {
+  const root = await emptyProject();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: "src/foo.ts" },
+      agent_id: "sub-1",
+    });
+    assert.deepEqual(out, {}, "guard chỉ chặn skill, không chặn mọi ghi của sub-agent");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("sub-agent sửa skill bằng Edit (không chỉ Write) cũng bị chặn", async () => {
+  const root = await emptyProject();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Edit",
+      tool_input: { file_path: ".claude/skills/foo/SKILL.md" },
+      agent_id: "sub-1",
+    });
+    assert.equal(
+      (out.hookSpecificOutput as Record<string, string>)["permissionDecision"],
+      "deny",
+      "guard phải bao trùm mọi tool trong WRITE_TOOLS, không riêng Write",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
 /* --- Vân tay định nghĩa ---------------------------------------------------- */
 
 test("definitionHash ổn định với thứ tự field khác nhau", () => {

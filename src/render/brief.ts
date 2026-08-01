@@ -222,11 +222,18 @@ export function renderBrief(input: BriefInput): string {
 
   /* --- Kỹ năng + model gợi ý -------------------------------------------- */
 
-  if (t.skills.length > 0 || t.model) {
+  const skillSet = new Set(t.skills);
+  for (const moduleId of t.touches) {
+    const mod = graph.modules.get(moduleId)?.value;
+    if (!mod) continue;
+    for (const s of mod.skills) skillSet.add(s);
+  }
+
+  if (skillSet.size > 0 || t.model) {
     const modelLine = t.model
       ? `Gợi ý giao việc: model \`${graph.config.models[t.model]}\` (${t.model})`
       : "";
-    const skillList = t.skills.length > 0 ? bullet(t.skills.map((s) => `\`/${s}\``)) : "";
+    const skillList = skillSet.size > 0 ? bullet([...skillSet].map((s) => `\`/${s}\``)) : "";
     const body = [modelLine, skillList].filter((s) => s.length > 0).join("\n\n");
     parts.push(`## Kỹ năng cần dùng cho task này\n\n${body}`);
   }

@@ -339,3 +339,20 @@ test("version phải theo semver", () => {
   assert.equal(zPart.safeParse({ ...base, version: "0.1.0" }).success, true);
   assert.equal(zPart.safeParse({ ...base, version: "v1" }).success, false);
 });
+
+/* --- Module.skills (N11) ---------------------------------------------------- */
+
+test("Module.skills mặc định rỗng khi không khai", () => {
+  const m = zModule.parse({ id: "M-a", title: "t", nature: "code" });
+  assert.deepEqual(m.skills, []);
+});
+
+test("Module.skills nhận mảng chuỗi", () => {
+  const m = zModule.parse({
+    id: "M-a",
+    title: "t",
+    nature: "code",
+    skills: ["adflex-legal-chunking", "another-skill"],
+  });
+  assert.deepEqual(m.skills, ["adflex-legal-chunking", "another-skill"]);
+});
