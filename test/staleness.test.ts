@@ -776,3 +776,39 @@ test("cảnh báo độ dài nằm TRƯỚC phần biến động, không bị �
     await cleanup(root);
   }
 });
+
+/* --- exit_contract kind verification phải hiện trong "Điều kiện hoàn thành" ----- */
+
+test("brief liệt kê tiêu chí kind verification trong Điều kiện hoàn thành, không âm thầm bỏ sót", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        exit_contract: [
+          { kind: "command", run: "true" },
+          { kind: "verification", target: "M-intent/V-intent-eval" },
+        ],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.match(brief, /## Điều kiện hoàn thành/);
+    assert.match(
+      brief,
+      /bằng chứng `M-intent\/V-intent-eval`/,
+      "tiêu chí kind: verification (thêm ở N7) từng bị switch trong brief.ts bỏ sót hoàn toàn",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});

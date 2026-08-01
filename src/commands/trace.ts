@@ -64,7 +64,7 @@ export async function run(argv: Argv): Promise<number> {
     process.stdout.write("\n");
   }
 
-  if (!flag(argv, "no-diagram")) {
+  if (argv.flags["diagram"] !== false) {
     const edgeResults = new Map(
       checks.map((c) => [`${c.edge.from}/${c.edge.verificationId}`, c.result] as const),
     );

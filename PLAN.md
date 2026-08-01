@@ -282,39 +282,58 @@ sau khi cả ba xong, chạy lại toàn bộ verification.
 249 test pass (242 gốc N12 + 3 ADR + 3 ngưỡng brief + 1 do `c8` chạy khác
 lượt — `npm test` thường 248, `test:coverage` 249).
 
-### N13 — hướng dẫn sử dụng chi tiết (người đọc + AI đọc)
+### N13 — hướng dẫn sử dụng chi tiết (người đọc + AI đọc) — ✅ ĐÃ XONG
 
-Ganas hiện **không có tài liệu cấp cao nào** giải thích cách dùng — chỉ có
-template ngắn sinh cho dự án CONSUMER (`CLAUDE.md`/`AGENTS.md`/`README.md`,
-cố ý ngắn để không tốn context mỗi phiên) và `SKILL.md` rải rác theo lệnh.
-Không có nơi nào giải thích toàn cảnh: triết lý, mô hình xương sống, workflow
-đầu-cuối.
+`docs/` (mới, gốc repo) + `llms.txt`, phân biệt rõ với `CLAUDE.md`/`SKILL.md`
+(cố ý ngắn, chỉ đường) và `CONTRIBUTING.md` (cho người SỬA CODE ganas, không
+phải người DÙNG ganas):
 
-Phân biệt rõ với các file đã có: N13 là tài liệu THAM CHIẾU ĐẦY ĐỦ (cho người
-tò mò đọc sâu, và cho AI cần hiểu toàn bộ hệ thống trước khi thao tác) — khác
-với `CLAUDE.md`/`SKILL.md` (cố ý ngắn, chỉ đường). N13 không thay thế các file
-ngắn đó.
+- **`docs/CONCEPTS.md`** (503 dòng) — tham chiếu đầy đủ mô hình dữ liệu:
+  xương sống Goal→Design→Task, sơ đồ khối Part/Module/Verification,
+  Fact/Claim/Decision, sổ cái (`defHash` vs vân tay đối tượng đo), bảng đầy
+  đủ 11 trạng thái Freshness theo đúng thứ tự ưu tiên thật của `decide()`,
+  sơ đồ quan hệ mermaid. Mọi khẳng định đối chiếu trực tiếp với source lúc
+  viết, không suy đoán.
+- **`docs/COMMANDS.md`** (381 dòng) + **`test/cli-help.test.ts`** (6 test,
+  chống lệch) — tham chiếu đầy đủ cả 11 lệnh CLI, mọi flag (trích trực tiếp
+  từ từng `option()`/`flag()` trong `src/commands/*.ts`, không đoán theo quy
+  ước CLI thường thấy), mã thoát. Phát hiện phụ: `--root <path>` là flag
+  thật (dùng nội bộ cho test gọi `run()` trực tiếp) nhưng không có trong
+  `--help` — ghi rõ là chi tiết triển khai, không phải giao diện công khai.
+- **`docs/WORKFLOW.md`** (553 dòng) — "một ngày làm việc" đầu-cuối
+  (webhook thanh toán làm ví dụ), **mọi YAML/lệnh/output đã chạy thật**
+  trong thư mục scratch (`ganas init` → `git init` → ... → `ganas commit`
+  thật) khi viết tài liệu, không viết theo trí nhớ.
+- **`llms.txt`** (gốc repo) — theo đúng chuẩn (Jeremy Howard/Answer.AI,
+  2024): tóm một câu + link tới từng file trong `docs/`, cộng mục "Optional"
+  trỏ `CONTRIBUTING.md`/`PLAN.md`.
+- `docs/SCHEMA.md` (sinh tự động từ `.describe()`) — **không làm**, đúng như
+  "cân nhắc" ban đầu, không phải cam kết.
 
-**Cấu trúc đề xuất** (`docs/` ở gốc repo ganas):
-- `docs/CONCEPTS.md` — mô hình xương sống bằng prose: Goal → Design → Task →
-  Module/Part, Fact/Claim/Decision, ledger, freshness. Có sơ đồ mermaid.
-- `docs/COMMANDS.md` — reference đầy đủ từng lệnh CLI. Nên có test đối chiếu
-  với `HELP`/`COMMANDS` trong `src/cli.ts` để không lệch (chuẩn SDD: một
-  nguồn sự thật, không hai bản copy rồi trôi dạt nhau).
-- `docs/WORKFLOW.md` — "một ngày làm việc" đầu-cuối: init → viết
-  goal/design/task → session mở (brief) → sửa code → verify → trace → gate →
-  done. Có ví dụ YAML thật, chạy được.
-- `llms.txt` ở gốc repo — theo đúng chuẩn (Jeremy Howard/Answer.AI, 2024):
-  mỗi mục trong `docs/` tóm một câu + link. Đây là phần dành RIÊNG cho AI đọc
-  thẳng, không phải crawl HTML — nhiều tool (Cursor, Copilot, Claude) đã hỗ
-  trợ đọc file này.
-- Cân nhắc: `docs/SCHEMA.md` sinh (không viết tay) từ `.describe()` đã có sẵn
-  trên nhiều field zod — tránh đúng rủi ro N12 vừa cảnh báo (doc và schema
-  thật lệch nhau). Có thể là script nhỏ chạy trong CI.
+**Hai lỗi thật được phát hiện NHỜ quá trình viết doc có kiểm chứng** (đúng
+tinh thần "doc phải chạy được, không suy đoán" mà chính ganas áp cho người
+dùng nó) — cả hai đã sửa, kèm test hồi quy:
+1. `ganas trace --no-diagram` không có tác dụng gì — `args.ts` diễn dịch
+   `--no-X` thành `flags.X = false`, nhưng `trace.ts` lại check
+   `flag(argv, "no-diagram")` (tên field sai, không bao giờ khớp). Sửa thành
+   `argv.flags["diagram"] !== false`, khớp đúng pattern `brief.ts`/`next.ts`/
+   `verify.ts` đã dùng cho `--no-volatile`/`--no-mutation`.
+2. Brief hoàn toàn bỏ sót tiêu chí `exit_contract` kind `verification` khỏi
+   mục "Điều kiện hoàn thành" — `switch (c.kind)` trong `brief.ts` thiếu
+   case này từ khi N7 thêm kind mới, không có exhaustiveness check nên
+   TypeScript không bắt được lúc đó. Thêm case còn thiếu, cộng
+   `default: c satisfies never` để lớp lỗi này KHÔNG lặp lại — thêm kind mới
+   vào `ExitCriterion` mà quên xử lý ở đây giờ là lỗi biên dịch, không phải
+   một gap âm thầm chờ ai đó đọc kỹ mới thấy.
 
-Trình tự: N12 nên đi trước N13 (hướng dẫn nên phản ánh tiêu chuẩn đã chốt,
-không phải ngược lại), nhưng cả hai độc lập với N7/N8/N9 — có thể xen vào bất
-cứ lúc nào.
+Implement bởi 3 sub-agent song song (`CONCEPTS.md`, `COMMANDS.md`+test,
+`WORKFLOW.md`), review từng cái ở phiên chính, phát hiện + sửa 2 bug trên
+trực tiếp ở phiên chính (không qua sub-agent — việc nhỏ, một-file), cập nhật
+lại đoạn `WORKFLOW.md` mô tả bug #2 cho khớp hành vi đã sửa (lấy output thật
+sau khi sửa, không sửa chay).
+
+256 test pass (248 N12 + 6 `cli-help.test.ts` + 1 `--no-diagram` + 1
+verification-trong-brief).
 
 ## Ghi chú cho phiên sau
 

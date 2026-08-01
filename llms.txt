@@ -1,0 +1,35 @@
+# ganas
+
+> Control layer cho các phiên Claude Code: xương sống Goal → Design → Task,
+> sơ đồ khối (Part/Module) làm bản đồ hệ thống, ba loại tri thức có bằng
+> chứng (Fact/Claim/Decision), sổ cái xác minh append-only, và hook cưỡng
+> chế các luật đó trong lúc agent làm việc. Mã nguồn và tài liệu bằng tiếng
+> Việt.
+
+Ganas giải quyết hai vấn đề của phiên agent kéo dài: mất ngữ cảnh giữa các
+lần mở lại, và agent "ảo giác" — tuyên bố đã kiểm chứng một điều mà thực ra
+chỉ suy diễn từ trí nhớ. Câu trả lời không phải tóm tắt tự do, mà là dữ liệu
+có cấu trúc cộng bằng chứng truy lại được (probe chạy thật, anchor trỏ vào
+file/commit/URL cụ thể, chữ ký người cho quyết định).
+
+## Docs
+
+- [docs/CONCEPTS.md](docs/CONCEPTS.md): Tham chiếu đầy đủ mô hình dữ liệu —
+  Goal/Design/Task, Part/Module/Verification, Fact/Claim/Decision, sổ cái,
+  11 trạng thái freshness, sơ đồ quan hệ mermaid. Đọc trước nếu cần hiểu
+  toàn cảnh trước khi thao tác.
+- [docs/COMMANDS.md](docs/COMMANDS.md): Tham chiếu đầy đủ CLI — mọi lệnh
+  (`init`, `validate`, `next`, `brief`, `gate`, `verify`, `trace`, `commit`,
+  `handoff`, `prune`, `hook`), từng cờ, mã thoát, ví dụ. Đối chiếu bằng test
+  (`test/cli-help.test.ts`) với `src/cli.ts` để không trôi dạt.
+- [docs/WORKFLOW.md](docs/WORKFLOW.md): Một luồng làm việc đầu-cuối, từng
+  bước, với YAML và output THẬT (đã chạy kiểm chứng, không viết theo trí
+  nhớ) — từ `ganas init` tới `ganas commit`.
+
+## Optional
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): Cho người/agent SỬA CODE ganas (khác
+  ba file trên — dành cho người DÙNG ganas). Quy ước comment, `.strict()`,
+  bảng tiền tố ID, luật `hint` bắt buộc, tooling, quy ước test.
+- [PLAN.md](PLAN.md): Roadmap phát triển ganas theo thời gian (N1–N13) —
+  lịch sử quyết định thiết kế, không phải tài liệu tham chiếu ổn định.

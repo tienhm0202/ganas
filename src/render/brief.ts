@@ -277,6 +277,15 @@ export function renderBrief(input: BriefInput): string {
       case "manual":
         manual.push(c.check);
         break;
+      case "verification":
+        auto.push(`bằng chứng \`${c.target}\``);
+        break;
+      default:
+        // Bắt buộc TS báo lỗi biên dịch nếu `ExitCriterion` thêm `kind` mới mà
+        // quên xử lý ở đây — đúng lỗi vừa xảy ra với `verification` (N7 thêm
+        // kind mới, switch này không được cập nhật, brief âm thầm bỏ sót tiêu
+        // chí mà không ai biết cho tới khi đọc kỹ).
+        c satisfies never;
     }
   }
 

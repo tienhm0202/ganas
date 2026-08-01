@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { run as ganasTrace } from "../src/commands/trace.js";
 import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
 import {
@@ -11,6 +12,22 @@ import {
   renderDiagram,
 } from "../src/graph/trace.js";
 import { cleanup, makeProject } from "./helpers.js";
+
+/** Bắt stdout của một lời gọi command run() — chưa có helper chung nào cho việc này. */
+async function captureStdout(fn: () => Promise<number>): Promise<{ code: number; out: string }> {
+  const original = process.stdout.write.bind(process.stdout);
+  let out = "";
+  process.stdout.write = (chunk: string) => {
+    out += chunk;
+    return true;
+  };
+  try {
+    const code = await fn();
+    return { code, out };
+  } finally {
+    process.stdout.write = original;
+  }
+}
 
 /* --- Bộ dựng khối có cổng --------------------------------------------------- */
 
@@ -274,6 +291,37 @@ test("recordEdgeChecks ghi sổ cái; freshness sau đó đọc lại đúng k�
     const graph2 = await loadGraph(root);
     const after = await computeFreshness(graph2);
     assert.equal(after.get("M-a/V-a-to-b")?.freshness, "fresh");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- CLI: --no-diagram ------------------------------------------------------------- */
+
+test("ganas trace --no-diagram bỏ khối mermaid; mặc định thì có", async () => {
+  const root = await makeProject({ ".ganas/modules/M-a.yaml": moduleYaml("M-a") });
+  try {
+    const withDiagram = await captureStdout(() =>
+      ganasTrace({ positional: [], options: { root }, flags: {}, passthrough: [] }),
+    );
+    assert.match(withDiagram.out, /```mermaid/);
+
+    // parseArgs() (src/util/args.ts) diễn dịch `--no-diagram` thành
+    // `flags.diagram = false`, KHÔNG phải `flags["no-diagram"] = true` — mô
+    // phỏng đúng shape thật, không phải đoán tên field.
+    const withoutDiagram = await captureStdout(() =>
+      ganasTrace({
+        positional: [],
+        options: { root },
+        flags: { diagram: false },
+        passthrough: [],
+      }),
+    );
+    assert.doesNotMatch(
+      withoutDiagram.out,
+      /```mermaid/,
+      "--no-diagram phải bỏ khối mermaid, không phải luôn in dù có cờ",
+    );
   } finally {
     await cleanup(root);
   }
