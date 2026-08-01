@@ -1,0 +1,163 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { check, validSpine, goal, sprint, design, task } from "./helpers.js";
+
+test("graph hợp lệ không có lỗi", async () => {
+  const { diagnostics } = await check(validSpine());
+  const errors = diagnostics.filter((d) => d.severity === "error");
+  assert.deepEqual(errors, [], `không mong đợi lỗi: ${JSON.stringify(errors, null, 2)}`);
+});
+
+test("design thiếu serves bị từ chối — đây là luật chặn '20 design trôi nổi'", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": `id: D-001
+title: "Design không neo vào đâu"
+summary: "..."
+status: active`,
+  });
+  const err = diagnostics.find((d) => d.severity === "error" && d.message.includes("serves"));
+  assert.ok(err, `phải báo lỗi thiếu serves, nhận được: ${JSON.stringify(diagnostics)}`);
+  assert.equal(err.file, ".ganas/designs/D-001.yaml");
+});
+
+test("design serves rỗng cũng bị từ chối", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": `id: D-001
+title: "Design serves rỗng"
+serves: []
+summary: "..."
+status: active`,
+  });
+  assert.ok(diagnostics.some((d) => d.severity === "error" && d.message.includes("serves")));
+});
+
+test("design trỏ vào goal không tồn tại → dangling ref có file:line", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design("D-001", ["G-099"]),
+  });
+  const err = diagnostics.find((d) => d.code === "spine/design-missing-goal");
+  assert.ok(err, "phải bắt được goal treo");
+  assert.match(err.message, /G-099/);
+  assert.equal(typeof err.line, "number", "diagnostic phải có số dòng để sửa được ngay");
+});
+
+test("goal thiếu tiêu chí nghiệm thu bị từ chối", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": `id: G-001
+title: "Mục tiêu không đo được"
+outcome: "Mọi thứ tốt hơn"
+acceptance: []
+status: draft`,
+  });
+  assert.ok(
+    diagnostics.some((d) => d.severity === "error" && d.message.includes("nghiệm thu")),
+    "goal không có tiêu chí kiểm chứng được thì không phải mục tiêu",
+  );
+});
+
+test("goal active mà chưa có người duyệt bị từ chối — model không được tự chốt mục tiêu", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": `id: G-001
+title: "Mục tiêu model tự đặt"
+outcome: "..."
+acceptance:
+  - id: A-1
+    kind: command
+    run: "true"
+status: active`,
+  });
+  const err = diagnostics.find((d) => d.message.includes("approved_by"));
+  assert.ok(err, `phải chặn goal active thiếu approved_by: ${JSON.stringify(diagnostics)}`);
+});
+
+test("goal draft chưa duyệt thì vẫn hợp lệ, chỉ cảnh báo khi có design phục vụ", async () => {
+  const { diagnostics, codes } = await check({
+    ".ganas/goals/G-001.yaml": `id: G-001
+title: "Mục tiêu nháp"
+outcome: "..."
+acceptance:
+  - id: A-1
+    kind: command
+    run: "true"
+status: draft`,
+    ".ganas/designs/D-001.yaml": design(),
+  });
+  assert.deepEqual(diagnostics.filter((d) => d.severity === "error"), []);
+  assert.ok(codes.includes("spine/design-serves-draft-goal"));
+});
+
+test("task phục vụ goal mà design của nó không phục vụ → spine đứt", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": goal("G-001"),
+    ".ganas/goals/G-002.yaml": goal("G-002"),
+    ".ganas/sprints/S-2026-08.yaml": sprint("S-2026-08", ["G-001", "G-002"]),
+    ".ganas/designs/D-001.yaml": design("D-001", ["G-001"]),
+    ".ganas/tasks/T-001.yaml": task("T-001", { serves: ["G-002"] }),
+  });
+  const err = diagnostics.find((d) => d.code === "spine/task-goal-not-in-design");
+  assert.ok(err, "task không được phục vụ goal mà design của nó không phục vụ");
+  assert.match(err.message, /G-002/);
+});
+
+test("task thiếu exit_contract bị từ chối — không có cách nào biết nó xong", async () => {
+  const files = validSpine();
+  files[".ganas/tasks/T-001.yaml"] = `id: T-001
+title: "Task không có điều kiện done"
+serves:
+  - G-001
+implements: D-001
+sprint: S-2026-08
+status: todo`;
+  const { diagnostics } = await check(files);
+  assert.ok(
+    diagnostics.some((d) => d.severity === "error" && d.message.includes("exit_contract")),
+  );
+});
+
+test("vòng lặp phụ thuộc giữa task bị bắt", async () => {
+  const files = validSpine();
+  files[".ganas/tasks/T-001.yaml"] = task("T-001", { extra: "blocked_by:\n  - T-002" });
+  files[".ganas/tasks/T-002.yaml"] = task("T-002", { extra: "blocked_by:\n  - T-001" });
+  const { diagnostics } = await check(files);
+  const err = diagnostics.find((d) => d.code === "spine/task-cycle");
+  assert.ok(err, "phải bắt được vòng lặp");
+  assert.match(err.message, /T-00\d → T-00\d/);
+});
+
+test("design mồ côi khi mọi goal nó phục vụ đã closed", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal("G-001", "closed_at: 2026-02-01T00:00:00Z").replace(
+      "status: active",
+      "status: closed",
+    ),
+    ".ganas/designs/D-001.yaml": design("D-001", ["G-001"]),
+  });
+  assert.ok(codes.includes("spine/design-orphaned"));
+});
+
+test("task ước lượng large bị cảnh báo phải chẻ nhỏ", async () => {
+  const files = validSpine();
+  files[".ganas/tasks/T-001.yaml"] = task("T-001", { extra: "estimated_context: large" });
+  const { codes } = await check(files);
+  assert.ok(codes.includes("spine/task-too-large"));
+});
+
+test("ID trùng giữa hai file bị bắt", async () => {
+  const files = validSpine();
+  files[".ganas/tasks/T-001-copy.yaml"] = task("T-001");
+  const { diagnostics } = await check(files);
+  const err = diagnostics.find((d) => d.code === "load/duplicate-id");
+  assert.ok(err, "cùng một ID ở hai file phải bị từ chối");
+});
+
+test("task trỏ sprint/design không tồn tại đều bị bắt", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/tasks/T-001.yaml": task("T-001", { implements: "D-999", sprint: "S-2099-01" }),
+  });
+  assert.ok(codes.includes("spine/task-missing-design"));
+  assert.ok(codes.includes("spine/task-missing-sprint"));
+});
