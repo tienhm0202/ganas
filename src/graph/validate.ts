@@ -329,6 +329,19 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       }
     });
 
+    m.verify.forEach((v, i) => {
+      if (v.kind === "contract" && !graph.modules.has(v.to)) {
+        diags.push({
+          severity: "error",
+          code: "spine/contract-missing-target",
+          message: `khối ${m.id} khai cạnh hợp đồng ${v.id} tới khối ${v.to} nhưng khối đó không tồn tại`,
+          file: module.file,
+          line: at(graph, module, "verify", i, "to"),
+          hint: `Sửa \`to\`, hoặc tạo khối ${v.to}. \`ganas trace\` sẽ không kiểm được cạnh này tới khi đó.`,
+        });
+      }
+    });
+
     if (m.verify.length === 0 && m.status !== "unmapped") {
       diags.push({
         severity: "warning",

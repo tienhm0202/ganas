@@ -17,6 +17,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   next: () => import("./commands/next.js"),
   gate: () => import("./commands/gate.js"),
   verify: () => import("./commands/verify.js"),
+  trace: () => import("./commands/trace.js"),
   hook: () => import("./commands/hook.js"),
 };
 
@@ -32,6 +33,7 @@ Lệnh:
   brief [task]         In brief của một task
   gate [task]          Chấm điều kiện hoàn thành của task
   verify [target...]   Chạy bằng chứng: probe và eval, ghi sổ cái
+  trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng
   hook <event>         Điểm vào cho hook Claude Code (đọc JSON ở stdin)
 
 Tuỳ chọn chung:

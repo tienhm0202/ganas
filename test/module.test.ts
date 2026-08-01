@@ -87,6 +87,24 @@ test("depends_on trỏ khối không tồn tại → lỗi", async () => {
   assert.ok(codes.includes("spine/module-missing-dependency"));
 });
 
+test("cạnh contract trỏ khối đích không tồn tại → lỗi", async () => {
+  const { diagnostics } = await check({
+    ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
+      part: null as never,
+      verify: `verify:
+  - id: V-a-probe
+    kind: probe
+    run: "true"
+  - id: V-a-to-ghost
+    kind: contract
+    to: M-ghost`,
+    }),
+  });
+  const err = diagnostics.find((d) => d.code === "spine/contract-missing-target");
+  assert.ok(err, JSON.stringify(diagnostics, null, 2));
+  assert.equal(typeof err.line, "number");
+});
+
 test("task chạm khối không tồn tại → lỗi", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
