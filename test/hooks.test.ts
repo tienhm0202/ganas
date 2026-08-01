@@ -8,6 +8,7 @@ import { loadGraph } from "../src/graph/load.js";
 import { computeFreshness } from "../src/graph/freshness.js";
 import { renderBrief } from "../src/render/brief.js";
 import { evaluateGate } from "../src/gate.js";
+import { runTarget, moduleTargets } from "../src/verify/run.js";
 
 /** Dự án đủ để hook chạy: spine hợp lệ + exit_contract mà ta điều khiển được. */
 async function project(over: Record<string, string> = {}, config?: string): Promise<string> {
@@ -258,14 +259,15 @@ exit_contract:
   try {
     const graph = await loadGraph(root);
     const t = graph.tasks.get("T-001")!.value;
+    const freshness = await computeFreshness(graph);
 
-    let result = await evaluateGate(graph, t);
+    let result = await evaluateGate(graph, t, freshness);
     assert.equal(result.ok, false);
     assert.match(result.unmet[0]!.reason!, /chưa tồn tại/);
 
     await mkdir(join(root, ".ganas", "facts"), { recursive: true });
     await writeFile(join(root, ".ganas", "facts", "accounting.yaml"), "- id: F-ACC-001\n", "utf8");
-    result = await evaluateGate(graph, t);
+    result = await evaluateGate(graph, t, freshness);
     assert.match(result.unmet[0]!.reason!, /chưa chứa/);
 
     await writeFile(
@@ -273,8 +275,78 @@ exit_contract:
       "- id: F-ACC-013\n",
       "utf8",
     );
-    result = await evaluateGate(graph, t);
+    result = await evaluateGate(graph, t, freshness);
     assert.equal(result.ok, true);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- Gate: tiêu chí verification ------------------------------------------- */
+
+test("gate: tiêu chí verification — chưa chạy thì fail, verify xong thì pass", async () => {
+  const root = await project({
+    ".ganas/modules/M-a.yaml": `id: M-a
+title: "Khối A"
+nature: code
+paths: ["src/a/**"]
+status: implemented
+verify:
+  - id: V-a-probe
+    kind: probe
+    run: "test -f src/a/index.ts"
+`,
+    ".ganas/tasks/T-001.yaml": `id: T-001
+title: "t"
+serves: [G-001]
+implements: D-001
+sprint: S-2026-08
+touches:
+  - M-a
+exit_contract:
+  - kind: verification
+    target: M-a/V-a-probe
+`,
+  });
+  try {
+    await mkdir(join(root, "src", "a"), { recursive: true });
+    await writeFile(join(root, "src", "a", "index.ts"), "export {};\n", "utf8");
+
+    let graph = await loadGraph(root);
+    let freshness = await computeFreshness(graph);
+    let result = await evaluateGate(graph, graph.tasks.get("T-001")!.value, freshness);
+    assert.equal(result.ok, false);
+    assert.match(result.unmet[0]!.reason!, /chưa chạy lần nào/);
+
+    await runTarget(moduleTargets(graph.modules.get("M-a")!)[0]!, { root, by: "test" });
+
+    graph = await loadGraph(root);
+    freshness = await computeFreshness(graph);
+    result = await evaluateGate(graph, graph.tasks.get("T-001")!.value, freshness);
+    assert.equal(result.ok, true, JSON.stringify(result.unmet, null, 2));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("gate: tiêu chí verification trỏ target không tồn tại → fail rõ ràng", async () => {
+  const root = await project({
+    ".ganas/tasks/T-001.yaml": `id: T-001
+title: "t"
+serves: [G-001]
+implements: D-001
+sprint: S-2026-08
+exit_contract:
+  - kind: verification
+    target: M-khong-co/V-x
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const result = await evaluateGate(graph, graph.tasks.get("T-001")!.value, freshness);
+    assert.equal(result.ok, false);
+    assert.match(result.unmet[0]!.reason!, /không tìm thấy/);
   } finally {
     await cleanup(root);
   }

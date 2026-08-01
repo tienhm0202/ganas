@@ -8,6 +8,8 @@
  *    sống suốt phiên.
  */
 
+import { LOCAL_ONLY } from "../graph/paths.js";
+
 export interface InitVars {
   project: string;
   owner?: string | undefined;
@@ -142,12 +144,8 @@ Trước khi commit: \`ganas validate\`.
 }
 
 export function gitignoreAddition(): string {
-  return `
-# ganas — trạng thái phiên, không chia sẻ giữa các máy
-.ganas/runs/
-.ganas/state.json
-.ganas/.cache/
-`;
+  const lines = LOCAL_ONLY.map((p) => `.ganas/${p}`).join("\n");
+  return `\n# ganas — trạng thái phiên, không chia sẻ giữa các máy\n${lines}\n`;
 }
 
 export function sampleGoal(id: string, v: InitVars): string {

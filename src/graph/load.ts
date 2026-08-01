@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { ZodIssue, ZodTypeAny, z } from "zod";
@@ -173,6 +173,9 @@ export async function loadGraph(root: string): Promise<Graph> {
 
   const ledger = indexByTarget(await readLedger(root));
 
+  const gitignoreFile = join(root, ".gitignore");
+  const gitignoreRaw = existsSync(gitignoreFile) ? await readFile(gitignoreFile, "utf8") : null;
+
   const [goals, sprints, designs, tasks, parts, modules, facts, claims, decisions] = await Promise.all([
     collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
     collectSingle(ganasPath(root, DIRS.sprints), zSprint, root, "sprint"),
@@ -203,6 +206,7 @@ export async function loadGraph(root: string): Promise<Graph> {
     claims: claims.items,
     decisions: decisions.items,
     ledger,
+    gitignoreRaw,
     sources: new Map([
       ...goals.sources,
       ...sprints.sources,

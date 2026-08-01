@@ -60,6 +60,8 @@ export interface Graph {
   ledger: Map<string, LedgerEntry[]>;
   /** Lỗi phát sinh ngay lúc nạp (YAML hỏng, sai schema, ID trùng). */
   loadDiagnostics: Diagnostic[];
+  /** Nội dung `.gitignore` ở gốc dự án, nếu có — dùng để đối chiếu `LOCAL_ONLY`. */
+  gitignoreRaw: string | null;
 }
 
 export function hasErrors(diags: readonly Diagnostic[]): boolean {

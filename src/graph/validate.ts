@@ -1,7 +1,11 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { lineOfPath } from "../util/yaml.js";
 import { freshnessOf, evalWeakness, formatAnchor } from "../model/index.js";
+import type { ExitCriterion } from "../model/index.js";
 import { lintProbe } from "../verify/lint.js";
 import { entryAt, defHash } from "../verify/ledger.js";
+import { LOCAL_ONLY } from "./paths.js";
 import type { Diagnostic, Graph, Sourced } from "./types.js";
 
 /**
@@ -227,14 +231,42 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       }
     });
 
+    const verifiedTargets = t.exit_contract
+      .filter((c): c is Extract<ExitCriterion, { kind: "verification" }> => c.kind === "verification")
+      .map((c) => c.target);
+
     t.touches.forEach((moduleId, i) => {
-      if (!graph.modules.has(moduleId)) {
+      const mod = graph.modules.get(moduleId);
+      if (!mod) {
         diags.push({
           severity: "error",
           code: "spine/task-missing-module",
           message: `task ${t.id} chạm khối ${moduleId} nhưng khối đó không tồn tại`,
           file: task.file,
           line: at(graph, task, "touches", i),
+        });
+        return;
+      }
+
+      // chạm khối mà không để lại tiêu chí kiểm chứng nào cho NÓ thì task
+      // "done" được mà chưa ai chạy `ganas verify` lên khối đó.
+      const covered = verifiedTargets.some(
+        (target) => target === moduleId || target.startsWith(`${moduleId}/`),
+      );
+      if (!covered) {
+        diags.push({
+          severity: "error",
+          code: "spine/task-missing-verification",
+          message:
+            `task ${t.id} chạm khối ${moduleId} nhưng \`exit_contract\` không có tiêu chí ` +
+            `\`kind: verification\` nào kiểm khối đó`,
+          file: task.file,
+          line: at(graph, task, "touches", i),
+          hint:
+            mod.value.verify.length > 0
+              ? `Thêm vào exit_contract: { kind: verification, target: "${moduleId}/${mod.value.verify[0]!.id}" }`
+              : `Khối ${moduleId} chưa có \`verify\` nào — thêm bằng chứng cho khối trước, ` +
+                `rồi trỏ exit_contract vào đó.`,
         });
       }
     });
@@ -608,6 +640,26 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         file: claim.file,
         line: at(graph, claim, "id"),
         hint: `Đây là một hiểu nhầm đã tồn tại trong dự án. Giữ lại để phiên sau không tin lại.`,
+      });
+    }
+  }
+
+  /* --- .gitignore: local-only phải được loại trừ ----------------------- */
+
+  // Dự án không dùng git thì "local vs shared qua git" vô nghĩa — bỏ qua,
+  // khớp hành vi `ensureGitignore()` lúc `ganas init`.
+  if (existsSync(join(graph.root, ".git"))) {
+    const lines = new Set((graph.gitignoreRaw ?? "").split("\n").map((l) => l.trim()));
+    const missing = LOCAL_ONLY.filter((p) => !lines.has(`.ganas/${p}`));
+    if (missing.length > 0) {
+      diags.push({
+        severity: "error",
+        code: "spine/gitignore-missing-local",
+        message:
+          `.gitignore thiếu ${missing.map((p) => `.ganas/${p}`).join(", ")} — trạng thái riêng ` +
+          `của máy có thể bị commit nhầm`,
+        file: ".gitignore",
+        hint: `Thêm các dòng trên vào .gitignore (hoặc chạy lại \`ganas init\` để tự bổ sung).`,
       });
     }
   }

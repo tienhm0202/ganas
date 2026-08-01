@@ -28,6 +28,16 @@ export const DIRS = {
 export const CONFIG_FILE = "config.yaml";
 export const STATE_FILE = "state.json";
 
+/**
+ * Đường dẫn trong `.ganas/` CHỈ thuộc một máy, một lúc — không commit.
+ *
+ * Nguồn duy nhất: `gitignoreAddition()` (templates/project.ts) sinh
+ * `.gitignore` từ đây, và validator (`spine/gitignore-missing-local`) đối
+ * chiếu lại `.gitignore` thật với đúng danh sách này. Trước đây hai chỗ khai
+ * độc lập, dễ lệch nhau mà không ai biết.
+ */
+export const LOCAL_ONLY: readonly string[] = [`${DIRS.runs}/`, STATE_FILE];
+
 /** Đi ngược lên tìm thư mục chứa .ganas/. Trả về null nếu không có. */
 export function findGanasRoot(from = process.cwd()): string | null {
   let dir = resolve(from);

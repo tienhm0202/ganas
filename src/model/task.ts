@@ -63,11 +63,25 @@ const zExitManual = z.object({
   check: zNonEmpty,
 });
 
+/**
+ * Đòi một target trong sổ cái phải FRESH (chạy thật, còn tươi) — không phải
+ * chỉ "chạy một lệnh nào đó thoát mã 0". Đây là cầu nối giữa `touches` (khối
+ * nào task này chạm) và bằng chứng thật của khối đó; không có tiêu chí này
+ * thì task chạm khối xong vẫn "done" được mà không ai chạy `ganas verify`.
+ */
+const zExitVerification = z.object({
+  kind: z.literal("verification"),
+  target: zNonEmpty.describe(
+    "id target trong sổ cái, vd `M-intent/V-intent-eval` (bằng chứng của khối) hoặc `F-ACC-001` (fact)",
+  ),
+});
+
 export const zExitCriterion = z.discriminatedUnion("kind", [
   zExitCommand,
   zExitArtifact,
   zExitHandoff,
   zExitManual,
+  zExitVerification,
 ]);
 
 export type ExitCriterion = z.infer<typeof zExitCriterion>;

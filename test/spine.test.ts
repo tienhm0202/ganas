@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { check, validSpine, goal, sprint, design, task } from "./helpers.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { check, validSpine, makeProject, cleanup, goal, sprint, design, task } from "./helpers.js";
+import { loadGraph } from "../src/graph/load.js";
+import { validateGraph } from "../src/graph/validate.js";
 
 test("graph hợp lệ không có lỗi", async () => {
   const { diagnostics } = await check(validSpine());
@@ -160,4 +164,61 @@ test("task trỏ sprint/design không tồn tại đều bị bắt", async () =
   });
   assert.ok(codes.includes("spine/task-missing-design"));
   assert.ok(codes.includes("spine/task-missing-sprint"));
+});
+
+/* --- .gitignore: local-only phải được loại trừ ---------------------------- */
+
+async function projectWithGit(gitignore?: string): Promise<string> {
+  const root = await makeProject(validSpine());
+  await mkdir(join(root, ".git"), { recursive: true });
+  if (gitignore !== undefined) await writeFile(join(root, ".gitignore"), gitignore, "utf8");
+  return root;
+}
+
+test("không có .git thì không kiểm .gitignore — luật vô nghĩa với dự án không dùng git", async () => {
+  const root = await makeProject(validSpine());
+  try {
+    const graph = await loadGraph(root);
+    const codes = validateGraph(graph).map((d) => d.code);
+    assert.ok(!codes.includes("spine/gitignore-missing-local"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("có .git nhưng chưa có .gitignore → lỗi liệt kê đủ mục local-only", async () => {
+  const root = await projectWithGit();
+  try {
+    const graph = await loadGraph(root);
+    const err = validateGraph(graph).find((d) => d.code === "spine/gitignore-missing-local");
+    assert.ok(err, "thiếu .gitignore thì trạng thái riêng của máy có thể bị commit nhầm");
+    assert.match(err.message, /\.ganas\/runs\//);
+    assert.match(err.message, /\.ganas\/state\.json/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test(".gitignore đủ hai dòng local-only → không lỗi", async () => {
+  const root = await projectWithGit(".ganas/runs/\n.ganas/state.json\n");
+  try {
+    const graph = await loadGraph(root);
+    const codes = validateGraph(graph).map((d) => d.code);
+    assert.ok(!codes.includes("spine/gitignore-missing-local"), JSON.stringify(codes));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test(".gitignore thiếu MỘT trong hai dòng → lỗi chỉ nêu đúng dòng thiếu", async () => {
+  const root = await projectWithGit(".ganas/runs/\n");
+  try {
+    const graph = await loadGraph(root);
+    const err = validateGraph(graph).find((d) => d.code === "spine/gitignore-missing-local");
+    assert.ok(err);
+    assert.doesNotMatch(err.message, /\.ganas\/runs\//);
+    assert.match(err.message, /\.ganas\/state\.json/);
+  } finally {
+    await cleanup(root);
+  }
 });

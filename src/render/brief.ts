@@ -119,6 +119,23 @@ export function renderBrief(input: BriefInput): string {
     parts.push(`## Phải đọc trước khi sửa gì\n\n${bullet(items)}`);
   }
 
+  /* --- Khối chạm tới: suy từ sơ đồ, không phải tay khai ----------------- */
+
+  if (t.touches.length > 0) {
+    const items = t.touches.map((moduleId) => {
+      const mod = graph.modules.get(moduleId)?.value;
+      if (!mod) return `\`${moduleId}\` — ⚠ **KHÔNG TÌM THẤY** trong sơ đồ khối`;
+      const locations = [...mod.paths, ...mod.entrypoints];
+      return (
+        `\`${moduleId}\` — ${mod.title}` +
+        (locations.length
+          ? `\n  ${locations.map((p) => `\`${p}\``).join(", ")}`
+          : "\n  (chưa khai paths/entrypoints)")
+      );
+    });
+    parts.push(`## Khối chạm tới (suy từ sơ đồ)\n\n${bullet(items)}`);
+  }
+
   /* --- Tri thức: ba mục tách bạch --------------------------------------- */
 
   const usable: string[] = [];

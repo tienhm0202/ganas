@@ -5,7 +5,7 @@ import { taskForSession } from "../state.js";
 import { openProject } from "./_common.js";
 
 export async function run(argv: Argv): Promise<number> {
-  const { root, graph } = await openProject(argv);
+  const { root, graph, freshness } = await openProject(argv);
 
   const sessionId = option(argv, "session");
   const taskId =
@@ -16,7 +16,7 @@ export async function run(argv: Argv): Promise<number> {
   const task = graph.tasks.get(taskId);
   if (!task) throw new GanasError(`không có task ${taskId}`);
 
-  const result = await evaluateGate(graph, task.value, sessionId);
+  const result = await evaluateGate(graph, task.value, freshness, sessionId);
 
   if (flag(argv, "json")) {
     process.stdout.write(

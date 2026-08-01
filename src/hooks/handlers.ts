@@ -211,7 +211,8 @@ export async function stop(input: HookInput): Promise<HookOutput> {
   const task = graph.tasks.get(taskId);
   if (!task) return ALLOW;
 
-  const result = await evaluateGate(graph, task.value, input.session_id);
+  const freshness = await computeFreshness(graph);
+  const result = await evaluateGate(graph, task.value, freshness, input.session_id);
   if (result.ok && result.pendingHuman.length === 0) return ALLOW;
 
   const unmetText = result.unmet

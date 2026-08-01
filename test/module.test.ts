@@ -115,6 +115,83 @@ test("task chạm khối không tồn tại → lỗi", async () => {
   assert.ok(codes.includes("spine/task-missing-module"));
 });
 
+/* --- Nợ kiểm chứng ở mức task ------------------------------------------- */
+
+function taskTouching(moduleId: string, exitContract: string): string {
+  return `id: T-001
+title: "t"
+serves:
+  - G-001
+implements: D-001
+sprint: S-2026-08
+status: todo
+touches:
+  - ${moduleId}
+exit_contract:
+${exitContract}
+`;
+}
+
+test("task chạm khối mà exit_contract không có tiêu chí verification → lỗi", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/modules/M-a.yaml": moduleYaml("M-a", { part: null as never }),
+    ".ganas/tasks/T-001.yaml": taskTouching("M-a", `  - kind: command\n    run: "true"`),
+  });
+  const err = diagnostics.find((d) => d.code === "spine/task-missing-verification");
+  assert.ok(err, JSON.stringify(diagnostics, null, 2));
+  assert.match(err.hint!, /V-M-a-probe/, "hint phải gợi ý đúng target đã có sẵn của khối");
+});
+
+test("task chạm khối, exit_contract có verification đúng target → không lỗi", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/modules/M-a.yaml": moduleYaml("M-a", { part: null as never }),
+    ".ganas/tasks/T-001.yaml": taskTouching(
+      "M-a",
+      `  - kind: verification\n    target: M-a/V-M-a-probe`,
+    ),
+  });
+  assert.ok(!codes.includes("spine/task-missing-verification"), JSON.stringify(codes));
+});
+
+test("task chạm khối, verification trỏ SAI khối khác → vẫn lỗi", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/modules/M-a.yaml": moduleYaml("M-a", { part: null as never }),
+    ".ganas/modules/M-b.yaml": moduleYaml("M-b", { part: null as never }),
+    ".ganas/tasks/T-001.yaml": taskTouching(
+      "M-a",
+      `  - kind: verification\n    target: M-b/V-M-b-probe`,
+    ),
+  });
+  assert.ok(codes.includes("spine/task-missing-verification"));
+});
+
+test("task chạm khối chưa có verify nào → hint bảo thêm bằng chứng trước", async () => {
+  const { diagnostics } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/modules/M-a.yaml": `id: M-a
+title: "Khối chưa kiểm"
+nature: code
+paths: ["src/a/**"]
+status: implemented
+`,
+    ".ganas/tasks/T-001.yaml": taskTouching("M-a", `  - kind: command\n    run: "true"`),
+  });
+  const err = diagnostics.find((d) => d.code === "spine/task-missing-verification");
+  assert.ok(err);
+  assert.match(err.hint!, /chưa có `verify` nào/);
+});
+
 /* --- Chu trình ------------------------------------------------------------- */
 
 test("vòng lặp phụ thuộc giữa các khối bị bắt", async () => {

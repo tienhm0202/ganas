@@ -5,6 +5,7 @@ import { runShell, judge } from "./util/exec.js";
 import { ganasPath, DIRS } from "./graph/paths.js";
 import type { Task, ExitCriterion } from "./model/index.js";
 import type { Graph } from "./graph/types.js";
+import type { VerificationState } from "./graph/freshness.js";
 
 export interface CriterionResult {
   criterion: ExitCriterion;
@@ -34,12 +35,18 @@ function labelOf(c: ExitCriterion): string {
       return "handoff record của phiên";
     case "manual":
       return c.check;
+    case "verification":
+      return `bằng chứng \`${c.target}\``;
   }
 }
 
 async function checkCriterion(
   criterion: ExitCriterion,
-  ctx: { root: string; sessionId?: string | undefined },
+  ctx: {
+    root: string;
+    sessionId?: string | undefined;
+    freshness: Map<string, VerificationState>;
+  },
 ): Promise<CriterionResult> {
   const label = labelOf(criterion);
 
@@ -94,6 +101,21 @@ async function checkCriterion(
 
     case "manual":
       return { criterion, label, status: "pending_human" };
+
+    case "verification": {
+      const state = ctx.freshness.get(criterion.target);
+      if (!state) {
+        return {
+          criterion,
+          label,
+          status: "fail",
+          reason: `không tìm thấy target "${criterion.target}" trong sổ cái/graph`,
+        };
+      }
+      return state.freshness === "fresh"
+        ? { criterion, label, status: "pass" }
+        : { criterion, label, status: "fail", reason: state.reason };
+    }
   }
 }
 
@@ -107,10 +129,11 @@ async function checkCriterion(
 export async function evaluateGate(
   graph: Graph,
   task: Task,
+  freshness: Map<string, VerificationState>,
   sessionId?: string | undefined,
 ): Promise<GateResult> {
   const results = await Promise.all(
-    task.exit_contract.map((c) => checkCriterion(c, { root: graph.root, sessionId })),
+    task.exit_contract.map((c) => checkCriterion(c, { root: graph.root, sessionId, freshness })),
   );
 
   const unmet = results.filter((r) => r.status === "fail");

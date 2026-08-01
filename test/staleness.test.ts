@@ -345,6 +345,76 @@ test("brief in ĐÚNG lý do cho từng trường hợp, không nói chung chung
   }
 });
 
+test("brief liệt kê khối chạm tới, suy paths/entrypoints từ sơ đồ", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/modules/M-a.yaml": `id: M-a
+title: "Khối A"
+nature: code
+paths: ["src/a/**"]
+entrypoints: ["src/a/index.ts"]
+status: implemented
+verify:
+  - id: V-a-probe
+    kind: probe
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        touches: ["M-a", "M-ghost"],
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+
+    const brief = renderBrief({ graph, task, freshness });
+    assert.match(brief, /## Khối chạm tới \(suy từ sơ đồ\)/);
+    assert.match(brief, /`M-a` — Khối A/);
+    assert.match(brief, /`src\/a\/\*\*`/);
+    assert.match(brief, /`src\/a\/index\.ts`/);
+    assert.match(brief, /`M-ghost` — ⚠ \*\*KHÔNG TÌM THẤY\*\*/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("brief không có mục 'Khối chạm tới' khi task không touches gì", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.doesNotMatch(brief, /Khối chạm tới/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
 test("eval dao động quanh ngưỡng thì brief cho thấy xu hướng điểm", async () => {
   const root = await makeProject({
     ".ganas/modules/M-a.yaml": `id: M-a
