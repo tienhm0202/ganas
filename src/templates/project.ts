@@ -72,6 +72,8 @@ thì không được ghi vào kho tri thức**.
 | \`ganas next\` | Task kế tiếp + brief đầy đủ |
 | \`ganas validate\` | Kiểm tra graph trước khi commit |
 | \`ganas verify <id>\` | Chạy probe của một fact |
+| \`ganas gate\` | Chấm điều kiện hoàn thành của task đang làm |
+| \`ganas commit\` | Commit task đã đạt gate — chỉ khi thật sự xong |
 
 <!-- Giữ file này dưới ~200 dòng. Quy trình nhiều bước → chuyển thành skill.
      Luật theo vùng code → chuyển thành .claude/rules/*.md có \`paths:\`. -->

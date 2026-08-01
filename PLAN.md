@@ -57,6 +57,19 @@ Ba việc gộp một đợt:
 
 198 test pass (186 cũ + 12 mới).
 
+**P2 N7.1 — `ganas commit`.** Logic git vào thẳng ganas thay vì làm tay:
+`src/commit.ts` (`buildCommitMessage`, `pathsToStage` — thuần, không cần git
+thật) + `src/commands/commit.ts` (CLI, gọi git thật). Từ chối commit nếu
+`evaluateGate` chưa `ok` — không có commit nào cho task chưa xong. `git add`
+chỉ đúng phạm vi task (`.ganas/` + `paths` của khối trong `touches`), không
+`git add -A`. Message dựng TỪ kết quả gate thật (tiêu đề `<task id>: <tiêu
+đề>`, thân liệt kê tiêu chí đã ✓, cuối là goal/design/sprint) — không phải
+văn xuôi tự bịa, và **không bao giờ có dòng ghi công AI/trợ lý** (quy ước
+cứng, không phải tuỳ chọn cấu hình). `--dry-run` chỉ in message. Idempotent:
+gọi lại khi không có gì đổi thì không tạo commit rỗng.
+
+204 test pass (198 + 6 mới, `test/commit.test.ts`).
+
 ## Đang làm / tiếp theo
 
 ### N8 — handoff dẫn xuất từ transcript Claude Code
