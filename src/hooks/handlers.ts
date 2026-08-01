@@ -6,6 +6,7 @@ import { computeFreshness } from "../graph/freshness.js";
 import { selectNextTask } from "../graph/select.js";
 import { renderBrief } from "../render/brief.js";
 import { evaluateGate } from "../gate.js";
+import { generateHandoff } from "../handoff.js";
 import { bindSession, releaseSession, taskForSession } from "../state.js";
 import { enforcementFor, type EnforcementRule } from "../model/index.js";
 import { LEDGER_FILE, ledgerPath } from "../verify/ledger.js";
@@ -245,6 +246,31 @@ export async function stop(input: HookInput): Promise<HookOutput> {
  * PreCompact / SessionEnd
  * ------------------------------------------------------------------------- */
 
+/** Ghi handoff nếu biết đủ (root/session/task) — lỗi thì bỏ qua, không chặn hook nào. */
+async function tryHandoff(
+  root: string,
+  input: HookInput,
+): Promise<{ path: string } | undefined> {
+  if (!input.session_id) return undefined;
+  const taskId = await taskForSession(root, input.session_id);
+  if (!taskId) return undefined;
+
+  try {
+    const graph = await loadGraph(root);
+    const task = graph.tasks.get(taskId);
+    if (!task) return undefined;
+    const freshness = await computeFreshness(graph);
+    const gate = await evaluateGate(graph, task.value, freshness, input.session_id);
+    return await generateHandoff(root, graph, task.value, gate, {
+      sessionId: input.session_id,
+      transcriptPath: input.transcript_path,
+    });
+  } catch {
+    // Handoff là tiện ích, không phải cửa chặn — hỏng thì bỏ qua lặng lẽ.
+    return undefined;
+  }
+}
+
 export async function preCompact(input: HookInput): Promise<HookOutput> {
   const root = findGanasRoot(input.cwd ?? process.cwd());
   if (!root) return ALLOW;
@@ -253,18 +279,24 @@ export async function preCompact(input: HookInput): Promise<HookOutput> {
   if (!taskId) return ALLOW;
 
   // Compaction là lúc tri thức chưa ghi ra file sẽ biến mất — hoặc tệ hơn, bị
-  // tóm tắt thành một phiên bản méo. Nhắc ghi ra trước khi điều đó xảy ra.
+  // tóm tắt thành một phiên bản méo. Nhắc ghi ra trước khi điều đó xảy ra, và
+  // tự chụp lại handoff từ transcript trong lúc còn đọc được.
+  const handoff = await tryHandoff(root, input);
+  const handoffNote = handoff ? `\n\nĐã ghi handoff: ${relative(root, handoff.path)}.` : "";
+
   return {
     systemMessage:
       `ganas: context sắp bị nén. Trước khi mất chi tiết, ghi những gì đã xác lập ` +
       `ra file: fact đã verify vào .ganas/facts/, điều chưa kiểm chứng vào ` +
-      `.ganas/claims/ (kèm anchor), câu hỏi còn mở vào task ${taskId}.`,
+      `.ganas/claims/ (kèm anchor), câu hỏi còn mở vào task ${taskId}.` +
+      handoffNote,
   };
 }
 
 export async function sessionEnd(input: HookInput): Promise<HookOutput> {
   const root = findGanasRoot(input.cwd ?? process.cwd());
   if (!root || !input.session_id) return ALLOW;
+  await tryHandoff(root, input);
   await releaseSession(root, input.session_id);
   return ALLOW;
 }

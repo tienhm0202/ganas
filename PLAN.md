@@ -70,15 +70,25 @@ gọi lại khi không có gì đổi thì không tạo commit rỗng.
 
 204 test pass (198 + 6 mới, `test/commit.test.ts`).
 
+**P2 N8 — handoff dẫn xuất từ transcript.** `src/handoff.ts`:
+`parseTranscript()` đọc JSONL transcript của Claude Code, trích CƠ HỌC —
+tin nhắn người dùng nguyên văn (lọc wrapper hệ thống như
+`<local-command-...>`, `isMeta`), file bị Write/Edit/MultiEdit/NotebookEdit,
+lệnh Bash đã chạy. **Cố ý bỏ qua mọi block `text` của assistant** — văn xuôi
+model không được coi là tri thức của phiên, kể cả trích nguyên văn.
+`renderHandoff()` ghép thêm fact/claim đã có bằng chứng gắn ĐÚNG session
+(`verified_by`/`source_session`), `open_questions` của task, và kết quả
+`evaluateGate` thật — không có bước "model đọc rồi tóm tắt lại".
+`generateHandoff()` ghi `.ganas/runs/<session>.md` (đè, không phải
+append-only — đây là tiện ích tiếp nối, không phải bằng chứng). Lệnh CLI
+`ganas handoff --session <id>` bắt buộc phải có `--session` (không đoán được
+phiên). Nối tự động vào hook `preCompact`/`sessionEnd` (đã có sẵn
+`transcript_path`/`session_id` trong input) — hỏng thì bỏ qua lặng lẽ, không
+chặn hook nào.
+
+213 test pass (204 cũ + 9 mới, `test/handoff.test.ts`).
+
 ## Đang làm / tiếp theo
-
-### N8 — handoff dẫn xuất từ transcript Claude Code
-
-`gate.ts` đã có `kind: "handoff"` trong `exit_contract`, trỏ tới
-`.ganas/runs/<session>.md`, nhưng chưa có gì SINH ra file đó. Cần: đọc
-transcript phiên, dựng handoff record (việc đã làm, quyết định, câu hỏi mở)
-— tự động, không phải model tự viết tổng kết văn xuôi rồi coi là tri thức
-(luật cấm trong `knowledgeRuleMd()`).
 
 ### N9 — công cụ dọn dẹp (`ganas prune` / `ganas clean`)
 

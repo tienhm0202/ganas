@@ -19,6 +19,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   verify: () => import("./commands/verify.js"),
   trace: () => import("./commands/trace.js"),
   commit: () => import("./commands/commit.js"),
+  handoff: () => import("./commands/handoff.js"),
   hook: () => import("./commands/hook.js"),
 };
 
@@ -36,6 +37,7 @@ Lệnh:
   verify [target...]   Chạy bằng chứng: probe và eval, ghi sổ cái
   trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng
+  handoff --session id Ghi bản ghi tiếp nối của phiên, dẫn xuất từ transcript
   hook <event>         Điểm vào cho hook Claude Code (đọc JSON ở stdin)
 
 Tuỳ chọn chung:
