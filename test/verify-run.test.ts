@@ -1,12 +1,13 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeProject, cleanup, goal } from "./helpers.js";
+import { test } from "node:test";
+
 import { loadGraph } from "../src/graph/load.js";
-import { runTarget, factTarget, moduleTargets, allTargets } from "../src/verify/run.js";
-import { readLedger, lastFor, indexByTarget } from "../src/verify/ledger.js";
-import { readEvalResult, AdapterError } from "../src/verify/adapters.js";
+import { AdapterError, readEvalResult } from "../src/verify/adapters.js";
+import { indexByTarget, lastFor, readLedger } from "../src/verify/ledger.js";
+import { allTargets, factTarget, moduleTargets, runTarget } from "../src/verify/run.js";
+import { cleanup, goal, makeProject } from "./helpers.js";
 
 const RUN_OPTS = (root: string) => ({ root, by: "test" });
 
@@ -262,7 +263,12 @@ test("adapter promptfoo đọc results.stats", async () => {
 
 test("adapter promptfoo báo lỗi khi chạy 0 ca", async () => {
   await assert.rejects(
-    () => readEvalResult("promptfoo", OUT, JSON.stringify({ results: { stats: { successes: 0, failures: 0 } } })),
+    () =>
+      readEvalResult(
+        "promptfoo",
+        OUT,
+        JSON.stringify({ results: { stats: { successes: 0, failures: 0 } } }),
+      ),
     AdapterError,
   );
 });
@@ -425,7 +431,9 @@ verify:
 `,
   });
   try {
-    const ids = allTargets(await loadGraph(root)).map((t) => t.id).sort();
+    const ids = allTargets(await loadGraph(root))
+      .map((t) => t.id)
+      .sort();
     assert.deepEqual(ids, ["F-A-001", "M-a/V-unit", "P-x/V-e2e"]);
   } finally {
     await cleanup(root);

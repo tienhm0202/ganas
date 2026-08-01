@@ -1,8 +1,9 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { matchesAny } from "../src/util/glob.js";
-import { judge } from "../src/util/exec.js";
+import { test } from "node:test";
+
 import type { ExecResult } from "../src/util/exec.js";
+import { judge } from "../src/util/exec.js";
+import { matchesAny } from "../src/util/glob.js";
 
 test("* chỉ khớp trong một cấp thư mục", () => {
   assert.equal(matchesAny("src/a.ts", ["src/*.ts"]), true);

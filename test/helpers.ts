@@ -1,9 +1,10 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+
 import { loadGraph } from "../src/graph/load.js";
-import { validateGraph } from "../src/graph/validate.js";
 import type { Diagnostic } from "../src/graph/types.js";
+import { validateGraph } from "../src/graph/validate.js";
 
 const CONFIG = `version: 1
 project: "test"

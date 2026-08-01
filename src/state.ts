@@ -1,6 +1,7 @@
-import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+
 import { ganasPath, STATE_FILE } from "./graph/paths.js";
 
 /**
@@ -51,10 +52,7 @@ export async function writeState(root: string, state: State): Promise<void> {
 }
 
 /** Đọc–sửa–ghi. Đủ cho mức song song thực tế (vài phiên trên một máy). */
-export async function updateState(
-  root: string,
-  mutate: (state: State) => void,
-): Promise<State> {
+export async function updateState(root: string, mutate: (state: State) => void): Promise<State> {
   const state = await readState(root);
   mutate(state);
   await writeState(root, state);
@@ -75,11 +73,8 @@ export async function releaseSession(root: string, sessionId: string): Promise<v
 }
 
 /** Task của một phiên; rơi về current_task khi không có session id. */
-export async function taskForSession(
-  root: string,
-  sessionId?: string | undefined,
-): Promise<string | null> {
+export async function taskForSession(root: string, sessionId?: string): Promise<string | null> {
   const state = await readState(root);
-  if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId]!.task;
+  if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
   return state.current_task;
 }

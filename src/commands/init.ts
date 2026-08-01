@@ -1,10 +1,18 @@
-import { mkdir, writeFile, readFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { flag, option, type Argv } from "../util/args.js";
-import { GanasError } from "../util/errors.js";
-import { findGanasRoot, ganasPath, DIRS, CONFIG_FILE, STATE_FILE, GANAS_DIR } from "../graph/paths.js";
+
+import {
+  CONFIG_FILE,
+  DIRS,
+  findGanasRoot,
+  GANAS_DIR,
+  ganasPath,
+  STATE_FILE,
+} from "../graph/paths.js";
 import * as T from "../templates/project.js";
+import { type Argv, flag, option } from "../util/args.js";
+import { GanasError } from "../util/errors.js";
 
 /** Thư mục con tạo sẵn — thư mục rỗng giúp người mới biết chỗ đặt file. */
 const SUBDIRS = [
@@ -37,7 +45,11 @@ async function prompt(question: string, fallback = ""): Promise<string> {
 }
 
 /** Ghi file, không đè lên file đã có trừ khi --force. */
-async function writeNew(file: string, content: string, force: boolean): Promise<"written" | "kept"> {
+async function writeNew(
+  file: string,
+  content: string,
+  force: boolean,
+): Promise<"written" | "kept"> {
   if (existsSync(file) && !force) return "kept";
   await mkdir(join(file, ".."), { recursive: true });
   await writeFile(file, content, "utf8");
@@ -58,13 +70,15 @@ export async function run(argv: Argv): Promise<number> {
     );
   }
 
-  const project = option(argv, "project") ?? (noninteractive
-    ? basename(cwd)
-    : await prompt("Tên dự án", basename(cwd)));
+  const project =
+    option(argv, "project") ??
+    (noninteractive ? basename(cwd) : await prompt("Tên dự án", basename(cwd)));
 
-  const ownerRaw = option(argv, "owner") ?? (noninteractive
-    ? ""
-    : await prompt("Handle người duyệt mục tiêu (vd @nguyen-a), bỏ trống nếu chưa có"));
+  const ownerRaw =
+    option(argv, "owner") ??
+    (noninteractive
+      ? ""
+      : await prompt("Handle người duyệt mục tiêu (vd @nguyen-a), bỏ trống nếu chưa có"));
   const owner = ownerRaw ? (ownerRaw.startsWith("@") ? ownerRaw : `@${ownerRaw}`) : undefined;
 
   const vars: T.InitVars = { project, owner };
@@ -94,21 +108,13 @@ export async function run(argv: Argv): Promise<number> {
   // Luật ghi tri thức: không có `paths:` frontmatter nên sống qua compaction.
   track(
     ".claude/rules/ganas-knowledge.md",
-    await writeNew(
-      join(cwd, ".claude", "rules", "ganas-knowledge.md"),
-      T.knowledgeRuleMd(),
-      force,
-    ),
+    await writeNew(join(cwd, ".claude", "rules", "ganas-knowledge.md"), T.knowledgeRuleMd(), force),
   );
 
   // Luật kiến trúc (tách lõi khỏi I/O) — cùng lý do không có `paths:` frontmatter.
   track(
     ".claude/rules/architecture.md",
-    await writeNew(
-      join(cwd, ".claude", "rules", "architecture.md"),
-      T.architectureRuleMd(),
-      force,
-    ),
+    await writeNew(join(cwd, ".claude", "rules", "architecture.md"), T.architectureRuleMd(), force),
   );
 
   // CLAUDE.md và AGENTS.md: không đè nếu dự án đã có — đó là việc của `ganas adopt`.

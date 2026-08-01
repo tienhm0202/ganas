@@ -1,15 +1,16 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeProject, cleanup } from "./helpers.js";
-import { loadGraph } from "../src/graph/load.js";
+import { test } from "node:test";
+
 import { computeFreshness } from "../src/graph/freshness.js";
+import { loadGraph } from "../src/graph/load.js";
 import {
-  contractEdges,
   checkAllEdges,
   computeDebt,
+  contractEdges,
   recordEdgeChecks,
   renderDiagram,
 } from "../src/graph/trace.js";
+import { cleanup, makeProject } from "./helpers.js";
 
 /* --- Bộ dựng khối có cổng --------------------------------------------------- */
 
@@ -96,7 +97,10 @@ test("khối đích cần cổng khối nguồn không có → fail, nợ broken
   const { root, graph } = await graphOf({
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
       outputs: [{ name: "text", shape: "string" }],
-      verify: [`- id: V-a-probe\n    kind: probe\n    run: "true"`, `${contractVerify("a-to-b", "M-b")}`],
+      verify: [
+        `- id: V-a-probe\n    kind: probe\n    run: "true"`,
+        `${contractVerify("a-to-b", "M-b")}`,
+      ],
     }),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", {
       dependsOn: ["M-a"],
@@ -123,7 +127,10 @@ test("cổng khớp tên nhưng lệch shape → fail", async () => {
   const { root, graph } = await graphOf({
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
       outputs: [{ name: "text", shape: "string" }],
-      verify: [`- id: V-a-probe\n    kind: probe\n    run: "true"`, `${contractVerify("a-to-b", "M-b")}`],
+      verify: [
+        `- id: V-a-probe\n    kind: probe\n    run: "true"`,
+        `${contractVerify("a-to-b", "M-b")}`,
+      ],
     }),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", {
       dependsOn: ["M-a"],
@@ -144,7 +151,10 @@ test("cổng khớp tên nhưng lệch shape → fail", async () => {
 test("cổng vào optional thiếu ở nguồn vẫn pass", async () => {
   const { root, graph } = await graphOf({
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
-      verify: [`- id: V-a-probe\n    kind: probe\n    run: "true"`, `${contractVerify("a-to-b", "M-b")}`],
+      verify: [
+        `- id: V-a-probe\n    kind: probe\n    run: "true"`,
+        `${contractVerify("a-to-b", "M-b")}`,
+      ],
     }),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", {
       dependsOn: ["M-a"],
@@ -173,7 +183,7 @@ test("depends_on không có contract khớp → nợ uncovered-edge", async () =
     const debt = computeDebt(graph, checks);
     const uncovered = debt.find((d) => d.kind === "uncovered-edge");
     assert.ok(uncovered, JSON.stringify(debt, null, 2));
-    assert.deepEqual(uncovered!.edge, { from: "M-a", to: "M-c" });
+    assert.deepEqual(uncovered.edge, { from: "M-a", to: "M-c" });
   } finally {
     await cleanup(root);
   }
@@ -196,10 +206,7 @@ test("contractEdges liệt kê mọi cạnh contract khai trong verify", async (
   try {
     const edges = contractEdges(graph);
     assert.equal(edges.length, 2);
-    assert.deepEqual(
-      edges.map((e) => e.to).sort(),
-      ["M-b", "M-c"],
-    );
+    assert.deepEqual(edges.map((e) => e.to).sort(), ["M-b", "M-c"]);
   } finally {
     await cleanup(root);
   }
@@ -220,7 +227,10 @@ exit: M-b
 `,
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
       outputs: [{ name: "text", shape: "string" }],
-      verify: [`- id: V-a-probe\n    kind: probe\n    run: "true"`, `${contractVerify("a-to-b", "M-b")}`],
+      verify: [
+        `- id: V-a-probe\n    kind: probe\n    run: "true"`,
+        `${contractVerify("a-to-b", "M-b")}`,
+      ],
     }),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", {
       dependsOn: ["M-a"],
@@ -244,7 +254,10 @@ test("recordEdgeChecks ghi sổ cái; freshness sau đó đọc lại đúng k�
   const { root, graph } = await graphOf({
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
       outputs: [{ name: "text", shape: "string" }],
-      verify: [`- id: V-a-probe\n    kind: probe\n    run: "true"`, `${contractVerify("a-to-b", "M-b")}`],
+      verify: [
+        `- id: V-a-probe\n    kind: probe\n    run: "true"`,
+        `${contractVerify("a-to-b", "M-b")}`,
+      ],
     }),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", {
       dependsOn: ["M-a"],

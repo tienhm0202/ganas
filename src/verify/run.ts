@@ -1,22 +1,24 @@
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { parseDocument } from "yaml";
-import { runShell, judge } from "../util/exec.js";
-import { lintProbe, hasBlockingFinding } from "./lint.js";
-import { proveCanFail } from "./mutate.js";
-import { readEvalResult, AdapterError } from "./adapters.js";
+
+import type { Graph, Sourced } from "../graph/types.js";
+import type { Fact, Module, Part, Verification } from "../model/index.js";
+import { judge, runShell } from "../util/exec.js";
+import { AdapterError, readEvalResult } from "./adapters.js";
 import {
   appendEntry,
   defHash,
   fileHash,
-  runContext,
-  sha256,
   type LedgerEntry,
   type LedgerResult,
+  runContext,
+  sha256,
 } from "./ledger.js";
-import type { Fact, Verification, Module, Part } from "../model/index.js";
-import type { Graph, Sourced } from "../graph/types.js";
+import { hasBlockingFinding, lintProbe } from "./lint.js";
+import { proveCanFail } from "./mutate.js";
 
 /** Một thứ có thể verify: fact, hoặc một bằng chứng của khối/phần. */
 export interface Target {
@@ -127,7 +129,10 @@ export async function runTarget(target: Target, opts: RunOptions): Promise<RunOu
   }
 
   const v = target.verification;
-  const run = target.kind === "eval" ? (v as { run: string }).run : (target.definition as { run: string }).run;
+  const run =
+    target.kind === "eval"
+      ? (v as { run: string }).run
+      : (target.definition as { run: string }).run;
   const skipIf = v?.skip_if ?? (target.definition as { skip_if?: string }).skip_if;
 
   /* --- Lint trước, chạy sau ------------------------------------------- */

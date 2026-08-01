@@ -1,27 +1,33 @@
-import { readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { ZodIssue, ZodTypeAny, z } from "zod";
-import { readYamlFile, lineOfPath, type LoadedYaml } from "../util/yaml.js";
-import { GanasError } from "../util/errors.js";
+
+import type { z, ZodIssue, ZodTypeAny } from "zod";
+
 import {
-  zConfig,
-  zGoal,
-  zSprint,
-  zDesign,
-  zTask,
-  zPart,
-  zModule,
-  zFactFile,
   zClaimFile,
+  zConfig,
   zDecisionFile,
+  zDesign,
+  zFactFile,
+  zGoal,
+  zModule,
+  zPart,
+  zSprint,
+  zTask,
 } from "../model/index.js";
-import { DIRS, CONFIG_FILE, ganasPath } from "./paths.js";
-import { readLedger, indexByTarget } from "../verify/ledger.js";
+import { GanasError } from "../util/errors.js";
+import { lineOfPath, type LoadedYaml, readYamlFile } from "../util/yaml.js";
+import { indexByTarget, readLedger } from "../verify/ledger.js";
+import { CONFIG_FILE, DIRS, ganasPath } from "./paths.js";
 import type { Diagnostic, Graph, Sourced } from "./types.js";
 
 /** Đổi issue của zod thành Diagnostic có `file:line`. */
-function issuesToDiagnostics(loaded: LoadedYaml, issues: readonly ZodIssue[], root: string): Diagnostic[] {
+function issuesToDiagnostics(
+  loaded: LoadedYaml,
+  issues: readonly ZodIssue[],
+  root: string,
+): Diagnostic[] {
   return issues.map((issue) => ({
     severity: "error" as const,
     code: `schema/${issue.code}`,
@@ -93,7 +99,7 @@ async function collectSingle<S extends ZodTypeAny>(
       });
       continue;
     }
-    items.set(value.id, { value: parsed.data, file: rel });
+    items.set(value.id, { value: parsed.data as z.infer<S>, file: rel });
   }
 
   return { items, diagnostics, sources };
@@ -176,22 +182,23 @@ export async function loadGraph(root: string): Promise<Graph> {
   const gitignoreFile = join(root, ".gitignore");
   const gitignoreRaw = existsSync(gitignoreFile) ? await readFile(gitignoreFile, "utf8") : null;
 
-  const [goals, sprints, designs, tasks, parts, modules, facts, claims, decisions] = await Promise.all([
-    collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
-    collectSingle(ganasPath(root, DIRS.sprints), zSprint, root, "sprint"),
-    collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
-    collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
-    collectSingle(ganasPath(root, DIRS.parts), zPart, root, "phần"),
-    collectSingle(ganasPath(root, DIRS.modules), zModule, root, "khối"),
-    collectArray([ganasPath(root, DIRS.facts)], zFactFile, root, "fact"),
-    collectArray(
-      [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
-      zClaimFile,
-      root,
-      "claim",
-    ),
-    collectArray([ganasPath(root, DIRS.decisions)], zDecisionFile, root, "decision"),
-  ]);
+  const [goals, sprints, designs, tasks, parts, modules, facts, claims, decisions] =
+    await Promise.all([
+      collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
+      collectSingle(ganasPath(root, DIRS.sprints), zSprint, root, "sprint"),
+      collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
+      collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
+      collectSingle(ganasPath(root, DIRS.parts), zPart, root, "phần"),
+      collectSingle(ganasPath(root, DIRS.modules), zModule, root, "khối"),
+      collectArray([ganasPath(root, DIRS.facts)], zFactFile, root, "fact"),
+      collectArray(
+        [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
+        zClaimFile,
+        root,
+        "claim",
+      ),
+      collectArray([ganasPath(root, DIRS.decisions)], zDecisionFile, root, "decision"),
+    ]);
 
   return {
     root,

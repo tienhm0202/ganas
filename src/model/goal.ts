@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { zGoalId, zHandle, zIsoDate, zNonEmpty, zExpect } from "./common.js";
+
+import { zExpect, zGoalId, zHandle, zIsoDate, zNonEmpty } from "./common.js";
 
 /**
  * Tiêu chí nghiệm thu. Một goal không có tiêu chí kiểm chứng được thì không phải

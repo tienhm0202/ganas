@@ -41,7 +41,7 @@ export interface HookOutput {
 
 export async function readHookInput(): Promise<HookInput> {
   const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  for await (const chunk of process.stdin as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk));
   const raw = Buffer.concat(chunks).toString("utf8").trim();
   if (!raw) return {};
   try {

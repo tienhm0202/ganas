@@ -1,16 +1,26 @@
-import { stat, readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+
+import type { Fact, Freshness } from "../model/index.js";
 import { runShell } from "../util/exec.js";
 import { matchesAny } from "../util/glob.js";
-import type { Fact, Freshness } from "../model/index.js";
-import { defHash, fileHash, lastFor, historyFor, type LedgerEntry } from "../verify/ledger.js";
+import { defHash, fileHash, historyFor, lastFor, type LedgerEntry } from "../verify/ledger.js";
 import { allTargets, type Target } from "../verify/run.js";
 import type { Graph } from "./types.js";
 
 /** Thư mục bỏ qua khi không có git — không phải mã nguồn dự án. */
 const SKIP_DIRS = new Set([
-  ".git", "node_modules", "dist", "build", "out", "target", "vendor",
-  ".next", ".venv", "__pycache__", ".ganas",
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "target",
+  "vendor",
+  ".next",
+  ".venv",
+  "__pycache__",
+  ".ganas",
 ]);
 
 /** Danh sách file của dự án. Ưu tiên git: nhanh và tôn trọng .gitignore. */
@@ -117,14 +127,22 @@ function decide(args: {
       action: "chạy lại eval trên model mới",
     };
   }
-  if (entry.prompt !== undefined && current.prompt !== undefined && entry.prompt !== current.prompt) {
+  if (
+    entry.prompt !== undefined &&
+    current.prompt !== undefined &&
+    entry.prompt !== current.prompt
+  ) {
     return {
       freshness: "prompt_changed",
       reason: `file prompt đã sửa sau lần chạy ${entry.at.slice(0, 10)}`,
       action: "chạy lại eval",
     };
   }
-  if (entry.dataset !== undefined && current.dataset !== undefined && entry.dataset !== current.dataset) {
+  if (
+    entry.dataset !== undefined &&
+    current.dataset !== undefined &&
+    entry.dataset !== current.dataset
+  ) {
     return {
       freshness: "dataset_changed",
       reason: `dataset đã đổi sau lần chạy ${entry.at.slice(0, 10)}`,

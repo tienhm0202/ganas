@@ -87,7 +87,7 @@ export function parseArgs(raw: string[], booleanFlags: Iterable<string> = []): A
 /** Đọc một cờ boolean, chấp nhận cả dạng tên dài lẫn tên ngắn. */
 export function flag(argv: Argv, ...names: string[]): boolean {
   for (const n of names) {
-    if (argv.flags[n] !== undefined) return argv.flags[n]!;
+    if (argv.flags[n] !== undefined) return argv.flags[n];
   }
   return false;
 }

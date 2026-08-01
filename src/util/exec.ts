@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+
 import type { Expect } from "../model/index.js";
 
 export interface ExecResult {
@@ -38,7 +39,8 @@ export function runShell(
         // execFile đặt error.code = mã thoát (số) khi lệnh chạy nhưng fail, và
         // = mã lỗi hệ thống (chuỗi, vd "ETIMEDOUT") khi không spawn được.
         const rawCode: unknown = error ? (error as { code?: unknown }).code : 0;
-        const timedOut = rawCode === "ETIMEDOUT" || (error as { killed?: boolean })?.killed === true;
+        const timedOut =
+          rawCode === "ETIMEDOUT" || (error as { killed?: boolean })?.killed === true;
         resolve({
           code: typeof rawCode === "number" ? rawCode : error ? 1 : 0,
           stdout: String(stdout),
@@ -84,7 +86,10 @@ export function judge(result: ExecResult, expect: Expect): Judgement {
     try {
       re = new RegExp(expect.stdout_matches);
     } catch {
-      return { pass: false, reason: `stdout_matches không phải regex hợp lệ: ${expect.stdout_matches}` };
+      return {
+        pass: false,
+        reason: `stdout_matches không phải regex hợp lệ: ${expect.stdout_matches}`,
+      };
     }
     if (!re.test(result.stdout)) {
       return { pass: false, reason: `stdout không khớp /${expect.stdout_matches}/` };

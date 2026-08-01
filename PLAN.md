@@ -252,9 +252,40 @@ dung + dòng trỏ trong CLAUDE.md.
 242 test pass (240 cũ + 2 mới, `test/init.test.ts` — file test đầu tiên cho
 `commands/init.ts`).
 
-**Còn lại trong N12** (chưa làm): ESLint/Prettier, coverage threshold,
-bảng tiền tố ID, hai điểm mở (JSON Schema cho `contract.shape`, ADR cho
-`Decision`), ngưỡng cảnh báo độ dài brief.
+**✅ ĐÃ XONG — ESLint + Prettier + coverage threshold (N12, phần tooling):**
+- `eslint.config.mjs` (flat config) — `typescript-eslint` `recommendedTypeChecked`
+  (parser trỏ `tsconfig.eslint.json` riêng vì `tsconfig.json` chính loại
+  `test/` khỏi build), `@typescript-eslint/no-floating-promises: error` cho
+  `src/**` (tắt riêng cho `test/**` — `test(name, async fn)` ở top-level
+  không await là đúng idiom của `node:test`, bật rule ở đó chỉ ra hàng trăm
+  false positive), `eslint-plugin-simple-import-sort`, `eslint-config-prettier`
+  cuối cùng để không đụng độ format.
+- `.prettierrc.json`/`.prettierignore` — khớp style đã nhất quán sẵn trong
+  repo (2 space, double quote, semicolon, trailing comma), `printWidth: 100`
+  (nhiều dòng message/comment tiếng Việt dài hơn 80 vốn có sẵn).
+- 10 lỗi lint thật được sửa (không disable tràn lan) — chủ yếu do
+  `no-unsafe-*` từ type-checked linting bắt được (destructure dynamic
+  `import()`, `JSON.parse` chưa ép kiểu, generic inference bị widen thành
+  `any`). Đúng MỘT chỗ disable (`preToolUse` — `async` chỉ để khớp chữ ký
+  `Handler` dùng chung, nhánh này thuần đồng bộ), có comment giải thích.
+- `npm run test:coverage` (`c8`) cho `src/graph/`+`src/verify/` — ngưỡng
+  `--lines 88 --branches 80`, xác nhận đây là ngưỡng THẬT (đo được
+  92.5%/86.24%, có headroom, không phải số tròn đoán bừa) — thử nâng lên 95
+  để xác nhận gate thật sự fail rồi hạ về đúng số.
+- `src/model/knowledge.ts` và `src/render/brief.ts` bị loại khỏi phạm vi
+  lint/format (có ghi chú lý do trong config) — hai file đó thuộc phần việc
+  song song khác của N12 (ADR fields, ngưỡng độ dài brief), tránh xung đột
+  khi chạy song song. Cần bỏ loại trừ này sau khi hai việc đó xong.
+
+Implement bởi sub-agent, review + verify lại ở phiên chính (diff rộng — 69
+file, chủ yếu do Prettier — nên đọc kỹ từng thay đổi thật thay vì chỉ tin
+báo cáo): xác nhận `git stash` lỡ tay giữa chừng của sub-agent đã restore
+sạch (stash list rỗng), soát riêng các chỗ sửa lỗi thật (không phải chỉ
+format), xác nhận `knowledge.ts`/`brief.ts` không bị đụng, chạy lại
+typecheck/lint/format:check/build/test/test:coverage — tất cả sạch.
+
+243 test pass khi chạy qua `test:coverage` (thêm 1 do c8 instrument lại;
+`npm test` thường vẫn 242, không đổi).
 
 ### N13 — hướng dẫn sử dụng chi tiết (người đọc + AI đọc)
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { zNonEmpty, zExpect } from "./common.js";
+
+import { zExpect, zNonEmpty } from "./common.js";
 
 /**
  * Bằng chứng cho một khối.

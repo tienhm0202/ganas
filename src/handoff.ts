@@ -1,10 +1,11 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { ganasPath, DIRS } from "./graph/paths.js";
+
 import { formatGate, type GateResult } from "./gate.js";
-import type { Task } from "./model/index.js";
+import { DIRS, ganasPath } from "./graph/paths.js";
 import type { Graph } from "./graph/types.js";
+import type { Task } from "./model/index.js";
 
 /**
  * Handoff — bản ghi tiếp nối giữa các phiên, DẪN XUẤT từ transcript thật.
@@ -82,7 +83,7 @@ export function parseTranscript(raw: string): TranscriptSummary {
       continue;
     }
 
-    const timestamp = typeof obj["timestamp"] === "string" ? (obj["timestamp"] as string) : undefined;
+    const timestamp = typeof obj["timestamp"] === "string" ? obj["timestamp"] : undefined;
     if (timestamp) {
       if (!startedAt || timestamp < startedAt) startedAt = timestamp;
       if (!endedAt || timestamp > endedAt) endedAt = timestamp;
@@ -124,7 +125,16 @@ export function parseTranscript(raw: string): TranscriptSummary {
     }
   }
 
-  return { startedAt, endedAt, turnCount, userMessages, filesWritten, filesRead, commandsRun, toolCounts };
+  return {
+    startedAt,
+    endedAt,
+    turnCount,
+    userMessages,
+    filesWritten,
+    filesRead,
+    commandsRun,
+    toolCounts,
+  };
 }
 
 /* ------------------------------------------------------------------------- *
@@ -172,7 +182,9 @@ export function renderHandoff(args: {
     "",
     bulletOrNote(
       t?.userMessages ?? [],
-      t ? "(không có tin nhắn nào ngoài lệnh hệ thống)" : "(không đọc được transcript của phiên này)",
+      t
+        ? "(không có tin nhắn nào ngoài lệnh hệ thống)"
+        : "(không đọc được transcript của phiên này)",
     ),
     "",
     "## Hành động (trích cơ học từ transcript, không phải tường thuật)",
@@ -185,12 +197,7 @@ export function renderHandoff(args: {
   ];
 
   if (task.context_contract.open_questions.length > 0) {
-    lines.push(
-      "",
-      "## Câu hỏi còn mở",
-      "",
-      bulletOrNote(task.context_contract.open_questions, ""),
-    );
+    lines.push("", "## Câu hỏi còn mở", "", bulletOrNote(task.context_contract.open_questions, ""));
   }
 
   lines.push("", `## Điều kiện hoàn thành của ${task.id}`, "", formatGate(gate));

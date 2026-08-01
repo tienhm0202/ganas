@@ -1,15 +1,16 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeProject, cleanup, goal, sprint, design } from "./helpers.js";
-import { loadGraph } from "../src/graph/load.js";
-import { computeFreshness } from "../src/graph/freshness.js";
-import { evaluateGate } from "../src/gate.js";
-import { buildCommitMessage, pathsToStage } from "../src/commit.js";
-import { runShell } from "../src/util/exec.js";
+import { test } from "node:test";
+
 import { run as ganasCommit } from "../src/commands/commit.js";
+import { buildCommitMessage, pathsToStage } from "../src/commit.js";
+import { evaluateGate } from "../src/gate.js";
+import { computeFreshness } from "../src/graph/freshness.js";
+import { loadGraph } from "../src/graph/load.js";
 import { zTask } from "../src/model/index.js";
+import { runShell } from "../src/util/exec.js";
+import { cleanup, design, goal, makeProject, sprint } from "./helpers.js";
 
 /* --- buildCommitMessage: thuần, không cần git thật ------------------------ */
 

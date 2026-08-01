@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { runShell, judge } from "./util/exec.js";
-import { ganasPath, DIRS } from "./graph/paths.js";
-import type { Task, ExitCriterion } from "./model/index.js";
-import type { Graph } from "./graph/types.js";
+
 import type { VerificationState } from "./graph/freshness.js";
+import { DIRS, ganasPath } from "./graph/paths.js";
+import type { Graph } from "./graph/types.js";
+import type { ExitCriterion, Task } from "./model/index.js";
+import { judge, runShell } from "./util/exec.js";
 
 export interface CriterionResult {
   criterion: ExitCriterion;
@@ -130,7 +131,7 @@ export async function evaluateGate(
   graph: Graph,
   task: Task,
   freshness: Map<string, VerificationState>,
-  sessionId?: string | undefined,
+  sessionId?: string,
 ): Promise<GateResult> {
   const results = await Promise.all(
     task.exit_contract.map((c) => checkCriterion(c, { root: graph.root, sessionId, freshness })),

@@ -37,14 +37,15 @@ function readJsonAdapter(data: unknown): EvalReading {
   let score = num(d["score"]);
   const passed = num(d["passed"]);
   const failed = num(d["failed"]);
-  const n = num(d["n"]) ?? (passed !== undefined && failed !== undefined ? passed + failed : undefined);
+  const n =
+    num(d["n"]) ?? (passed !== undefined && failed !== undefined ? passed + failed : undefined);
 
   // Thiếu `score` nhưng có passed/n thì suy ra được — đừng bắt runner khai thừa.
   if (score === undefined && passed !== undefined && n !== undefined && n > 0) {
     score = passed / n;
   }
   if (score === undefined) {
-    throw new AdapterError('thiếu `score` (và không suy ra được từ `passed`/`n`)');
+    throw new AdapterError("thiếu `score` (và không suy ra được từ `passed`/`n`)");
   }
   if (score < 0 || score > 1) {
     throw new AdapterError(`score = ${score}, phải nằm trong 0..1`);
@@ -80,8 +81,7 @@ function readPromptfooAdapter(data: unknown): EvalReading {
   if (n === 0) throw new AdapterError("bộ eval chạy 0 ca — không có gì để chấm");
 
   const tokenUsage = (results?.["tokenUsage"] ?? root?.["tokenUsage"]) as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
 
   return {
     score: successes / n,

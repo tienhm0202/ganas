@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { zSprintId, zGoalId, zIsoDate, zNonEmpty } from "./common.js";
+
+import { zGoalId, zIsoDate, zNonEmpty, zSprintId } from "./common.js";
 
 export const SPRINT_STATUS = ["planned", "active", "closed"] as const;
 

@@ -1,22 +1,23 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeProject, cleanup, goal } from "./helpers.js";
+import { test } from "node:test";
+
 import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
+import * as handlers from "../src/hooks/handlers.js";
 import {
   appendEntry,
   definitionHash,
-  ledgerPath,
-  readLedger,
+  entryAt,
+  historyFor,
   indexByTarget,
   lastFor,
-  historyFor,
-  entryAt,
   type LedgerEntry,
+  ledgerPath,
+  readLedger,
 } from "../src/verify/ledger.js";
-import * as handlers from "../src/hooks/handlers.js";
+import { cleanup, goal, makeProject } from "./helpers.js";
 
 const PROBE = { run: "test -f src/a.ts", expect: "exit_zero" as const };
 const VERIFIED_AT = "2025-06-01T00:00:00.000Z";
@@ -172,10 +173,7 @@ test("đường dẫn tương đối tới sổ cái cũng bị chặn", async (
       tool_name: "Edit",
       tool_input: { file_path: ".ganas/verify-ledger.jsonl" },
     });
-    assert.equal(
-      (out.hookSpecificOutput as Record<string, string>)["permissionDecision"],
-      "deny",
-    );
+    assert.equal((out.hookSpecificOutput as Record<string, string>)["permissionDecision"], "deny");
   } finally {
     await cleanup(root);
   }

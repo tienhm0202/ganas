@@ -1,7 +1,8 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { check, validSpine, goal, task } from "./helpers.js";
+import { test } from "node:test";
+
 import { freshnessOf, zFact } from "../src/model/index.js";
+import { check, goal, task, validSpine } from "./helpers.js";
 
 /* --- Anchor bắt buộc ------------------------------------------------------ */
 
@@ -37,7 +38,10 @@ test("claim có anchor hợp lệ thì qua", async () => {
     - "src/api/handlers/index.ts#L1"
   provenance: session`,
   });
-  assert.deepEqual(diagnostics.filter((d) => d.severity === "error"), []);
+  assert.deepEqual(
+    diagnostics.filter((d) => d.severity === "error"),
+    [],
+  );
 });
 
 /* --- Không được đổi mức tin cậy trần --------------------------------------- */
@@ -188,7 +192,11 @@ test("fact quá ttl → stale kể cả khi không file nào đổi", () => {
 });
 
 test("ttl_days = 0 nghĩa là không hết hạn theo thời gian", () => {
-  const fact = makeFact({ ttl_days: 0, last_verified_at: "2020-01-01T00:00:00Z", last_result: "pass" });
+  const fact = makeFact({
+    ttl_days: 0,
+    last_verified_at: "2020-01-01T00:00:00Z",
+    last_result: "pass",
+  });
   const now = Date.parse("2025-12-01T00:00:00Z");
   assert.equal(freshnessOf({ fact, now }), "fresh");
 });

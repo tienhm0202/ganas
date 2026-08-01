@@ -1,14 +1,14 @@
 import type {
-  Goal,
-  Sprint,
-  Design,
-  Task,
-  Fact,
   Claim,
-  Decision,
   Config,
-  Part,
+  Decision,
+  Design,
+  Fact,
+  Goal,
   Module,
+  Part,
+  Sprint,
+  Task,
 } from "../model/index.js";
 import type { LoadedYaml } from "../util/yaml.js";
 import type { LedgerEntry } from "../verify/ledger.js";

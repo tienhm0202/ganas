@@ -1,13 +1,13 @@
-import { flag, option, type Argv } from "../util/args.js";
-import { openProject } from "./_common.js";
 import {
   checkAllEdges,
   computeDebt,
+  type EdgeCheck,
   recordEdgeChecks,
   renderDiagram,
-  type EdgeCheck,
 } from "../graph/trace.js";
+import { type Argv, flag, option } from "../util/args.js";
 import type { LedgerResult } from "../verify/ledger.js";
+import { openProject } from "./_common.js";
 
 const MARK: Record<LedgerResult, string> = {
   pass: "✓",

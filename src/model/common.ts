@@ -31,9 +31,7 @@ export const zClaimId = z.string().regex(ID_PATTERNS.claim, "ID claim phải d�
 export const zLegacyClaimId = z
   .string()
   .regex(ID_PATTERNS.legacyClaim, "ID legacy claim phải dạng LC-007");
-export const zDecisionId = z
-  .string()
-  .regex(ID_PATTERNS.decision, "ID decision phải dạng DEC-004");
+export const zDecisionId = z.string().regex(ID_PATTERNS.decision, "ID decision phải dạng DEC-004");
 export const zModuleId = z.string().regex(ID_PATTERNS.module, "ID khối phải dạng M-intent");
 export const zPartId = z.string().regex(ID_PATTERNS.part, "ID phần phải dạng P-chat-core");
 

@@ -1,10 +1,10 @@
-import { flag, option, type Argv } from "../util/args.js";
-import { GanasError } from "../util/errors.js";
-import { openProject } from "./_common.js";
-import { allTargets, runTarget, type Target, type RunOutcome } from "../verify/run.js";
-import { defHash, lastFor } from "../verify/ledger.js";
 import type { Graph } from "../graph/types.js";
+import { type Argv, flag, option } from "../util/args.js";
+import { GanasError } from "../util/errors.js";
 import type { LedgerResult } from "../verify/ledger.js";
+import { defHash, lastFor } from "../verify/ledger.js";
+import { allTargets, type RunOutcome, runTarget, type Target } from "../verify/run.js";
+import { openProject } from "./_common.js";
 
 const MARK: Record<LedgerResult, string> = {
   pass: "✓",
@@ -99,7 +99,9 @@ export async function run(argv: Argv): Promise<number> {
   } else {
     const wantAll = flag(argv, "all");
     selected = all
-      .filter((t) => tier === "all" || tierOf(t) === tier || (tier === "full" && tierOf(t) === "smoke"))
+      .filter(
+        (t) => tier === "all" || tierOf(t) === tier || (tier === "full" && tierOf(t) === "smoke"),
+      )
       .map((target) => ({ target, why: needsRun(target, graph) ?? "" }))
       .filter((s) => wantAll || s.why !== "")
       .map((s) => ({ target: s.target, why: s.why || "chạy lại theo yêu cầu" }));

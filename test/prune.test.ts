@@ -1,13 +1,14 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile, utimes } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeProject, cleanup, goal, sprint, design } from "./helpers.js";
-import { loadGraph } from "../src/graph/load.js";
-import { writeState, readState } from "../src/state.js";
-import { planPrune, applyPrune } from "../src/prune.js";
+import { test } from "node:test";
+
 import { run as ganasPrune } from "../src/commands/prune.js";
+import { loadGraph } from "../src/graph/load.js";
+import { applyPrune, planPrune } from "../src/prune.js";
+import { readState, writeState } from "../src/state.js";
+import { cleanup, design, goal, makeProject, sprint } from "./helpers.js";
 
 const DAY_MS = 86_400_000;
 const NOW = Date.parse("2026-08-15T00:00:00Z");
@@ -74,7 +75,11 @@ test("runs/*.md của phiên VẪN đang bind trong state.json thì không đụ
 
     const graph = await loadGraph(root);
     const plan = await planPrune(root, graph, { olderThanDays: 7, now: NOW });
-    assert.deepEqual(plan.staleRuns, [], "phiên còn bind thì gate của task khác có thể còn cần file này");
+    assert.deepEqual(
+      plan.staleRuns,
+      [],
+      "phiên còn bind thì gate của task khác có thể còn cần file này",
+    );
   } finally {
     await cleanup(root);
   }
@@ -192,7 +197,11 @@ exit_contract:
   try {
     const graph = await loadGraph(root);
     const plan = await planPrune(root, graph, { olderThanDays: 7, now: NOW });
-    assert.deepEqual(plan.doneTasks, [], "archive T-001 sẽ làm blocked_by của T-002 trỏ vào chỗ trống");
+    assert.deepEqual(
+      plan.doneTasks,
+      [],
+      "archive T-001 sẽ làm blocked_by của T-002 trỏ vào chỗ trống",
+    );
   } finally {
     await cleanup(root);
   }
@@ -211,7 +220,11 @@ test("sprint closed hết task sống trỏ vào (kể cả task cùng bị arch
     const graph = await loadGraph(root);
     const plan = await planPrune(root, graph, { olderThanDays: 7, now: NOW });
     assert.equal(plan.doneTasks.length, 1, "T-001 phải được archive trước");
-    assert.equal(plan.closedSprints.length, 1, "sau đó sprint không còn ai trỏ vào nên cũng archive được");
+    assert.equal(
+      plan.closedSprints.length,
+      1,
+      "sau đó sprint không còn ai trỏ vào nên cũng archive được",
+    );
     assert.equal(plan.closedSprints[0]!.id, "S-2026-07");
   } finally {
     await cleanup(root);
@@ -313,7 +326,10 @@ test("ganas prune: mặc định dry-run, KHÔNG đụng đĩa", async () => {
       passthrough: [],
     });
     assert.equal(code, 0);
-    assert.ok(existsSync(join(root, ".ganas", "tasks", "T-001.yaml")), "dry-run không được dời file");
+    assert.ok(
+      existsSync(join(root, ".ganas", "tasks", "T-001.yaml")),
+      "dry-run không được dời file",
+    );
     assert.ok(!existsSync(join(root, ".ganas", "tasks", "done")));
   } finally {
     await cleanup(root);

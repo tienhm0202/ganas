@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+
 import { NotInitializedError } from "../util/errors.js";
 
 export const GANAS_DIR = ".ganas";

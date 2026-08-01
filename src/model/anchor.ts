@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { zIsoDate, zHandle, zNonEmpty } from "./common.js";
+
+import { zHandle, zIsoDate, zNonEmpty } from "./common.js";
 
 /**
  * Anchor = bằng chứng cho một phát biểu.
@@ -94,22 +95,20 @@ export function parseAnchorString(raw: string): AnchorObject | null {
   return null;
 }
 
-export const zAnchor = z
-  .union([z.string(), zAnchorObject])
-  .transform((v, ctx) => {
-    if (typeof v !== "string") return v;
-    const parsed = parseAnchorString(v);
-    if (!parsed) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          `anchor "${v}" không nhận dạng được. Dùng "src/a.ts#L12", "src/a.ts:12", ` +
-          `"commit:abc1234", hoặc dạng object cho url/human (url cần fetched_at).`,
-      });
-      return z.NEVER;
-    }
-    return parsed;
-  });
+export const zAnchor = z.union([z.string(), zAnchorObject]).transform((v, ctx) => {
+  if (typeof v !== "string") return v;
+  const parsed = parseAnchorString(v);
+  if (!parsed) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        `anchor "${v}" không nhận dạng được. Dùng "src/a.ts#L12", "src/a.ts:12", ` +
+        `"commit:abc1234", hoặc dạng object cho url/human (url cần fetched_at).`,
+    });
+    return z.NEVER;
+  }
+  return parsed;
+});
 
 /** Ít nhất một anchor. Đây là chỗ luật "không anchor thì không hợp lệ" được cưỡng chế. */
 const NEED_ANCHOR =

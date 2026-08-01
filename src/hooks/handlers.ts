@@ -1,16 +1,17 @@
-import { relative, resolve, isAbsolute } from "node:path";
-import { findGanasRoot, GANAS_DIR } from "../graph/paths.js";
-import { loadGraph } from "../graph/load.js";
-import { validateGraph } from "../graph/validate.js";
-import { computeFreshness } from "../graph/freshness.js";
-import { selectNextTask } from "../graph/select.js";
-import { renderBrief } from "../render/brief.js";
+import { isAbsolute, relative, resolve } from "node:path";
+
 import { evaluateGate } from "../gate.js";
-import { generateHandoff } from "../handoff.js";
-import { bindSession, releaseSession, taskForSession } from "../state.js";
-import { enforcementFor, type EnforcementRule } from "../model/index.js";
-import { LEDGER_FILE, ledgerPath } from "../verify/ledger.js";
+import { computeFreshness } from "../graph/freshness.js";
+import { loadGraph } from "../graph/load.js";
+import { findGanasRoot, GANAS_DIR } from "../graph/paths.js";
+import { selectNextTask } from "../graph/select.js";
 import type { Diagnostic } from "../graph/types.js";
+import { validateGraph } from "../graph/validate.js";
+import { generateHandoff } from "../handoff.js";
+import { enforcementFor, type EnforcementRule } from "../model/index.js";
+import { renderBrief } from "../render/brief.js";
+import { bindSession, releaseSession, taskForSession } from "../state.js";
+import { LEDGER_FILE, ledgerPath } from "../verify/ledger.js";
 import { ALLOW, type HookInput, type HookOutput } from "./io.js";
 
 /** Diagnostic liên quan tới bằng chứng — luật `knowledge_anchor`, không phải `schema`. */
@@ -42,9 +43,8 @@ export async function sessionStart(input: HookInput): Promise<HookOutput> {
   const bound = sessionId ? await taskForSession(root, sessionId) : null;
   const existing = bound ? graph.tasks.get(bound) : undefined;
 
-  const picked = existing && existing.value.status !== "done"
-    ? { task: existing }
-    : selectNextTask(graph);
+  const picked =
+    existing && existing.value.status !== "done" ? { task: existing } : selectNextTask(graph);
 
   if (!picked) {
     return {
@@ -131,6 +131,7 @@ const SKILL_WRITE_REASON =
  * tin cậy của cả hệ thống, và không ai có thói quen cũ nào ghi vào file mà ganas
  * vừa tạo ra.
  */
+// eslint-disable-next-line @typescript-eslint/require-await -- phải khớp chữ ký `Handler` dùng chung (Promise<HookOutput>) dù nhánh này thuần đồng bộ.
 export async function preToolUse(input: HookInput): Promise<HookOutput> {
   const cwd = input.cwd ?? process.cwd();
   const root = findGanasRoot(cwd);
@@ -260,10 +261,7 @@ export async function stop(input: HookInput): Promise<HookOutput> {
  * ------------------------------------------------------------------------- */
 
 /** Ghi handoff nếu biết đủ (root/session/task) — lỗi thì bỏ qua, không chặn hook nào. */
-async function tryHandoff(
-  root: string,
-  input: HookInput,
-): Promise<{ path: string } | undefined> {
+async function tryHandoff(root: string, input: HookInput): Promise<{ path: string } | undefined> {
   if (!input.session_id) return undefined;
   const taskId = await taskForSession(root, input.session_id);
   if (!taskId) return undefined;

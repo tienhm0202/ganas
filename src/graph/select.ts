@@ -42,7 +42,9 @@ export function selectNextTask(graph: Graph): Candidate | null {
     return score;
   };
 
-  return open.sort((a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id))[0]!;
+  return open.sort(
+    (a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id),
+  )[0]!;
 }
 
 /** Task bị chặn, kèm lý do — hiển thị khi không còn việc nào làm được. */

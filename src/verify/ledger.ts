@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { appendFile, readFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { dirname } from "node:path";
+
 import { ganasPath } from "../graph/paths.js";
 import { runShell } from "../util/exec.js";
 
@@ -158,7 +159,10 @@ export function indexByTarget(entries: readonly LedgerEntry[]): Map<string, Ledg
   return map;
 }
 
-export function lastFor(index: Map<string, LedgerEntry[]>, target: string): LedgerEntry | undefined {
+export function lastFor(
+  index: Map<string, LedgerEntry[]>,
+  target: string,
+): LedgerEntry | undefined {
   const list = index.get(target);
   return list?.[list.length - 1];
 }
@@ -181,7 +185,10 @@ export function entryAt(
 }
 
 /** Bối cảnh máy/commit lúc chạy — để biết một kết quả đến từ đâu. */
-export async function runContext(root: string, by: string): Promise<Pick<LedgerEntry, "by" | "git" | "host">> {
+export async function runContext(
+  root: string,
+  by: string,
+): Promise<Pick<LedgerEntry, "by" | "git" | "host">> {
   const git = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5000 });
   return {
     by,

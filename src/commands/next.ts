@@ -1,7 +1,7 @@
-import { flag, option, type Argv } from "../util/args.js";
-import { selectNextTask, blockedTasks } from "../graph/select.js";
+import { blockedTasks, selectNextTask } from "../graph/select.js";
 import { renderBrief } from "../render/brief.js";
 import { bindSession, updateState } from "../state.js";
+import { type Argv, flag, option } from "../util/args.js";
 import { openProject, volatileStatus } from "./_common.js";
 
 export async function run(argv: Argv): Promise<number> {

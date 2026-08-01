@@ -1,5 +1,5 @@
-import { runShell, judge } from "../util/exec.js";
 import type { Expect } from "../model/index.js";
+import { judge, runShell } from "../util/exec.js";
 
 /**
  * Mutation test cho probe.
@@ -43,7 +43,7 @@ export function mutateProbe(run: string): Mutation | null {
     const [full, head, flag, quote, path] = fileTest;
     const replaced = `${head}${flag} ${quote}${path}${MUTANT_SUFFIX}${quote}`;
     return {
-      run: run.replace(full!, replaced),
+      run: run.replace(full, replaced),
       what: `đổi đường dẫn \`${path}\` thành đường dẫn không tồn tại`,
     };
   }
@@ -52,7 +52,7 @@ export function mutateProbe(run: string): Mutation | null {
   if (grep) {
     const [full, cmd, flags, quote, pattern] = grep;
     return {
-      run: run.replace(full!, `${cmd}${flags} ${quote}${IMPROBABLE}${quote}`),
+      run: run.replace(full, `${cmd}${flags} ${quote}${IMPROBABLE}${quote}`),
       what: `đổi pattern \`${pattern}\` thành chuỗi không thể khớp`,
     };
   }
@@ -61,7 +61,7 @@ export function mutateProbe(run: string): Mutation | null {
   if (grepBare) {
     const [full, cmd, flags, pattern] = grepBare;
     return {
-      run: run.replace(full!, `${cmd}${flags} ${IMPROBABLE}`),
+      run: run.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
       what: `đổi pattern \`${pattern}\` thành chuỗi không thể khớp`,
     };
   }
@@ -70,7 +70,7 @@ export function mutateProbe(run: string): Mutation | null {
   if (quoted) {
     const [full, quote, body] = quoted;
     return {
-      run: run.replace(full!, `${quote}${IMPROBABLE}${quote}`),
+      run: run.replace(full, `${quote}${IMPROBABLE}${quote}`),
       what: `đổi chuỗi \`${body}\` thành chuỗi không thể khớp`,
     };
   }
@@ -107,7 +107,10 @@ export async function proveCanFail(
     };
   }
 
-  const result = await runShell(mutation.run, { cwd: opts.cwd, timeoutMs: opts.timeoutMs ?? 30_000 });
+  const result = await runShell(mutation.run, {
+    cwd: opts.cwd,
+    timeoutMs: opts.timeoutMs ?? 30_000,
+  });
   const verdict = judge(result, expect);
 
   if (verdict.pass) {

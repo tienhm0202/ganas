@@ -49,11 +49,11 @@ function tokensOf(text: string): Set<string> {
     out.add(m[1]!.toLowerCase());
   }
   for (const m of text.matchAll(/[A-Za-z0-9_./-]*[/.][A-Za-z0-9_./-]+/g)) {
-    const t = m[0]!.toLowerCase().replace(/^\.\//, "");
+    const t = m[0].toLowerCase().replace(/^\.\//, "");
     if (t.length >= 3) out.add(t);
   }
   for (const m of text.matchAll(/[A-Za-z_][A-Za-z0-9_]{2,}/g)) {
-    out.add(m[0]!.toLowerCase());
+    out.add(m[0].toLowerCase());
   }
 
   return out;
@@ -61,9 +61,39 @@ function tokensOf(text: string): Set<string> {
 
 /** Từ chỉ là khung lệnh, xuất hiện ở mọi probe nên không nói lên điều gì. */
 const SHELL_NOISE = new Set([
-  "test", "grep", "rip", "npm", "npx", "run", "node", "bash", "sh", "cat", "ls", "find",
-  "true", "false", "exit", "echo", "printf", "head", "tail", "wc", "sed", "awk", "jq",
-  "the", "and", "not", "for", "with", "out", "dev", "null", "quiet", "count",
+  "test",
+  "grep",
+  "rip",
+  "npm",
+  "npx",
+  "run",
+  "node",
+  "bash",
+  "sh",
+  "cat",
+  "ls",
+  "find",
+  "true",
+  "false",
+  "exit",
+  "echo",
+  "printf",
+  "head",
+  "tail",
+  "wc",
+  "sed",
+  "awk",
+  "jq",
+  "the",
+  "and",
+  "not",
+  "for",
+  "with",
+  "out",
+  "dev",
+  "null",
+  "quiet",
+  "count",
 ]);
 
 export interface LintInput {

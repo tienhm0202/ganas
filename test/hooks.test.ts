@@ -1,14 +1,15 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeProject, cleanup, goal, sprint, design, task } from "./helpers.js";
-import * as handlers from "../src/hooks/handlers.js";
-import { loadGraph } from "../src/graph/load.js";
-import { computeFreshness } from "../src/graph/freshness.js";
-import { renderBrief } from "../src/render/brief.js";
+import { test } from "node:test";
+
 import { evaluateGate } from "../src/gate.js";
-import { runTarget, moduleTargets } from "../src/verify/run.js";
+import { computeFreshness } from "../src/graph/freshness.js";
+import { loadGraph } from "../src/graph/load.js";
+import * as handlers from "../src/hooks/handlers.js";
+import { renderBrief } from "../src/render/brief.js";
+import { moduleTargets, runTarget } from "../src/verify/run.js";
+import { cleanup, design, goal, makeProject, sprint, task } from "./helpers.js";
 
 /** Dự án đủ để hook chạy: spine hợp lệ + exit_contract mà ta điều khiển được. */
 async function project(over: Record<string, string> = {}, config?: string): Promise<string> {
@@ -234,7 +235,11 @@ exit_contract:
   try {
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
     const out = await handlers.stop({ cwd: root, session_id: "s1" });
-    assert.equal(out.decision, undefined, "tiêu chí thủ công mà chặn Stop thì phiên không kết thúc được");
+    assert.equal(
+      out.decision,
+      undefined,
+      "tiêu chí thủ công mà chặn Stop thì phiên không kết thúc được",
+    );
     assert.match(out.systemMessage!, /Kế toán trưởng/);
   } finally {
     await cleanup(root);
@@ -270,11 +275,7 @@ exit_contract:
     result = await evaluateGate(graph, t, freshness);
     assert.match(result.unmet[0]!.reason!, /chưa chứa/);
 
-    await writeFile(
-      join(root, ".ganas", "facts", "accounting.yaml"),
-      "- id: F-ACC-013\n",
-      "utf8",
-    );
+    await writeFile(join(root, ".ganas", "facts", "accounting.yaml"), "- id: F-ACC-013\n", "utf8");
     result = await evaluateGate(graph, t, freshness);
     assert.equal(result.ok, true);
   } finally {

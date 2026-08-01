@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { lineOfPath } from "../util/yaml.js";
-import { freshnessOf, evalWeakness, formatAnchor } from "../model/index.js";
+
 import type { ExitCriterion } from "../model/index.js";
+import { evalWeakness, formatAnchor, freshnessOf } from "../model/index.js";
+import { lineOfPath } from "../util/yaml.js";
+import { defHash, entryAt } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
-import { entryAt, defHash } from "../verify/ledger.js";
 import { LOCAL_ONLY } from "./paths.js";
 import type { Diagnostic, Graph, Sourced } from "./types.js";
 
@@ -17,7 +18,11 @@ import type { Diagnostic, Graph, Sourced } from "./types.js";
  */
 
 /** Định vị dòng của một field trong file nguồn của bản ghi. */
-function at(graph: Graph, sourced: Sourced<unknown>, ...path: (string | number)[]): number | undefined {
+function at(
+  graph: Graph,
+  sourced: Sourced<unknown>,
+  ...path: (string | number)[]
+): number | undefined {
   const loaded = graph.sources.get(sourced.file);
   if (!loaded) return undefined;
   const full = sourced.index === undefined ? path : [sourced.index, ...path];
@@ -26,7 +31,9 @@ function at(graph: Graph, sourced: Sourced<unknown>, ...path: (string | number)[
 
 /** Phát hiện chu trình trong đồ thị có hướng. Trả về chu trình đầu tiên tìm được. */
 function findCycle(edges: Map<string, readonly string[]>): string[] | null {
-  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const WHITE = 0,
+    GRAY = 1,
+    BLACK = 2;
   const color = new Map<string, number>();
   const stack: string[] = [];
 
@@ -94,8 +101,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     });
 
     const allClosed =
-      d.serves.length > 0 &&
-      d.serves.every((g) => graph.goals.get(g)?.value.status === "closed");
+      d.serves.length > 0 && d.serves.every((g) => graph.goals.get(g)?.value.status === "closed");
     if (allClosed && d.status !== "archived" && d.status !== "superseded") {
       diags.push({
         severity: "warning",
@@ -232,7 +238,9 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     });
 
     const verifiedTargets = t.exit_contract
-      .filter((c): c is Extract<ExitCriterion, { kind: "verification" }> => c.kind === "verification")
+      .filter(
+        (c): c is Extract<ExitCriterion, { kind: "verification" }> => c.kind === "verification",
+      )
       .map((c) => c.target);
 
     t.touches.forEach((moduleId, i) => {
@@ -340,8 +348,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         diags.push({
           severity: "error",
           code: "spine/module-part-mismatch",
-          message:
-            `khối ${m.id} khai thuộc phần ${m.part}, nhưng phần đó không liệt kê nó trong \`modules\``,
+          message: `khối ${m.id} khai thuộc phần ${m.part}, nhưng phần đó không liệt kê nó trong \`modules\``,
           file: module.file,
           line: at(graph, module, "part"),
           hint: `Thêm ${m.id} vào \`modules\` của ${m.part}, hoặc sửa \`part\` của khối.`,
@@ -378,8 +385,7 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       diags.push({
         severity: "warning",
         code: "verify/module-unverified",
-        message:
-          `khối ${m.id} chưa có bằng chứng nào — mọi luồng đi qua nó đều không tin được`,
+        message: `khối ${m.id} chưa có bằng chứng nào — mọi luồng đi qua nó đều không tin được`,
         file: module.file,
         line: at(graph, module, "id"),
         hint:

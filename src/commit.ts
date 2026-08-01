@@ -1,6 +1,6 @@
-import type { Task } from "./model/index.js";
 import type { GateResult } from "./gate.js";
 import type { Graph } from "./graph/types.js";
+import type { Task } from "./model/index.js";
 
 /**
  * Dựng commit message TỪ dữ liệu đã kiểm chứng, không phải văn xuôi tự bịa.

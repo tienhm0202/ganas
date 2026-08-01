@@ -1,13 +1,14 @@
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { flag, option, type Argv } from "../util/args.js";
-import { GanasError } from "../util/errors.js";
-import { openProject } from "./_common.js";
-import { evaluateGate, formatGate } from "../gate.js";
+
 import { buildCommitMessage, pathsToStage } from "../commit.js";
+import { evaluateGate, formatGate } from "../gate.js";
 import { taskForSession } from "../state.js";
+import { type Argv, flag, option } from "../util/args.js";
+import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
+import { openProject } from "./_common.js";
 
 /** Bọc pathspec cho `git add`: đủ để chống một dấu nháy đơn trong path lạ. */
 function quote(p: string): string {
@@ -59,7 +60,10 @@ export async function run(argv: Argv): Promise<number> {
   try {
     const msgFile = join(dir, "MSG");
     await writeFile(msgFile, message, "utf8");
-    const result = await runShell(`git commit -F ${quote(msgFile)}`, { cwd: root, timeoutMs: 30_000 });
+    const result = await runShell(`git commit -F ${quote(msgFile)}`, {
+      cwd: root,
+      timeoutMs: 30_000,
+    });
     if (result.code !== 0) {
       throw new GanasError(`git commit thất bại:\n${result.stderr || result.stdout}`);
     }

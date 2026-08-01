@@ -1,9 +1,10 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lintProbe, hasBlockingFinding } from "../src/verify/lint.js";
+import { test } from "node:test";
+
+import { hasBlockingFinding, lintProbe } from "../src/verify/lint.js";
 import { mutateProbe, proveCanFail } from "../src/verify/mutate.js";
 import { check, goal } from "./helpers.js";
 
@@ -51,7 +52,10 @@ for (const run of DANGEROUS_CASES) {
 
 test("probe đọc git thì không bị coi là nguy hiểm", () => {
   const findings = lintProbe({ run: "git log --oneline -1", statement: "có commit" });
-  assert.equal(findings.some((f) => f.code === "dangerous"), false);
+  assert.equal(
+    findings.some((f) => f.code === "dangerous"),
+    false,
+  );
 });
 
 /* --- Lint: probe lạc đề chỉ là CẢNH BÁO ------------------------------------ */
@@ -77,7 +81,10 @@ test("phát biểu tiếng Việt + probe tiếng Anh vẫn khớp qua đường
     statement: "Kỳ chốt sổ là ngày 5 hàng tháng",
     context: ["src/accounting/**"],
   });
-  assert.equal(findings.some((f) => f.code === "unrelated"), false);
+  assert.equal(
+    findings.some((f) => f.code === "unrelated"),
+    false,
+  );
 });
 
 /* --- Mutation: sinh bản bóp méo -------------------------------------------- */
@@ -213,5 +220,9 @@ test("probe hợp lệ không sinh cảnh báo chất lượng nào", async () =
   depends_on: ["src/**"]
 `,
   });
-  assert.equal(codes.some((c) => c.startsWith("verify/")), false, codes.join(", "));
+  assert.equal(
+    codes.some((c) => c.startsWith("verify/")),
+    false,
+    codes.join(", "),
+  );
 });

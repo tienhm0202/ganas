@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { parseDocument, type Document, isNode } from "yaml";
+
+import { type Document, isNode, parseDocument } from "yaml";
+
 import { GanasError } from "./errors.js";
 
 export interface LoadedYaml {
@@ -47,7 +49,10 @@ export function offsetToLine(source: string, offset: number): number {
  * Tìm dòng của một đường dẫn trong Document (vd ["acceptance", 0, "run"]).
  * Trả về undefined nếu không định vị được — người gọi vẫn báo lỗi, chỉ thiếu dòng.
  */
-export function lineOfPath(loaded: LoadedYaml, path: readonly (string | number)[]): number | undefined {
+export function lineOfPath(
+  loaded: LoadedYaml,
+  path: readonly (string | number)[],
+): number | undefined {
   const { doc, source } = loaded;
 
   // Thu ngắn dần đường dẫn cho tới khi tìm được node thật: lỗi ở key chưa tồn

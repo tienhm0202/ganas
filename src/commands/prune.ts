@@ -1,7 +1,7 @@
-import { flag, option, type Argv } from "../util/args.js";
+import { applyPrune, planPrune, type PrunePlan } from "../prune.js";
+import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { openProject } from "./_common.js";
-import { planPrune, applyPrune, type PrunePlan } from "../prune.js";
 
 const DEFAULT_OLDER_THAN_DAYS = 7;
 
@@ -10,11 +10,13 @@ function summarize(plan: PrunePlan): string {
 
   if (plan.staleRuns.length > 0) {
     lines.push(`${plan.staleRuns.length} handoff cũ (phiên đã kết thúc) sẽ bị XOÁ:`);
-    for (const r of plan.staleRuns) lines.push(`  - ${r.file} (${r.ageDays} ngày, session ${r.sessionId})`);
+    for (const r of plan.staleRuns)
+      lines.push(`  - ${r.file} (${r.ageDays} ngày, session ${r.sessionId})`);
   }
   if (plan.deadSessions.length > 0) {
     lines.push(`${plan.deadSessions.length} session mồ côi trong state.json sẽ bị gỡ:`);
-    for (const d of plan.deadSessions) lines.push(`  - ${d.sessionId} (${d.ageDays} ngày, chưa từng release)`);
+    for (const d of plan.deadSessions)
+      lines.push(`  - ${d.sessionId} (${d.ageDays} ngày, chưa từng release)`);
   }
   if (plan.doneTasks.length > 0) {
     lines.push(`${plan.doneTasks.length} task done sẽ chuyển sang tasks/done/:`);
@@ -39,7 +41,10 @@ export async function run(argv: Argv): Promise<number> {
 
   const plan = await planPrune(root, graph, { olderThanDays });
   const total =
-    plan.staleRuns.length + plan.deadSessions.length + plan.doneTasks.length + plan.closedSprints.length;
+    plan.staleRuns.length +
+    plan.deadSessions.length +
+    plan.doneTasks.length +
+    plan.closedSprints.length;
 
   const apply = flag(argv, "yes", "y");
 

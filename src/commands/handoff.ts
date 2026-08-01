@@ -1,9 +1,9 @@
-import { flag, option, type Argv } from "../util/args.js";
-import { GanasError } from "../util/errors.js";
-import { openProject } from "./_common.js";
 import { evaluateGate } from "../gate.js";
 import { generateHandoff } from "../handoff.js";
 import { taskForSession } from "../state.js";
+import { type Argv, flag, option } from "../util/args.js";
+import { GanasError } from "../util/errors.js";
+import { openProject } from "./_common.js";
 
 export async function run(argv: Argv): Promise<number> {
   const { root, graph, freshness } = await openProject(argv);

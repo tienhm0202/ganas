@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { zDesignId, zGoalId, zDecisionId, zIsoDate, zNonEmpty } from "./common.js";
+
+import { zDecisionId, zDesignId, zGoalId, zIsoDate, zNonEmpty } from "./common.js";
 
 export const DESIGN_STATUS = ["draft", "active", "superseded", "archived"] as const;
 
@@ -19,7 +20,10 @@ export const zDesign = z
           "design phải khai `serves` — nó phục vụ goal nào? Không có goal thì không cần design.",
         invalid_type_error: "`serves` phải là danh sách ID goal, vd:\n  serves:\n    - G-001",
       })
-      .min(1, "design phải khai `serves` — nó phục vụ goal nào? Không có goal thì không cần design."),
+      .min(
+        1,
+        "design phải khai `serves` — nó phục vụ goal nào? Không có goal thì không cần design.",
+      ),
     summary: zNonEmpty.describe("một đoạn: cách tiếp cận và vì sao chọn nó"),
     status: z.enum(DESIGN_STATUS).default("draft"),
     /** Các quyết định người đã chốt mà design này dựa vào. */

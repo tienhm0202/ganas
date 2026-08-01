@@ -1,0 +1,11 @@
+dist/
+node_modules/
+coverage/
+
+# Markdown (PLAN.md, plugin/skills/**) không thuộc phạm vi task này.
+*.md
+
+# Đang có task riêng sửa hai file này (ADR fields / brief length warning) —
+# không chạm để tránh xung đột.
+src/model/knowledge.ts
+src/render/brief.ts

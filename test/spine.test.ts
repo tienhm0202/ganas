@@ -1,11 +1,12 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { check, validSpine, makeProject, cleanup, goal, sprint, design, task } from "./helpers.js";
+import { test } from "node:test";
+
 import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
 import { zTask } from "../src/model/index.js";
+import { check, cleanup, design, goal, makeProject, sprint, task, validSpine } from "./helpers.js";
 
 test("graph hợp lệ không có lỗi", async () => {
   const { diagnostics } = await check(validSpine());
@@ -90,7 +91,10 @@ acceptance:
 status: draft`,
     ".ganas/designs/D-001.yaml": design(),
   });
-  assert.deepEqual(diagnostics.filter((d) => d.severity === "error"), []);
+  assert.deepEqual(
+    diagnostics.filter((d) => d.severity === "error"),
+    [],
+  );
   assert.ok(codes.includes("spine/design-serves-draft-goal"));
 });
 
@@ -117,9 +121,7 @@ implements: D-001
 sprint: S-2026-08
 status: todo`;
   const { diagnostics } = await check(files);
-  assert.ok(
-    diagnostics.some((d) => d.severity === "error" && d.message.includes("exit_contract")),
-  );
+  assert.ok(diagnostics.some((d) => d.severity === "error" && d.message.includes("exit_contract")));
 });
 
 test("vòng lặp phụ thuộc giữa task bị bắt", async () => {

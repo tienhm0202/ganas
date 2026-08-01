@@ -1,10 +1,11 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cleanup } from "./helpers.js";
+import { test } from "node:test";
+
 import { run as ganasInit } from "../src/commands/init.js";
+import { cleanup } from "./helpers.js";
 
 /* --- Nội dung thuần: architectureRuleMd() ---------------------------------- */
 

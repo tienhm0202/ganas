@@ -1,19 +1,23 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, mkdir, utimes } from "node:fs/promises";
+import { mkdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { makeProject, cleanup, goal } from "./helpers.js";
+import { test } from "node:test";
+
+import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
-import { computeFreshness } from "../src/graph/freshness.js";
-import { runTarget, factTarget, moduleTargets } from "../src/verify/run.js";
 import type { Freshness } from "../src/model/index.js";
+import { factTarget, moduleTargets, runTarget } from "../src/verify/run.js";
+import { cleanup, goal, makeProject } from "./helpers.js";
 
 const RUN = (root: string) => ({ root, by: "test" });
 
 /* --- Helper: dựng dự án, verify thật, rồi hỏi trạng thái ------------------ */
 
-async function stateOf(root: string, targetId: string): Promise<{
+async function stateOf(
+  root: string,
+  targetId: string,
+): Promise<{
   freshness: Freshness;
   reason: string;
   action?: string | undefined;

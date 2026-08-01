@@ -1,6 +1,7 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseAnchorString, formatAnchor, zAnchor, zAnchors } from "../src/model/anchor.js";
+import { test } from "node:test";
+
+import { formatAnchor, parseAnchorString, zAnchor, zAnchors } from "../src/model/anchor.js";
 
 test("nhận dạng anchor file dạng #L", () => {
   assert.deepEqual(parseAnchorString("src/a.ts#L42"), {

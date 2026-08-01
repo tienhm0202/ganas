@@ -5,7 +5,7 @@
  * Hook gọi CLI này nhiều lần mỗi phiên, nên module lệnh được nạp bằng dynamic
  * import: chạy `ganas brief` không kéo theo code của init/pack/kb.
  */
-import { parseArgs, type Argv } from "./util/args.js";
+import { type Argv, parseArgs } from "./util/args.js";
 import { GanasError } from "./util/errors.js";
 
 type CommandModule = { run: (argv: Argv) => Promise<number> | number };
@@ -55,11 +55,12 @@ async function main(): Promise<number> {
   const argv = parseArgs(raw);
 
   if (argv.flags["version"] || argv.flags["v"]) {
-    const { readFile } = await import("node:fs/promises");
-    const { fileURLToPath } = await import("node:url");
-    const { dirname, join } = await import("node:path");
-    const here = dirname(fileURLToPath(import.meta.url));
-    const pkg = JSON.parse(await readFile(join(here, "..", "package.json"), "utf8"));
+    const fs = await import("node:fs/promises");
+    const url = await import("node:url");
+    const path = await import("node:path");
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const raw = await fs.readFile(path.join(here, "..", "package.json"), "utf8");
+    const pkg = JSON.parse(raw) as { version: string };
     process.stdout.write(`${pkg.version}\n`);
     return 0;
   }
@@ -93,6 +94,8 @@ main()
       process.exitCode = err.exitCode;
       return;
     }
-    process.stderr.write(`ganas: lỗi không lường trước\n${String(err instanceof Error ? err.stack : err)}\n`);
+    process.stderr.write(
+      `ganas: lỗi không lường trước\n${String(err instanceof Error ? err.stack : err)}\n`,
+    );
     process.exitCode = 70;
   });

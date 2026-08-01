@@ -1,13 +1,14 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { makeProject, cleanup, goal, sprint, design } from "./helpers.js";
-import { loadGraph } from "../src/graph/load.js";
-import { computeFreshness } from "../src/graph/freshness.js";
+import { test } from "node:test";
+
 import { evaluateGate } from "../src/gate.js";
-import { parseTranscript, renderHandoff, generateHandoff, runsPath } from "../src/handoff.js";
-import { zTask } from "../src/model/index.js";
+import { computeFreshness } from "../src/graph/freshness.js";
+import { loadGraph } from "../src/graph/load.js";
+import { generateHandoff, parseTranscript, renderHandoff, runsPath } from "../src/handoff.js";
 import * as handlers from "../src/hooks/handlers.js";
+import { zTask } from "../src/model/index.js";
+import { cleanup, design, goal, makeProject, sprint } from "./helpers.js";
 
 /* --- parseTranscript: trích cơ học từ JSONL -------------------------------- */
 
@@ -52,7 +53,10 @@ test("parseTranscript trích đúng: user text, file sửa, lệnh chạy — b�
     // tool_result quay lại dạng "user" — không phải tin nhắn người gõ
     line({
       type: "user",
-      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }],
+      },
       timestamp: "2026-08-01T09:02:05.000Z",
     }),
     "not json at all — dòng hỏng",
@@ -60,7 +64,9 @@ test("parseTranscript trích đúng: user text, file sửa, lệnh chạy — b�
       type: "assistant",
       message: {
         role: "assistant",
-        content: [{ type: "tool_use", id: "t3", name: "Read", input: { file_path: "src/retry.ts" } }],
+        content: [
+          { type: "tool_use", id: "t3", name: "Read", input: { file_path: "src/retry.ts" } },
+        ],
       },
       timestamp: "2026-08-01T09:03:00.000Z",
     }),
@@ -212,10 +218,10 @@ test("generateHandoff ghi đúng .ganas/runs/<session>.md", async () => {
 test("sessionEnd tự ghi handoff cho phiên đang bind, rồi mới giải phóng session", async () => {
   const root = await baseGraph();
   const { writeFile, mkdir } = await import("node:fs/promises");
-  const { join } = await import("node:path");
-  await mkdir(join(root, ".ganas", "tasks"), { recursive: true });
+  const path = await import("node:path");
+  await mkdir(path.join(root, ".ganas", "tasks"), { recursive: true });
   await writeFile(
-    join(root, ".ganas", "tasks", "T-001.yaml"),
+    path.join(root, ".ganas", "tasks", "T-001.yaml"),
     `id: T-001
 title: "t"
 serves: [G-001]
@@ -241,10 +247,10 @@ exit_contract:
 test("preCompact báo đã ghi handoff trong systemMessage", async () => {
   const root = await baseGraph();
   const { writeFile, mkdir } = await import("node:fs/promises");
-  const { join } = await import("node:path");
-  await mkdir(join(root, ".ganas", "tasks"), { recursive: true });
+  const path = await import("node:path");
+  await mkdir(path.join(root, ".ganas", "tasks"), { recursive: true });
   await writeFile(
-    join(root, ".ganas", "tasks", "T-001.yaml"),
+    path.join(root, ".ganas", "tasks", "T-001.yaml"),
     `id: T-001
 title: "t"
 serves: [G-001]
@@ -285,10 +291,10 @@ test("ganas handoff: thiếu --session bị từ chối rõ ràng", async () => 
 test("ganas handoff --session --task: sinh file, --json trả path", async () => {
   const root = await baseGraph();
   const { writeFile, mkdir } = await import("node:fs/promises");
-  const { join } = await import("node:path");
-  await mkdir(join(root, ".ganas", "tasks"), { recursive: true });
+  const path = await import("node:path");
+  await mkdir(path.join(root, ".ganas", "tasks"), { recursive: true });
   await writeFile(
-    join(root, ".ganas", "tasks", "T-001.yaml"),
+    path.join(root, ".ganas", "tasks", "T-001.yaml"),
     `id: T-001
 title: "t"
 serves: [G-001]

@@ -1,8 +1,8 @@
-import { flag, option, type Argv } from "../util/args.js";
-import { requireGanasRoot } from "../graph/paths.js";
 import { loadGraph } from "../graph/load.js";
-import { validateGraph } from "../graph/validate.js";
+import { requireGanasRoot } from "../graph/paths.js";
 import { countBySeverity, type Diagnostic, type Severity } from "../graph/types.js";
+import { validateGraph } from "../graph/validate.js";
+import { type Argv, flag, option } from "../util/args.js";
 
 const COLORS = {
   error: "[31m",
@@ -48,9 +48,7 @@ export async function run(argv: Argv): Promise<number> {
   const counts = countBySeverity(diags);
 
   if (flag(argv, "json")) {
-    process.stdout.write(
-      JSON.stringify({ root, counts, diagnostics: diags }, null, 2) + "\n",
-    );
+    process.stdout.write(JSON.stringify({ root, counts, diagnostics: diags }, null, 2) + "\n");
     return counts.error > 0 || (flag(argv, "strict") && counts.warning > 0) ? 1 : 0;
   }
 

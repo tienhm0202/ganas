@@ -1,7 +1,7 @@
-import { runShell, judge } from "../util/exec.js";
-import { lintProbe, hasBlockingFinding } from "../verify/lint.js";
-import { appendEntry, defHash, runContext, sha256, type LedgerResult } from "../verify/ledger.js";
-import type { Module, ContractVerification } from "../model/index.js";
+import type { ContractVerification, Module } from "../model/index.js";
+import { judge, runShell } from "../util/exec.js";
+import { appendEntry, defHash, type LedgerResult, runContext, sha256 } from "../verify/ledger.js";
+import { hasBlockingFinding, lintProbe } from "../verify/lint.js";
 import type { Graph } from "./types.js";
 
 /**
@@ -76,7 +76,11 @@ function portIssues(from: Module, to: Module): PortIssue[] {
  * Kiểm một cạnh: trước tiên so cổng khai báo, chỉ chạy `run` bổ sung (nếu có)
  * khi cổng đã khớp — cổng lệch thì chạy lệnh cũng vô nghĩa.
  */
-export async function checkEdge(graph: Graph, edge: ContractEdge, root: string): Promise<EdgeCheck> {
+export async function checkEdge(
+  graph: Graph,
+  edge: ContractEdge,
+  root: string,
+): Promise<EdgeCheck> {
   const from = graph.modules.get(edge.from)?.value;
   const to = graph.modules.get(edge.to)?.value;
 
@@ -101,11 +105,19 @@ export async function checkEdge(graph: Graph, edge: ContractEdge, root: string):
   const findings = lintProbe({
     run,
     statement: `${from.id} → ${to.id}`,
-    context: [...from.contract.outputs.map((p) => p.name), ...to.contract.inputs.map((p) => p.name)],
+    context: [
+      ...from.contract.outputs.map((p) => p.name),
+      ...to.contract.inputs.map((p) => p.name),
+    ],
   });
   if (hasBlockingFinding(findings)) {
     const blocking = findings.filter((f) => f.severity === "error");
-    return { edge, result: "unprovable", issues: [], reason: blocking.map((f) => f.message).join("; ") };
+    return {
+      edge,
+      result: "unprovable",
+      issues: [],
+      reason: blocking.map((f) => f.message).join("; "),
+    };
   }
 
   const result = await runShell(run, { cwd: root, timeoutMs: 60_000 });
@@ -187,7 +199,9 @@ export function renderDiagram(graph: Graph, opts: DiagramOptions = {}): string {
   if (loose.length > 0) {
     lines.push(`  subgraph unmapped["(chưa gán phần)"]`);
     for (const moduleId of loose) {
-      lines.push(`    ${nodeId(moduleId)}["${moduleLabel(moduleId, graph.modules.get(moduleId)?.value)}"]`);
+      lines.push(
+        `    ${nodeId(moduleId)}["${moduleLabel(moduleId, graph.modules.get(moduleId)?.value)}"]`,
+      );
     }
     lines.push("  end");
   }
@@ -201,7 +215,8 @@ export function renderDiagram(graph: Graph, opts: DiagramOptions = {}): string {
   for (const edge of contractEdges(graph)) {
     const key = `${edge.from}/${edge.verificationId}`;
     const result = opts.edgeResults?.get(key);
-    const mark = result === "pass" ? "✓" : result === "fail" ? "✗" : result === undefined ? "?" : result;
+    const mark =
+      result === "pass" ? "✓" : result === "fail" ? "✗" : result === undefined ? "?" : result;
     lines.push(`  ${nodeId(edge.from)} -.->|hợp đồng ${mark}| ${nodeId(edge.to)}`);
   }
 

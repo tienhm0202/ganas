@@ -1,7 +1,8 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { check, goal, sprint, design, task } from "./helpers.js";
+import { test } from "node:test";
+
 import { zModule, zPart, zVerification } from "../src/model/index.js";
+import { check, design, goal, sprint, task } from "./helpers.js";
 
 /* --- Bộ dựng YAML cho sơ đồ khối ------------------------------------------ */
 
@@ -18,7 +19,13 @@ exit: ${exit}
 
 function moduleYaml(
   id = "M-a",
-  opts: { part?: string; nature?: string; dependsOn?: string[]; verify?: string; status?: string } = {},
+  opts: {
+    part?: string;
+    nature?: string;
+    dependsOn?: string[];
+    verify?: string;
+    status?: string;
+  } = {},
 ): string {
   return `id: ${id}
 title: "Khối thử"
@@ -27,10 +34,13 @@ paths: ["src/${id}/**"]
 status: ${opts.status ?? "implemented"}
 depends_on:
 ${(opts.dependsOn ?? []).map((d) => `  - ${d}`).join("\n") || "  []"}
-${opts.verify ?? `verify:
+${
+  opts.verify ??
+  `verify:
   - id: V-${id}-probe
     kind: probe
-    run: "test -f src/${id}/index.ts"`}
+    run: "test -f src/${id}/index.ts"`
+}
 `;
 }
 

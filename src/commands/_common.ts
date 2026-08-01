@@ -1,9 +1,9 @@
-import { option, type Argv } from "../util/args.js";
-import { requireGanasRoot } from "../graph/paths.js";
-import { loadGraph } from "../graph/load.js";
 import { computeFreshness, type FactFreshness } from "../graph/freshness.js";
-import { runShell } from "../util/exec.js";
+import { loadGraph } from "../graph/load.js";
+import { requireGanasRoot } from "../graph/paths.js";
 import type { Graph } from "../graph/types.js";
+import { type Argv, option } from "../util/args.js";
+import { runShell } from "../util/exec.js";
 
 export interface OpenedProject {
   root: string;
