@@ -649,3 +649,130 @@ verify:
     await cleanup(root);
   }
 });
+
+/* --- Cảnh báo độ dài brief -------------------------------------------------- */
+
+test("brief ngắn (task tối thiểu) thì không có cảnh báo độ dài", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.doesNotMatch(brief, /Brief này dài/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("brief phình to (nhiều must_read/open_questions) thì cảnh báo độ dài, nêu đúng ký tự", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+
+    // Nhồi must_read + open_questions đủ dài để vượt ngưỡng cảnh báo — mô
+    // phỏng task đã phình to thật, không phải số bịa.
+    const mustRead = Array.from({ length: 60 }, (_, i) => ({
+      path: `src/module-${i}/very/deep/nested/file-with-a-fairly-long-name-${i}.ts`,
+      why:
+        `Cần đọc để hiểu luồng xử lý dữ liệu số ${i} trước khi sửa logic tương ứng, ` +
+        `tránh phá vỡ hợp đồng hiện có (lý do dài để mô phỏng nội dung thật).`,
+    }));
+    const openQuestions = Array.from(
+      { length: 40 },
+      (_, i) =>
+        `Câu hỏi mở số ${i}: liệu cách tiếp cận X có tương thích với ràng buộc Y trong hệ ` +
+        `thống hiện tại hay không, cần ai đó xác nhận trước khi triển khai tiếp?`,
+    );
+
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        context_contract: { must_read: mustRead, open_questions: openQuestions },
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness });
+    assert.match(brief, /> ⚠ Brief này dài ~\d[\d.]* ký tự \(~\d+ dòng\)/);
+    const [, reportedChars] = brief.match(/Brief này dài ~([\d.]+) ký tự/) ?? [];
+    assert.ok(reportedChars, "phải nêu con số ký tự");
+    const n = Number(reportedChars);
+    assert.ok(n > 14_000, `số ký tự báo cáo (${n}) phải vượt ngưỡng`);
+    assert.ok(
+      n < brief.length,
+      "số báo cáo phải là phần ỔN ĐỊNH, nhỏ hơn brief đầy đủ (chưa tính header cảnh báo)",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("cảnh báo độ dài nằm TRƯỚC phần biến động, không bị đẩy xuống cuối", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    const { zTask } = await import("../src/model/index.js");
+
+    const mustRead = Array.from({ length: 60 }, (_, i) => ({
+      path: `src/module-${i}/very/deep/nested/file-with-a-fairly-long-name-${i}.ts`,
+      why:
+        `Cần đọc để hiểu luồng xử lý dữ liệu số ${i} trước khi sửa logic tương ứng, ` +
+        `tránh phá vỡ hợp đồng hiện có (lý do dài để mô phỏng nội dung thật).`,
+    }));
+    const openQuestions = Array.from(
+      { length: 40 },
+      (_, i) =>
+        `Câu hỏi mở số ${i}: liệu cách tiếp cận X có tương thích với ràng buộc Y trong hệ ` +
+        `thống hiện tại hay không, cần ai đó xác nhận trước khi triển khai tiếp?`,
+    );
+
+    const task = {
+      value: zTask.parse({
+        id: "T-001",
+        title: "t",
+        serves: ["G-001"],
+        implements: "D-001",
+        sprint: "S-2026-08",
+        context_contract: { must_read: mustRead, open_questions: openQuestions },
+        exit_contract: [{ kind: "command", run: "true" }],
+      }),
+      file: ".ganas/tasks/T-001.yaml",
+    };
+    const brief = renderBrief({ graph, task, freshness, volatile: "MOC-THOI-GIAN" });
+    assert.match(brief, /Brief này dài/);
+    const warningIndex = brief.indexOf("Brief này dài");
+    const volatileIndex = brief.indexOf("MOC-THOI-GIAN");
+    assert.ok(
+      volatileIndex > warningIndex,
+      "cảnh báo phải nằm trước phần biến động, không phải sau",
+    );
+    assert.ok(
+      brief.endsWith("MOC-THOI-GIAN"),
+      "phần biến động vẫn phải ở CUỐI dù có cảnh báo độ dài",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});

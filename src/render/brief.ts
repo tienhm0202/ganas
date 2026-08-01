@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { formatAnchor, enforcementFor, type Claim, type Task } from "../model/index.js";
-import type { Graph, Sourced } from "../graph/types.js";
+
 import type { FactFreshness } from "../graph/freshness.js";
 import { openBlockers } from "../graph/select.js";
+import type { Graph, Sourced } from "../graph/types.js";
+import { type Claim, enforcementFor, formatAnchor, type Task } from "../model/index.js";
 
 export interface BriefInput {
   graph: Graph;
@@ -25,6 +26,18 @@ chưa biết và đưa vào \`open_questions\`.
 
 Không nâng claim thành fact nếu chưa chạy probe. Không sửa \`last_verified_at\`
 bằng tay.`;
+
+/**
+ * Ngưỡng cảnh báo độ dài brief, tính theo ký tự (proxy thô cho token — văn
+ * bản tiếng Việt/Anh/code lẫn lộn rơi vào khoảng 3-4 ký tự/token). Đo thực tế
+ * trên fixture giàu nội dung trong test: task với 25 must_read + 20
+ * open_questions + 8 module chạm tới ra ~10.8K ký tự (dưới ngưỡng); nhân đôi
+ * số mục (50/40/15) ra ~20.5K (vượt rõ). 14K nằm giữa hai mốc đó — đủ cao để
+ * không báo động với task có vài must_read/open_question bình thường, đủ
+ * thấp để bắt được task đang phình to thật sự trước khi nó ăn hết context
+ * mỗi phiên.
+ */
+const BRIEF_LENGTH_WARNING_CHARS = 14_000;
 
 /** Legacy claim liên quan tới task: anchor trỏ vào file mà task phải đọc. */
 export function relevantLegacyClaims(graph: Graph, task: Task): Claim[] {
@@ -61,7 +74,9 @@ export function renderBrief(input: BriefInput): string {
   parts.push(
     `# ${t.id} — ${t.title}\n\n` +
       `sprint \`${t.sprint}\` · design \`${t.implements}\` · phục vụ ${t.serves.map((g) => `\`${g}\``).join(", ")}` +
-      (t.status === "in_progress" ? `\n\n**Đây là việc đang dở** — nối tiếp, đừng bắt đầu lại.` : ""),
+      (t.status === "in_progress"
+        ? `\n\n**Đây là việc đang dở** — nối tiếp, đừng bắt đầu lại.`
+        : ""),
   );
 
   const blockers = openBlockers(graph, t);
@@ -78,7 +93,9 @@ export function renderBrief(input: BriefInput): string {
   for (const goalId of t.serves) {
     const goal = graph.goals.get(goalId)?.value;
     if (!goal) {
-      goalBlocks.push(`### ${goalId} — ⚠ KHÔNG TÌM THẤY (graph đang hỏng, chạy \`ganas validate\`)`);
+      goalBlocks.push(
+        `### ${goalId} — ⚠ KHÔNG TÌM THẤY (graph đang hỏng, chạy \`ganas validate\`)`,
+      );
       continue;
     }
     const criteria = goal.acceptance.map((a) =>
@@ -192,7 +209,8 @@ export function renderBrief(input: BriefInput): string {
 
   if (legacy.length > 0 || otherLegacy > 0) {
     const items = legacy.map(
-      (c) => `\`${c.id}\` — ${c.statement}\n  tài liệu cũ nói vậy: ${c.anchors.map(formatAnchor).join(", ")}`,
+      (c) =>
+        `\`${c.id}\` — ${c.statement}\n  tài liệu cũ nói vậy: ${c.anchors.map(formatAnchor).join(", ")}`,
     );
     // Nêu cả phần KHÔNG hiển thị: im lặng bỏ qua tri thức kế thừa sẽ tạo cảm
     // giác sai rằng tài liệu cũ đã được xử lý hết.
@@ -249,7 +267,8 @@ export function renderBrief(input: BriefInput): string {
         break;
       case "artifact":
         auto.push(
-          `file \`${c.path}\`` + (c.must_contain ? ` phải chứa \`${c.must_contain}\`` : " phải tồn tại"),
+          `file \`${c.path}\`` +
+            (c.must_contain ? ` phải chứa \`${c.must_contain}\`` : " phải tồn tại"),
         );
         break;
       case "handoff":
@@ -277,6 +296,20 @@ export function renderBrief(input: BriefInput): string {
   );
 
   parts.push(RULE_REMINDER);
+
+  /* --- Cảnh báo độ dài: đo trên phần ỔN ĐỊNH, trước khi thêm phần biến động,
+   * chèn ngay sau đầu đề để không bị chôn dưới cả chục mục khác ------------ */
+
+  const stable = parts.join("\n\n");
+  if (stable.length > BRIEF_LENGTH_WARNING_CHARS) {
+    const approxLines = stable.split("\n").length;
+    parts.splice(
+      1,
+      0,
+      `> ⚠ Brief này dài ~${stable.length} ký tự (~${approxLines} dòng) — cân nhắc chẻ nhỏ task/design, hoặc\n` +
+        `> gọn bớt \`context_contract.must_read\`.`,
+    );
+  }
 
   /* --- Phần biến động: luôn ở CUỐI -------------------------------------- */
 

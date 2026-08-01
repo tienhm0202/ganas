@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { freshnessOf, zFact } from "../src/model/index.js";
+import { freshnessOf, zDecision, zFact } from "../src/model/index.js";
 import { check, goal, task, validSpine } from "./helpers.js";
 
 /* --- Anchor bắt buộc ------------------------------------------------------ */
@@ -226,4 +226,34 @@ test("khai last_result mà không có last_verified_at bị từ chối", () => 
     last_result: "pass",
   });
   assert.equal(parsed.success, false, "không thể 'đã kiểm' mà không có thời điểm kiểm");
+});
+
+/* --- Schema của Decision: context/consequence thay cho rationale (N12) ----- */
+
+const baseDecision = {
+  id: "DEC-001",
+  statement: "Dùng Postgres thay vì Mongo",
+  decided_by: "@alice",
+  decided_at: "2025-01-01T00:00:00Z",
+};
+
+test("decision có cả context lẫn consequence parse được", () => {
+  const parsed = zDecision.parse({
+    ...baseDecision,
+    context: "Cần transaction đa bảng, Mongo không đáp ứng",
+    consequence: "Phải vận hành thêm một hệ quản trị quan hệ",
+  });
+  assert.equal(parsed.context, "Cần transaction đa bảng, Mongo không đáp ứng");
+  assert.equal(parsed.consequence, "Phải vận hành thêm một hệ quản trị quan hệ");
+});
+
+test("decision không khai context lẫn consequence vẫn parse được", () => {
+  const parsed = zDecision.parse(baseDecision);
+  assert.equal(parsed.context, undefined);
+  assert.equal(parsed.consequence, undefined);
+});
+
+test("rationale không còn là trường hợp lệ — bị bỏ qua thầm lặng vì zDecision không .strict()", () => {
+  const parsed = zDecision.parse({ ...baseDecision, rationale: "lý do cũ" });
+  assert.equal((parsed as Record<string, unknown>).rationale, undefined);
 });

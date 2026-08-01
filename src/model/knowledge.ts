@@ -1,16 +1,17 @@
 import { z } from "zod";
+
+import { zAnchor, zAnchors } from "./anchor.js";
 import {
-  zFactId,
   zClaimId,
-  zLegacyClaimId,
   zDecisionId,
+  zFactId,
+  zGlob,
   zHandle,
   zIsoDate,
+  zLegacyClaimId,
   zNonEmpty,
-  zGlob,
   zProbe,
 } from "./common.js";
-import { zAnchor, zAnchors } from "./anchor.js";
 
 /* ------------------------------------------------------------------------- *
  * FACT — điều kiểm chứng được bằng lệnh
@@ -166,7 +167,10 @@ export const zDecision = z.object({
   decided_by: zHandle,
   decided_at: zIsoDate,
   link: z.string().optional().describe("ticket / biên bản / link chat"),
-  rationale: z.string().optional(),
+  /** Điều gì buộc phải chọn — bối cảnh, ràng buộc, lựa chọn khác đã cân nhắc. */
+  context: z.string().optional(),
+  /** Phải sống với gì sau khi chọn — đánh đổi, rủi ro chấp nhận, việc kéo theo. */
+  consequence: z.string().optional(),
   supersedes: z.array(zDecisionId).default([]),
   notes: z.string().optional(),
 });

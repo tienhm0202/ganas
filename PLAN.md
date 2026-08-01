@@ -183,47 +183,7 @@ chấm TRAJECTORY chứ không chỉ câu trả lời cuối; ADR pattern
 công ty AI Trung Quốc (Alibaba Qwen-Agent, ByteDance Coze) không ra nguồn đủ
 cụ thể — không suy đoán, để trống.
 
-**Code:**
-- Thêm ESLint (flat config, `typescript-eslint` recommended-type-checked) +
-  Prettier — hiện KHÔNG có gì ngoài `tsc --strict`. Bắt riêng
-  `no-floating-promises` (code toàn async) và import order.
-- Chính thức hoá quy ước đang bất thành văn: không comment trừ khi giải
-  thích WHY; docstring tiếng Việt; `.strict()` bắt buộc trên mọi zod object
-  mới. Ghi thành checklist trong N13, không chỉ nằm trong đầu người viết.
-- Liệt kê chính thức bảng tiền tố ID (`G-`, `S-`, `D-`, `T-`, `P-`, `M-`,
-  `F-`, `C-`/`LC-`, `V-`) — hiện rải rác trong từng file model.
-
-**Test:**
-- Giữ `node:test` (đã nhất quán toàn repo) — không chuyển sang vitest/jest.
-- Thêm coverage threshold (`c8`) cho `src/graph/` và `src/verify/` (phần lõi
-  kiểm chứng — nơi một lỗ hổng nghĩa là bằng chứng giả lọt qua), KHÔNG bắt
-  buộc cho `src/commands/` (I/O nhiều, integration/manual test quan trọng
-  hơn coverage số).
-- Ghi nhận, KHÔNG bắt buộc ở N12: mutation testing (Stryker) cho chính bộ
-  test của ganas — `verify/mutate.ts` đã áp triết lý này cho probe của
-  NGƯỜI DÙNG ganas, nhưng chưa áp cho test suite của chính ganas.
-
-**Document:**
-- Giữ nguyên triết lý hiện tại (`knowledgeRuleMd()`: không viết tổng kết văn
-  xuôi, chỉ spine có cấu trúc) — đây chính là hướng SDD ngành đang hội tụ về,
-  không cần đổi.
-- Mở (quyết định lúc thực thi N12, không chốt ở đây): có nên thắt
-  `contract.inputs/outputs.shape` từ chuỗi tự do thành JSON Schema không —
-  chặt hơn, máy kiểm được, nhưng phải sửa `trace.ts` và tăng độ khó viết YAML
-  tay. Đổi ngay bây giờ phá vỡ N6 vừa xong nên KHÔNG làm trong đợt này.
-- Mở: có nên tách `Decision.rationale` thành `context`/`consequence` riêng
-  cho khớp ADR chuẩn, hay giữ `rationale` tự do — quyết lúc làm.
-
-**AI agent product practices — áp trực tiếp vào ganas:**
-- "Context là tài nguyên hữu hạn" → đã đúng hướng (CLAUDE.md ngắn, brief theo
-  từng task). Chốt thành tiêu chuẩn: đặt ngưỡng cảnh báo độ dài cho
-  `renderBrief()` output, tương tự comment "giữ CLAUDE.md dưới ~200 dòng" đã
-  có trong `templates/project.ts`.
-- "Lỗi phải actionable" → đã đúng hướng (mọi `Diagnostic` có `hint`). Chốt
-  thành luật: mọi `Diagnostic` MỚI thêm sau này bắt buộc có `hint`.
-- "Eval chấm trajectory" → khớp triết lý `verify-ledger.jsonl` (ghi từng lần
-  chạy, không chỉ kết quả cuối) — không cần đổi gì, chỉ xác nhận hướng đã
-  chọn là đúng.
+**N12 ĐÃ XONG TOÀN BỘ**, trừ hai điểm cố ý giữ nguyên trạng (ghi rõ ở cuối).
 
 **✅ ĐÃ XONG — kiến trúc cho DỰ ÁN DÙNG ganas (không phải chính ganas):**
 Bàn thêm trong hội thoại (không phải hướng portable-hoá ganas sang Python —
@@ -272,20 +232,55 @@ dung + dòng trỏ trong CLAUDE.md.
   `--lines 88 --branches 80`, xác nhận đây là ngưỡng THẬT (đo được
   92.5%/86.24%, có headroom, không phải số tròn đoán bừa) — thử nâng lên 95
   để xác nhận gate thật sự fail rồi hạ về đúng số.
-- `src/model/knowledge.ts` và `src/render/brief.ts` bị loại khỏi phạm vi
-  lint/format (có ghi chú lý do trong config) — hai file đó thuộc phần việc
-  song song khác của N12 (ADR fields, ngưỡng độ dài brief), tránh xung đột
-  khi chạy song song. Cần bỏ loại trừ này sau khi hai việc đó xong.
+- `src/model/knowledge.ts` và `src/render/brief.ts` loại tạm khỏi phạm vi
+  lint/format lúc mới cài (tránh xung đột với 2 việc chạy song song bên
+  dưới) — đã BỎ loại trừ sau khi cả hai xong, lint/format sạch trên toàn bộ
+  `src/`.
 
 Implement bởi sub-agent, review + verify lại ở phiên chính (diff rộng — 69
 file, chủ yếu do Prettier — nên đọc kỹ từng thay đổi thật thay vì chỉ tin
 báo cáo): xác nhận `git stash` lỡ tay giữa chừng của sub-agent đã restore
 sạch (stash list rỗng), soát riêng các chỗ sửa lỗi thật (không phải chỉ
-format), xác nhận `knowledge.ts`/`brief.ts` không bị đụng, chạy lại
-typecheck/lint/format:check/build/test/test:coverage — tất cả sạch.
+format), chạy lại typecheck/lint/format:check/build/test/test:coverage —
+tất cả sạch.
 
-243 test pass khi chạy qua `test:coverage` (thêm 1 do c8 instrument lại;
-`npm test` thường vẫn 242, không đổi).
+**✅ ĐÃ XONG — ba việc song song còn lại của N12:**
+
+- **ADR cho `Decision`** (`src/model/knowledge.ts`) — thay `rationale`
+  (chuỗi tự do, không dùng ở đâu khác trong repo) bằng `context` ("điều gì
+  buộc phải chọn") và `consequence` ("phải sống với gì sau khi chọn"), cả
+  hai optional, khớp đúng bộ ba ADR chuẩn (statement đã đóng vai "Decision").
+  Không giữ `rationale` song song — tránh ba field gần nghĩa gây rối, và
+  không có gì trong repo phụ thuộc vào nó nên đổi sạch không cần lớp tương
+  thích ngược.
+- **Ngưỡng cảnh báo độ dài brief** (`src/render/brief.ts`) —
+  `BRIEF_LENGTH_WARNING_CHARS = 14_000`, đo thật trên fixture (task 25
+  must_read + 20 open_questions + 8 khối chạm tới ra ~10.8K; gấp đôi nội
+  dung ra ~20.5K) chứ không phải số tròn đoán bừa. Cảnh báo chèn ngay sau
+  đầu đề brief (không bị chôn), đo trên phần ỔN ĐỊNH — trước khi thêm phần
+  biến động ở cuối. Xác nhận tay qua `ganas brief` thật với task cố ý phình
+  to.
+- **`CONTRIBUTING.md`** (file mới, gốc repo) — dành cho người/agent SỬA CODE
+  ganas (khác N13 — dành cho người DÙNG ganas). 6 mục: quy ước comment/WHY,
+  `.strict()` bắt buộc, bảng tiền tố ID (đối chiếu lại `ID_PATTERNS` thật,
+  bắt đúng `DEC-` cho Decision chứ không phải `D-` — dễ nhầm với Design),
+  luật `hint` bắt buộc cho `Diagnostic` mới, danh sách script hiện có, quy
+  ước test.
+
+Cả ba implement bởi sub-agent chạy song song (không chồng file), review +
+verify lại ở phiên chính từng cái, xoá loại trừ tạm trong ESLint/Prettier
+sau khi cả ba xong, chạy lại toàn bộ verification.
+
+**Hai điểm cố ý giữ nguyên, không làm ở N12:**
+- **JSON Schema cho `contract.shape`** — giữ hoãn. Đổi sẽ phá
+  `src/graph/trace.ts` (N6) và làm YAML tay khó viết hơn; không có tín hiệu
+  mới đủ mạnh để đảo quyết định.
+- **Mutation testing cho chính bộ test ganas** — vẫn chỉ ghi nhận ý tưởng,
+  chưa quyết làm; việc lớn (cần cài Stryker), không nằm trong phạm vi đã
+  chốt của N12.
+
+249 test pass (242 gốc N12 + 3 ADR + 3 ngưỡng brief + 1 do `c8` chạy khác
+lượt — `npm test` thường 248, `test:coverage` 249).
 
 ### N13 — hướng dẫn sử dụng chi tiết (người đọc + AI đọc)
 

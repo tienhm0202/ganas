@@ -10,15 +10,7 @@ import tseslint from "typescript-eslint";
  * `test/**\/*.ts` cần một tsconfig riêng bao trọn cả hai — xem tsconfig.eslint.json.
  */
 export default defineConfig([
-  globalIgnores([
-    "dist/**",
-    "node_modules/**",
-    "plugin/bin/**",
-    // Đang có task riêng sửa hai file này (ADR fields / brief length warning) —
-    // không chạm, kể cả qua lint autofix.
-    "src/model/knowledge.ts",
-    "src/render/brief.ts",
-  ]),
+  globalIgnores(["dist/**", "node_modules/**", "plugin/bin/**"]),
   {
     files: ["src/**/*.ts", "test/**/*.ts"],
     extends: [js.configs.recommended, tseslint.configs.recommendedTypeChecked],
