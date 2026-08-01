@@ -225,6 +225,37 @@ cụ thể — không suy đoán, để trống.
   chạy, không chỉ kết quả cuối) — không cần đổi gì, chỉ xác nhận hướng đã
   chọn là đúng.
 
+**✅ ĐÃ XONG — kiến trúc cho DỰ ÁN DÙNG ganas (không phải chính ganas):**
+Bàn thêm trong hội thoại (không phải hướng portable-hoá ganas sang Python —
+đã cân nhắc và bỏ, "Python" ở đây nghĩa là dự án đích cài ganas vào có thể là
+backend Python; JSON Schema/Pydantic không liên quan, đó là hướng khác đã bỏ).
+
+Phát hiện: `Module.nature` đã sẵn có 4 giá trị, và chúng CHÍNH LÀ ranh giới
+hexagonal architecture / ports & adapters — `code`/`data`/`llm` = lõi,
+`io` = adapter (docstring `MODULE_NATURE` đã định nghĩa `io` là "cổng ra
+ngoài" từ trước, chỉ chưa ai nối nó với pattern kiến trúc này).
+
+- `src/templates/project.ts`: `architectureRuleMd()` — rule mới, KHÔNG có
+  `paths:` frontmatter (cùng lý do `knowledgeRuleMd()`), dạy tách lõi khỏi
+  I/O, ánh xạ vào `Module.nature`, ví dụ ngắn cho cả TypeScript
+  (`interface` + adapter) và Python (`Protocol`/ABC + dependency injection).
+  Nói rõ đây là HƯỚNG DẪN, không phải luật máy kiểm (ganas không detect được
+  đáng tin cậy khối "code" có lỡ chạm I/O hay không).
+- `src/commands/init.ts`: sinh `.claude/rules/architecture.md` lúc
+  `ganas init`, cùng pattern với `ganas-knowledge.md`.
+- `claudeMd()` thêm một dòng trỏ tới rule mới, giữ tổng thể dưới ~200 dòng.
+
+Implement bởi sub-agent, review + verify lại ở phiên chính: đọc diff,
+typecheck/test/build sạch, `ganas init` thật xác nhận file sinh đúng nội
+dung + dòng trỏ trong CLAUDE.md.
+
+242 test pass (240 cũ + 2 mới, `test/init.test.ts` — file test đầu tiên cho
+`commands/init.ts`).
+
+**Còn lại trong N12** (chưa làm): ESLint/Prettier, coverage threshold,
+bảng tiền tố ID, hai điểm mở (JSON Schema cho `contract.shape`, ADR cho
+`Decision`), ngưỡng cảnh báo độ dài brief.
+
 ### N13 — hướng dẫn sử dụng chi tiết (người đọc + AI đọc)
 
 Ganas hiện **không có tài liệu cấp cao nào** giải thích cách dùng — chỉ có

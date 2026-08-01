@@ -101,6 +101,16 @@ export async function run(argv: Argv): Promise<number> {
     ),
   );
 
+  // Luật kiến trúc (tách lõi khỏi I/O) — cùng lý do không có `paths:` frontmatter.
+  track(
+    ".claude/rules/architecture.md",
+    await writeNew(
+      join(cwd, ".claude", "rules", "architecture.md"),
+      T.architectureRuleMd(),
+      force,
+    ),
+  );
+
   // CLAUDE.md và AGENTS.md: không đè nếu dự án đã có — đó là việc của `ganas adopt`.
   const claudeMdPath = join(cwd, "CLAUDE.md");
   const claudeMdResult = await writeNew(claudeMdPath, T.claudeMd(vars), force);
