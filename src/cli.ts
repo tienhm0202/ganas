@@ -20,6 +20,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   trace: () => import("./commands/trace.js"),
   commit: () => import("./commands/commit.js"),
   handoff: () => import("./commands/handoff.js"),
+  prune: () => import("./commands/prune.js"),
   hook: () => import("./commands/hook.js"),
 };
 
@@ -38,6 +39,7 @@ Lệnh:
   trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng
   handoff --session id Ghi bản ghi tiếp nối của phiên, dẫn xuất từ transcript
+  prune                Dọn ephemeral cũ, archive task done/sprint closed (mặc định dry-run)
   hook <event>         Điểm vào cho hook Claude Code (đọc JSON ở stdin)
 
 Tuỳ chọn chung:

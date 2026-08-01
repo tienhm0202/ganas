@@ -88,22 +88,34 @@ chặn hook nào.
 
 213 test pass (204 cũ + 9 mới, `test/handoff.test.ts`).
 
-## Đang làm / tiếp theo
+**P2 N9 — `ganas prune`.** `src/prune.ts`: `planPrune()` (thuần, không đụng
+đĩa) + `applyPrune()`. Ba tầng đúng như thiết kế ban đầu, `proposals/` bị
+loại khỏi tầng 2 vì **chưa có model `Proposal` nào được nạp vào `Graph`** —
+không có schema thì không có gì để mà quyết "đã duyệt hay chưa", ghi nhận là
+khoảng trống, không suy đoán:
 
-### N9 — công cụ dọn dẹp (`ganas prune` / `ganas clean`)
-
-Làm SAU N8 — `runs/` phải có nội dung thật thì mới biết pattern dọn thế nào,
-tránh đoán trước rồi phải sửa lại.
-
-Ba tầng, không được trộn lẫn:
-
-| Tầng | Ví dụ | Hành động |
+| Tầng | Gồm | Hành động |
 |---|---|---|
-| Ephemeral, local | `.ganas/runs/*.md` cũ, session chết trong `state.json` | Xoá thẳng — không chia sẻ, không phải bằng chứng |
-| Shared nhưng đã đóng | `tasks/` status `done`, `sprints/` status `closed`, `proposals/` đã duyệt/từ chối | Archive (dời sang thư mục con, vd `tasks/done/`) — `listYaml()` không đệ quy nên tự động biến mất khỏi graph mà không cần sửa `load.ts`. Giữ trong git history, không xoá. |
-| Vĩnh viễn, không đụng | `verify-ledger.jsonl`, `claims/` (kể cả `trust: refuted`), `decisions/`, `facts/` | Ngoài phạm vi tool này. `claims` refuted đặc biệt: `validate.ts` giữ nó lại CÓ CHỦ ĐÍCH ("để phiên sau không tin lại") — xoá là quay lại đúng hiểu nhầm cũ. |
+| Ephemeral, local | `runs/*.md` của phiên đã kết thúc (`sessionId` không còn trong `state.sessions`), session mồ côi trong `state.json` | Xoá thẳng |
+| Shared, đã đóng | `tasks/` status `done` + đủ tuổi (theo `done_at`), `sprints/` status `closed` + đủ tuổi (theo `ends_at`) | Archive (`git mv` nếu có git, rơi về `rename()` thường) sang `tasks/done/`, `sprints/closed/` |
+| Vĩnh viễn | `verify-ledger.jsonl`, `claims/`, `decisions/`, `facts/` | Không có đường code nào trong `prune.ts` chạm tới |
 
-Mặc định `--dry-run`; phải gõ thêm cờ mới thực thi.
+Hai guard chống liên kết treo, phát hiện được nhờ viết test trước khi tưởng
+là xong:
+- Task done nhưng còn task khác `blocked_by` nó → **giữ lại**. Archive xong
+  thì `blocked_by` trỏ vào chỗ trống, `openBlockers()` coi là chặn VĨNH VIỄN
+  — tệ hơn nhiều so với chưa dọn.
+- Sprint closed chỉ archive được nếu không còn task SỐNG SÓT (sau khi đã trừ
+  các task cũng bị archive trong CHÍNH lần chạy này) trỏ `sprint:` vào nó —
+  nếu không gần như mọi sprint closed đều bị chặn vì luôn có ít nhất một task
+  done trỏ vào.
+
+Mặc định dry-run (chỉ in kế hoạch); `--yes` mới thực thi. `--older-than <ngày>`
+(mặc định 7).
+
+225 test pass (213 cũ + 12 mới, `test/prune.test.ts`).
+
+## Đang làm / tiếp theo
 
 ### N10 — tiêu chuẩn code / test / document (chốt dựa trên nghiên cứu ngành)
 
