@@ -8,7 +8,7 @@ import {
   zIsoDate,
   zModuleId,
   zNonEmpty,
-  zSprintId,
+  zScopeId,
   zTaskId,
 } from "./common.js";
 import { MODEL_TIER } from "./config.js";
@@ -96,7 +96,11 @@ export const zTask = z
       .array(zGoalId, { required_error: "task phải khai `serves` — nó phục vụ goal nào?" })
       .min(1, "task phải khai `serves` — nó phục vụ goal nào?"),
     implements: zDesignId.describe("design mà task này hiện thực"),
-    sprint: zSprintId,
+    /**
+     * Phạm vi công việc chứa task. Bắt buộc: task không thuộc phạm vi nào thì
+     * không ai nghiệm thu được nó, và tri thức nó sinh ra không biết neo vào đâu.
+     */
+    scope: zScopeId,
     status: z.enum(TASK_STATUS).default("todo"),
     estimated_context: z.enum(ESTIMATED_CONTEXT).default("medium"),
 

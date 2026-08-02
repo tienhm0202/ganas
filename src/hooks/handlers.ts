@@ -53,7 +53,7 @@ export async function sessionStart(input: HookInput): Promise<HookOutput> {
         additionalContext:
           `# ganas\n\nDự án này dùng ganas, nhưng hiện **không có task nào làm được**.\n\n` +
           `Trước khi sửa code, hãy tạo task trong \`.ganas/tasks/\` (phải khai \`serves\`, ` +
-          `\`implements\`, \`sprint\`, \`exit_contract\`) rồi chạy \`ganas validate\`.`,
+          `\`implements\`, \`scope\`, \`exit_contract\`) rồi chạy \`ganas validate\`.`,
       },
     };
   }

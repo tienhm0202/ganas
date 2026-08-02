@@ -31,6 +31,7 @@ async function runFact(root: string, id: string) {
 
 test("probe đạt và bản bóp méo fail → pass, proof proven", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "file src/a.ts tồn tại"
   verify:
     run: "test -f src/a.ts"
@@ -46,6 +47,7 @@ test("probe đạt và bản bóp méo fail → pass, proof proven", async () =>
 
 test("probe fail → fail, kèm lý do đọc được", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "file src/khong-co.ts tồn tại"
   verify:
     run: "test -f src/khong-co.ts"
@@ -61,6 +63,7 @@ test("probe fail → fail, kèm lý do đọc được", async () => {
 
 test("⭐ probe pass nhưng bóp méo cũng pass → KHÔNG được tính là pass", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "thư mục src có tồn tại"
   verify:
     run: "ls src >/dev/null && echo 'src co ton tai'"
@@ -81,6 +84,7 @@ test("⭐ probe pass nhưng bóp méo cũng pass → KHÔNG được tính là p
 
 test("probe tautological bị chặn TRƯỚC khi chạy", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "mọi thứ đều ổn"
   verify:
     run: "true"
@@ -98,6 +102,7 @@ test("probe tautological bị chặn TRƯỚC khi chạy", async () => {
 
 test("⭐ skip_if khớp → unavailable, KHÔNG phải failing", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "cần công cụ không có trên máy này"
   verify:
     run: "ganas-khong-ton-tai --check"
@@ -118,6 +123,7 @@ test("⭐ skip_if khớp → unavailable, KHÔNG phải failing", async () => {
 
 test("skip_if không khớp thì probe vẫn chạy bình thường", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "file src/a.ts tồn tại"
   verify:
     run: "test -f src/a.ts"
@@ -132,6 +138,7 @@ test("skip_if không khớp thì probe vẫn chạy bình thường", async () =
 
 test("skip_if viết sai chính tả bị schema từ chối, không im lặng bỏ qua", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "s"
   verify:
     run: "test -f src/a.ts"
@@ -151,6 +158,7 @@ test("skip_if viết sai chính tả bị schema từ chối, không im lặng b
 
 test("mỗi lần chạy để lại đúng một dòng sổ cái", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "file src/a.ts tồn tại"
   verify:
     run: "test -f src/a.ts"
@@ -169,6 +177,7 @@ test("mỗi lần chạy để lại đúng một dòng sổ cái", async () => 
 
 test("kết quả pass được ghi ngược vào YAML và khớp sổ cái", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "file src/a.ts tồn tại"
   verify:
     run: "test -f src/a.ts"
@@ -191,6 +200,7 @@ test("kết quả pass được ghi ngược vào YAML và khớp sổ cái", as
 
 test("unavailable KHÔNG ghi ngược last_verified_at", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "cần công cụ không có"
   verify:
     run: "ganas-khong-ton-tai"
@@ -212,6 +222,7 @@ test("unavailable KHÔNG ghi ngược last_verified_at", async () => {
 
 test("verify thật rồi validate → không còn unbacked-verification", async () => {
   const root = await projectWithFacts(`- id: F-A-001
+  scope: P-thu
   statement: "file src/a.ts tồn tại"
   verify:
     run: "test -f src/a.ts"
@@ -402,16 +413,16 @@ test("allTargets gom cả fact, khối và phần", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-A-001
+  scope: P-thu
   statement: "s"
   verify:
     run: "test -f src/a.ts"
 `,
-    ".ganas/parts/P-x.yaml": `id: P-x
-title: "Phần"
+    ".ganas/scopes/P-x.yaml": `id: P-x
+title: "Phạm vi"
 version: 0.1.0
 modules: [M-a]
 entry: M-a
-exit: M-a
 acceptance:
   - id: V-e2e
     kind: eval
@@ -419,7 +430,7 @@ acceptance:
     threshold: 0.8
 `,
     ".ganas/modules/M-a.yaml": `id: M-a
-part: P-x
+scope: P-x
 title: "Khối"
 nature: code
 paths: ["src/a/**"]

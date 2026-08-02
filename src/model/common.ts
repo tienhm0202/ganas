@@ -6,7 +6,6 @@ import { z } from "zod";
  */
 export const ID_PATTERNS = {
   goal: /^G-\d{3,}$/,
-  sprint: /^S-[0-9]{4}-[0-9]{2}(-[a-z0-9-]+)?$/,
   design: /^D-\d{3,}$/,
   task: /^T-\d{3,}$/,
   fact: /^F-[A-Z0-9]+-\d{3,}$/,
@@ -18,12 +17,11 @@ export const ID_PATTERNS = {
    * vừa là node có contract và bộ verify — không cần hai bản đồ song song.
    */
   module: /^M-[a-z0-9][a-z0-9-]*$/,
-  /** Phần = đơn vị đóng gói bàn giao, có version. */
-  part: /^P-[a-z0-9][a-z0-9-]*$/,
+  /** Phạm vi công việc = đơn vị bàn giao có ranh giới code và người nghiệm thu. */
+  scope: /^P-[a-z0-9][a-z0-9-]*$/,
 } as const;
 
 export const zGoalId = z.string().regex(ID_PATTERNS.goal, "ID goal phải dạng G-001");
-export const zSprintId = z.string().regex(ID_PATTERNS.sprint, "ID sprint phải dạng S-2026-08");
 export const zDesignId = z.string().regex(ID_PATTERNS.design, "ID design phải dạng D-001");
 export const zTaskId = z.string().regex(ID_PATTERNS.task, "ID task phải dạng T-001");
 export const zFactId = z.string().regex(ID_PATTERNS.fact, "ID fact phải dạng F-ACC-007");
@@ -33,7 +31,7 @@ export const zLegacyClaimId = z
   .regex(ID_PATTERNS.legacyClaim, "ID legacy claim phải dạng LC-007");
 export const zDecisionId = z.string().regex(ID_PATTERNS.decision, "ID decision phải dạng DEC-004");
 export const zModuleId = z.string().regex(ID_PATTERNS.module, "ID khối phải dạng M-intent");
-export const zPartId = z.string().regex(ID_PATTERNS.part, "ID phần phải dạng P-chat-core");
+export const zScopeId = z.string().regex(ID_PATTERNS.scope, "ID phạm vi phải dạng P-chat-core");
 
 /** Ngày giờ ISO 8601. Chuỗi rỗng không hợp lệ — thà thiếu field còn hơn ghi rỗng. */
 export const zIsoDate = z

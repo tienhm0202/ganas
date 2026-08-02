@@ -22,10 +22,6 @@ function summarize(plan: PrunePlan): string {
     lines.push(`${plan.doneTasks.length} task done sẽ chuyển sang tasks/done/:`);
     for (const t of plan.doneTasks) lines.push(`  - ${t.id} (${t.file})`);
   }
-  if (plan.closedSprints.length > 0) {
-    lines.push(`${plan.closedSprints.length} sprint closed sẽ chuyển sang sprints/closed/:`);
-    for (const s of plan.closedSprints) lines.push(`  - ${s.id} (${s.file})`);
-  }
 
   return lines.join("\n");
 }
@@ -40,11 +36,7 @@ export async function run(argv: Argv): Promise<number> {
   }
 
   const plan = await planPrune(root, graph, { olderThanDays });
-  const total =
-    plan.staleRuns.length +
-    plan.deadSessions.length +
-    plan.doneTasks.length +
-    plan.closedSprints.length;
+  const total = plan.staleRuns.length + plan.deadSessions.length + plan.doneTasks.length;
 
   const apply = flag(argv, "yes", "y");
 

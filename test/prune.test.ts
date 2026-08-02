@@ -8,7 +8,7 @@ import { run as ganasPrune } from "../src/commands/prune.js";
 import { loadGraph } from "../src/graph/load.js";
 import { applyPrune, planPrune } from "../src/prune.js";
 import { readState, writeState } from "../src/state.js";
-import { cleanup, design, goal, makeProject, sprint } from "./helpers.js";
+import { cleanup, design, goal, makeProject, moduleYaml, scope } from "./helpers.js";
 
 const DAY_MS = 86_400_000;
 const NOW = Date.parse("2026-08-15T00:00:00Z");
@@ -108,7 +108,7 @@ test("session mồ côi quá hạn trong state.json bị đưa vào kế hoạch
 
 function doneTask(
   id: string,
-  opts: { doneDays?: number; doneAt?: string; blockedBy?: string[]; sprint?: string },
+  opts: { doneDays?: number; doneAt?: string; blockedBy?: string[]; scope?: string },
 ): string {
   const doneAt = opts.doneAt ?? daysAgo(opts.doneDays ?? 0);
   return `id: ${id}
@@ -116,7 +116,7 @@ title: "Task đã xong"
 serves:
   - G-001
 implements: D-001
-sprint: ${opts.sprint ?? "S-2026-07"}
+scope: ${opts.scope ?? "P-thu"}
 status: done
 done_at: ${doneAt}
 ${opts.blockedBy ? `blocked_by:\n${opts.blockedBy.map((b) => `  - ${b}`).join("\n")}\n` : ""}exit_contract:
@@ -125,27 +125,12 @@ ${opts.blockedBy ? `blocked_by:\n${opts.blockedBy.map((b) => `  - ${b}`).join("\
 `;
 }
 
-/**
- * Sprint closed với `ends_at` neo theo NOW giả lập của test — helper
- * `sprint()` dùng `new Date()` thật, trộn với NOW giả sẽ cho kết quả sai
- * tuỳ lúc chạy test.
- */
-function closedSprintYaml(id: string, endedDaysAgo: number): string {
-  return `id: ${id}
-title: "Sprint đã đóng"
-goals:
-  - G-001
-starts_at: ${daysAgo(endedDaysAgo + 14)}
-ends_at: ${daysAgo(endedDaysAgo)}
-status: closed
-`;
-}
-
 test("task done đủ tuổi, không ai blocked_by tới → vào kế hoạch archive", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": closedSprintYaml("S-2026-07", 10),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
   });
   try {
@@ -162,7 +147,8 @@ test("task done nhưng CHƯA đủ tuổi → giữ lại", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": sprint("S-2026-07"),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 1 }),
   });
   try {
@@ -178,14 +164,15 @@ test("task done nhưng còn task khác blocked_by tới nó → KHÔNG archive (
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": sprint("S-2026-07"),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
     ".ganas/tasks/T-002.yaml": `id: T-002
 title: "Task khác"
 serves:
   - G-001
 implements: D-001
-sprint: S-2026-07
+scope: P-thu
 status: todo
 blocked_by:
   - T-001
@@ -207,63 +194,14 @@ exit_contract:
   }
 });
 
-/* --- Tầng 2: sprint closed ----------------------------------------------------- */
-
-test("sprint closed hết task sống trỏ vào (kể cả task cùng bị archive lần này) → archive luôn", async () => {
-  const root = await makeProject({
-    ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": closedSprintYaml("S-2026-07", 10),
-    ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
-  });
-  try {
-    const graph = await loadGraph(root);
-    const plan = await planPrune(root, graph, { olderThanDays: 7, now: NOW });
-    assert.equal(plan.doneTasks.length, 1, "T-001 phải được archive trước");
-    assert.equal(
-      plan.closedSprints.length,
-      1,
-      "sau đó sprint không còn ai trỏ vào nên cũng archive được",
-    );
-    assert.equal(plan.closedSprints[0]!.id, "S-2026-07");
-  } finally {
-    await cleanup(root);
-  }
-});
-
-test("sprint closed nhưng còn task KHÔNG bị archive trỏ vào → giữ lại", async () => {
-  const root = await makeProject({
-    ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": closedSprintYaml("S-2026-07", 10),
-    ".ganas/tasks/T-001.yaml": `id: T-001
-title: "Vẫn đang làm"
-serves:
-  - G-001
-implements: D-001
-sprint: S-2026-07
-status: in_progress
-exit_contract:
-  - kind: command
-    run: "true"
-`,
-  });
-  try {
-    const graph = await loadGraph(root);
-    const plan = await planPrune(root, graph, { olderThanDays: 7, now: NOW });
-    assert.deepEqual(plan.closedSprints, []);
-  } finally {
-    await cleanup(root);
-  }
-});
-
 /* --- applyPrune: thật sự đụng đĩa ---------------------------------------------- */
 
-test("applyPrune: xoá run cũ, gỡ session mồ côi, archive task+sprint — graph sau đó sạch", async () => {
+test("applyPrune: xoá run cũ, gỡ session mồ côi, archive task — graph sau đó sạch", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": closedSprintYaml("S-2026-07", 10),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
   });
   try {
@@ -286,17 +224,12 @@ test("applyPrune: xoá run cũ, gỡ session mồ côi, archive task+sprint — 
       existsSync(join(root, ".ganas", "tasks", "done", "T-001.yaml")),
       "task done phải dời sang tasks/done/",
     );
-    assert.ok(
-      existsSync(join(root, ".ganas", "sprints", "closed", "S-2026-07.yaml")),
-      "sprint closed phải dời sang sprints/closed/",
-    );
 
     const state = await readState(root);
     assert.deepEqual(state.sessions, {}, "session mồ côi phải bị gỡ khỏi state.json");
 
     const after = await loadGraph(root);
     assert.equal(after.tasks.size, 0, "task đã archive không còn xuất hiện trong graph");
-    assert.equal(after.sprints.size, 0, "sprint đã archive không còn xuất hiện trong graph");
   } finally {
     await cleanup(root);
   }
@@ -315,7 +248,8 @@ test("ganas prune: mặc định dry-run, KHÔNG đụng đĩa", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": sprint("S-2026-07"),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneAt: realDaysAgo(10) }),
   });
   try {
@@ -340,7 +274,8 @@ test("ganas prune --yes: thực thi thật", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-07.yaml": sprint("S-2026-07"),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneAt: realDaysAgo(10) }),
   });
   try {

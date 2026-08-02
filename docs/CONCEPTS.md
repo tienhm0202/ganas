@@ -90,13 +90,6 @@ không tồn tại; `spine/design-serves-draft-goal` cảnh báo nếu Goal đó
 `draft` (chưa duyệt); `spine/design-orphaned` cảnh báo nếu mọi Goal design
 phục vụ đã `closed` mà design chưa `archived`/`superseded`.
 
-### Sprint (`S-2026-08`)
-
-`src/model/sprint.ts`. Sprint là **lát cắt thời gian của một tập Goal**,
-không phải nơi chứa task tự do — field `goals` bắt buộc ít nhất một phần tử.
-Có `starts_at`/`ends_at` (validator đòi `ends_at` sau `starts_at`) và
-`status` (`planned`/`active`/`closed`).
-
 ### Task (`T-001`)
 
 `src/model/task.ts`. Task là đơn vị việc thực thi được trong một phiên. Các
@@ -105,7 +98,7 @@ ràng buộc liên kết xương sống, siết chặt bởi cả zod lẫn
 
 - `serves`: mảng Goal ID, bắt buộc không rỗng.
 - `implements`: đúng một Design ID — design mà task này hiện thực.
-- `sprint`: đúng một Sprint ID — task luôn thuộc về một sprint.
+- `scope`: đúng một Phạm vi ID — task luôn thuộc về một phạm vi công việc.
 
 **Luật liên kết quan trọng nhất của xương sống**
 (`spine/task-goal-not-in-design`, trong `validate.ts`): mọi Goal mà `task.serves`
@@ -117,9 +110,9 @@ không phục vụ. Nguyên văn hint khi vi phạm:
 > Hoặc bổ sung goal vào design ..., hoặc chuyển task sang design khác. Spine
 > phải liền mạch task → design → goal.
 
-Có thêm cảnh báo mềm hơn (`spine/task-goal-not-in-sprint`, severity
-`warning`): nếu `task.serves` chứa Goal mà `sprint.goals` không nhận, sprint
-đang làm việc ngoài phạm vi đã cam kết.
+Luật song song trên trục HỆ THỐNG (`scope/task-touches-outside-scope`, severity
+`error`): mọi khối trong `task.touches` phải nằm trong `scope.modules` của phạm
+vi task thuộc về. Một task chạm hai phạm vi thì không ai nghiệm thu được nó.
 
 **`context_contract`** — trả lời "phiên mới cần THÔNG TIN gì", chính là thứ
 `SessionStart` render vào brief đầu phiên:
@@ -185,7 +178,7 @@ Có thể ghi đè riêng từng luật qua `enforcement_rules` (5 luật khai t
 — đây là nơi `Task.model` (tier) được resolve thành model id cụ thể lúc
 render brief.
 
-## 4. Sơ đồ khối (block diagram) = bản đồ hệ thống
+## 4. Phạm vi công việc và sơ đồ khối = bản đồ hệ thống
 
 Đây là trục HỆ THỐNG, song song với trục VIỆC ở mục 2. Điểm thiết kế cố ý,
 nói thẳng trong comment đầu file `src/model/module.ts`:
@@ -199,19 +192,35 @@ nói thẳng trong comment đầu file `src/model/module.ts`:
 Nói cách khác: không có "sơ đồ kiến trúc" vẽ tay tách biệt khỏi code thật —
 `Module` vừa là node trên sơ đồ vừa trỏ thẳng vào `paths` thật trên đĩa.
 
-### Part (`P-chat-core`)
+### Phạm vi công việc — Scope (`P-chat-core`)
 
-`src/model/part.ts`. Part là **đơn vị đóng gói bàn giao**, không phải nhãn
-nhóm (comment đầu file nhấn mạnh điều này). Có `version` (bắt buộc semver,
-vd `0.3.0`), `owner` tuỳ chọn, `modules` (mảng Module ID, ít nhất một),
-`entry`/`exit` (khối đầu/cuối luồng — dùng để phát hiện khối mồ côi, cả hai
-phải nằm trong `modules`), và **`acceptance`** — bộ nghiệm thu riêng ở mức
-Part, chạy trên **luồng đã ghép**, không phải tổng của nghiệm thu từng khối.
-Lý do, nguyên văn: "một luồng có thể đúng ở từng khối mà vẫn sai khi ghép".
+`src/model/scope.ts`. **Đơn vị mà một câu nói của người dùng được dịch sang**:
+bàn giao cái gì (`title`), code nằm ở đâu (`modules` → `module.paths`), làm sao
+biết là xong (`acceptance`), ai ký (`owner`). Có `version` (bắt buộc semver),
+`status` (`draft`/`active`/`delivered`), `entry` (khối đầu luồng), và `window`
+tuỳ chọn (`starts_at`/`ends_at` — thay vai trò Sprint cũ, đã bỏ ở M1′).
 
-Validator phát hiện khối mồ côi trong Part: BFS xuôi theo `depends_on` bắt
-đầu từ `entry`, khối nào trong `modules` mà không tới được thì cảnh báo
-`spine/module-orphaned`.
+`acceptance` chạy trên **luồng đã ghép**, không phải tổng nghiệm thu từng khối:
+"một luồng có thể đúng ở từng khối mà vẫn sai khi ghép".
+
+Bất biến quan trọng nhất, và là lý do khái niệm này tồn tại:
+
+> Mọi phát biểu (fact, claim) chỉ được coi là đúng **bên trong** một phạm vi.
+> Ra ngoài là chưa biết.
+
+`depends_on` và `ttl_days` chỉ khoanh được THỜI GIAN ("còn đúng nữa không"),
+không khoanh được KHÔNG GIAN ("đúng ở đâu"). Không có phạm vi thì kho fact càng
+lớn càng thành máy sinh ảo giác.
+
+Hai luật chống "phạm vi thùng rác": `scope/without-acceptance` và
+`scope/without-owner` cảnh báo khi phạm vi `active` mà thiếu cách nghiệm thu
+hoặc thiếu người ký. Validator còn phát hiện khối mồ côi (`scope/module-orphaned`):
+BFS xuôi theo `depends_on` từ `entry`, khối nào trong `modules` mà không tới được
+thì cảnh báo.
+
+**Phạm vi không bao giờ bị `ganas prune` archive**, kể cả khi đã `delivered` —
+khối vẫn khai `scope:` trỏ vào nó và fact vẫn còn hiệu lực trong nó. Phạm vi là
+ranh giới của tri thức, mà tri thức sống lâu hơn đợt bàn giao.
 
 ### Module (`M-intent`)
 
@@ -228,6 +237,7 @@ Validator phát hiện khối mồ côi trong Part: BFS xuôi theo `depends_on` 
   - `io` — cổng ra ngoài (API, hàng đợi, filesystem). Đây cũng chính là
     ranh giới hexagonal architecture mà `architectureRuleMd()` dạy: `code`/
     `data`/`llm` là lõi, `io` là nơi CHẠM I/O thật.
+- **`scope`**: phạm vi công việc chứa khối; thiếu ⇒ cảnh báo `scope/module-without-scope`. Quan hệ hai chiều với `scope.modules` phải khớp.
 - **`paths`** (glob) / **`entrypoints`** — code của khối nằm ở đâu; cũng là
   căn cứ tính STALE khi file khớp glob thay đổi.
 - **`contract`**: `{ inputs: Port[], outputs: Port[] }` — cổng vào/ra. Mỗi
@@ -310,6 +320,19 @@ dạng chuỗi rút gọn dễ gõ tay, được `parseAnchorString()` diễn gi
 `"src/a.ts#L12-L18"`, `"src/a.ts:12"`, `"commit:abc1234"`; URL trần bị từ
 chối có chủ đích (thiếu `fetched_at` thì không neo được). Không nhận dạng
 được thì lỗi validate — không đoán bừa.
+
+### Phạm vi là bắt buộc với Fact và Claim, tuỳ chọn với Decision
+
+Fact và Claim đều bắt buộc khai `scope` — một phát biểu không biết mình đúng ở
+đâu thì không vào được kho. Decision thì **tuỳ chọn, thiếu = áp cho toàn dự án**:
+hai loại hỏng ngược chiều nhau. Fact ngoài phạm vi mà được tin ⇒ ảo giác; còn
+Decision bị thu hẹp phạm vi nhầm ⇒ model vi phạm một ràng buộc người đã chốt,
+tệ hơn. Mặc định an toàn của mỗi loại vì thế nằm ở hai phía đối nhau.
+
+`scope` của Fact **không** được suy tự động từ `depends_on` ∩ `module.paths`:
+fact không có `depends_on` sẽ mất phạm vi, fact chạm hai khối sẽ có hai phạm vi.
+Công cụ chỉ GỢI Ý (`ganas scope assign`), người quyết — cùng lý lẽ với
+`task.model`.
 
 ### Fact — điều kiểm chứng được bằng lệnh
 
@@ -433,7 +456,7 @@ trạng thái khác — kể cả nghe "không tệ" như `unavailable` hay `mar
 
 ## 8. Sơ đồ quan hệ (mermaid)
 
-Sơ đồ dưới đây gộp trục xương sống (Goal/Design/Task/Sprint) với trục hệ
+Sơ đồ dưới đây gộp trục xương sống (Goal/Design/Task) với trục hệ
 thống (Part/Module) và cách chúng nối vào nhau qua `touches` và
 `exit_contract`. Không cố nhét mọi field — chỉ quan hệ giữa các thực thể.
 
@@ -443,16 +466,13 @@ flowchart LR
     G["Goal G-001"]
     D["Design D-001"]
     T["Task T-001"]
-    SP["Sprint S-2026-08"]
     T -->|implements| D
     D -->|serves| G
     T -->|serves subset design.serves| G
-    T -->|sprint| SP
-    SP -->|goals| G
   end
 
   subgraph system["So do khoi / ban do he thong"]
-    subgraph P["Part P-chat-core 0.3.0"]
+    subgraph P["Scope P-chat-core 0.3.0"]
       M1["Module M-intent nature=llm"]
       M2["Module M-router nature=code"]
     end
@@ -462,11 +482,12 @@ flowchart LR
   V1["Verification M-intent V-intent-eval kind=eval"]
   M1 -->|verify| V1
 
+  T -->|scope| P
   T -->|touches| M1
   T -->|touches| M2
   T -->|exit_contract verification target| V1
 
-  F["Fact F-ACC-007"]
+  F["Fact F-ACC-007 scope=P-chat-core"]
   T -->|context_contract facts| F
 
   DEC["Decision DEC-004"]
@@ -489,7 +510,6 @@ Từ `ID_PATTERNS` (`src/model/common.ts`) và `zVerificationId`
 | Tiền tố | Loại | Ví dụ |
 | --- | --- | --- |
 | `G-` | Goal | `G-001` |
-| `S-` | Sprint | `S-2026-08` |
 | `D-` | Design | `D-001` |
 | `T-` | Task | `T-001` |
 | `F-` | Fact | `F-ACC-007` |
@@ -497,7 +517,7 @@ Từ `ID_PATTERNS` (`src/model/common.ts`) và `zVerificationId`
 | `LC-` | Legacy claim (import từ tài liệu cũ) | `LC-007` |
 | `DEC-` | Decision | `DEC-004` |
 | `M-` | Module | `M-intent` |
-| `P-` | Part | `P-chat-core` |
+| `P-` | Phạm vi công việc (Scope) | `P-chat-core` |
 | `V-` | Verification | `V-intent-smoke` |
 
 Lưu ý dễ nhầm: **Decision dùng `DEC-`, không phải `D-`** — `D-` đã là tiền

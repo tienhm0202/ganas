@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { zModule, zPart, zVerification } from "../src/model/index.js";
-import { check, design, goal, sprint, task } from "./helpers.js";
+import { zModule, zScope, zVerification } from "../src/model/index.js";
+import { check, design, goal, scope as scopeFixture, task } from "./helpers.js";
 
 /* --- Bộ dựng YAML cho sơ đồ khối ------------------------------------------ */
 
-function part(id = "P-chat", modules = ["M-a", "M-b"], entry = "M-a", exit = "M-b"): string {
+function part(id = "P-chat", modules = ["M-a", "M-b"], entry = "M-a"): string {
   return `id: ${id}
-title: "Phần thử"
+title: "Phạm vi thử"
 version: 0.1.0
+owner: "@nguoi-duyet"
 modules:
 ${modules.map((m) => `  - ${m}`).join("\n")}
 entry: ${entry}
-exit: ${exit}
 `;
 }
 
@@ -29,7 +29,7 @@ function moduleYaml(
 ): string {
   return `id: ${id}
 title: "Khối thử"
-${opts.part === null ? "" : `part: ${opts.part ?? "P-chat"}\n`}nature: ${opts.nature ?? "code"}
+${opts.part === null ? "" : `scope: ${opts.part ?? "P-chat"}\n`}nature: ${opts.nature ?? "code"}
 paths: ["src/${id}/**"]
 status: ${opts.status ?? "implemented"}
 depends_on:
@@ -47,7 +47,7 @@ ${
 /** Sơ đồ hợp lệ tối thiểu: P-chat gồm M-a → M-b. */
 function validDiagram(): Record<string, string> {
   return {
-    ".ganas/parts/P-chat.yaml": part(),
+    ".ganas/scopes/P-chat.yaml": part(),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a"),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", { dependsOn: ["M-a"] }),
   };
@@ -67,26 +67,26 @@ test("khối trỏ phần không tồn tại → lỗi có file:line", async () 
   const { diagnostics } = await check({
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", { part: "P-khong-co" }),
   });
-  const err = diagnostics.find((d) => d.code === "spine/module-missing-part");
+  const err = diagnostics.find((d) => d.code === "scope/module-scope-not-found");
   assert.ok(err, JSON.stringify(diagnostics, null, 2));
   assert.equal(typeof err.line, "number", "phải chỉ được dòng để sửa ngay");
 });
 
 test("phần liệt kê khối không tồn tại → lỗi", async () => {
   const { codes } = await check({
-    ".ganas/parts/P-chat.yaml": part("P-chat", ["M-a", "M-khong-co"], "M-a", "M-a"),
+    ".ganas/scopes/P-chat.yaml": part("P-chat", ["M-a", "M-khong-co"], "M-a"),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a"),
   });
-  assert.ok(codes.includes("spine/part-missing-module"));
+  assert.ok(codes.includes("scope/missing-module"));
 });
 
 test("khối khai thuộc phần nhưng phần không liệt kê nó → hai chiều lệch nhau", async () => {
   const { diagnostics } = await check({
-    ".ganas/parts/P-chat.yaml": part("P-chat", ["M-a"], "M-a", "M-a"),
+    ".ganas/scopes/P-chat.yaml": part("P-chat", ["M-a"], "M-a"),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a"),
     ".ganas/modules/M-lac.yaml": moduleYaml("M-lac", { part: "P-chat" }),
   });
-  const err = diagnostics.find((d) => d.code === "spine/module-part-mismatch");
+  const err = diagnostics.find((d) => d.code === "scope/module-scope-mismatch");
   assert.ok(err, "sơ đồ nói một đằng, khối nói một nẻo thì phải bắt được");
 });
 
@@ -118,7 +118,7 @@ test("cạnh contract trỏ khối đích không tồn tại → lỗi", async (
 test("task chạm khối không tồn tại → lỗi", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scopeFixture(),
     ".ganas/designs/D-001.yaml": design(),
     ".ganas/tasks/T-001.yaml": task("T-001", { extra: "touches:\n  - M-khong-co" }),
   });
@@ -133,7 +133,7 @@ title: "t"
 serves:
   - G-001
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 status: todo
 touches:
   - ${moduleId}
@@ -145,7 +145,7 @@ ${exitContract}
 test("task chạm khối mà exit_contract không có tiêu chí verification → lỗi", async () => {
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scopeFixture(),
     ".ganas/designs/D-001.yaml": design(),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", { part: null as never }),
     ".ganas/tasks/T-001.yaml": taskTouching("M-a", `  - kind: command\n    run: "true"`),
@@ -158,7 +158,7 @@ test("task chạm khối mà exit_contract không có tiêu chí verification �
 test("task chạm khối, exit_contract có verification đúng target → không lỗi", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scopeFixture(),
     ".ganas/designs/D-001.yaml": design(),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", { part: null as never }),
     ".ganas/tasks/T-001.yaml": taskTouching(
@@ -172,7 +172,7 @@ test("task chạm khối, exit_contract có verification đúng target → khôn
 test("task chạm khối, verification trỏ SAI khối khác → vẫn lỗi", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scopeFixture(),
     ".ganas/designs/D-001.yaml": design(),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", { part: null as never }),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", { part: null as never }),
@@ -187,7 +187,7 @@ test("task chạm khối, verification trỏ SAI khối khác → vẫn lỗi", 
 test("task chạm khối chưa có verify nào → hint bảo thêm bằng chứng trước", async () => {
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scopeFixture(),
     ".ganas/designs/D-001.yaml": design(),
     ".ganas/modules/M-a.yaml": `id: M-a
 title: "Khối chưa kiểm"
@@ -206,7 +206,7 @@ status: implemented
 
 test("vòng lặp phụ thuộc giữa các khối bị bắt", async () => {
   const { diagnostics } = await check({
-    ".ganas/parts/P-chat.yaml": part("P-chat", ["M-a", "M-b"], "M-a", "M-b"),
+    ".ganas/scopes/P-chat.yaml": part("P-chat", ["M-a", "M-b"], "M-a"),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", { dependsOn: ["M-b"] }),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", { dependsOn: ["M-a"] }),
   });
@@ -229,12 +229,12 @@ test("khối tự phụ thuộc chính nó bị từ chối ở schema", () => {
 
 test("khối không tới được từ entry → cảnh báo mồ côi", async () => {
   const { codes } = await check({
-    ".ganas/parts/P-chat.yaml": part("P-chat", ["M-a", "M-b", "M-le"], "M-a", "M-b"),
+    ".ganas/scopes/P-chat.yaml": part("P-chat", ["M-a", "M-b", "M-le"], "M-a"),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a"),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", { dependsOn: ["M-a"] }),
     ".ganas/modules/M-le.yaml": moduleYaml("M-le"),
   });
-  assert.ok(codes.includes("spine/module-orphaned"));
+  assert.ok(codes.includes("scope/module-orphaned"));
 });
 
 /* --- Bằng chứng ------------------------------------------------------------ */
@@ -333,7 +333,7 @@ test("probe nhận skip_if — dùng cho khối cần môi trường ngoài", ()
 /* --- Schema của Part -------------------------------------------------------- */
 
 test("phần khai entry không nằm trong modules → bị từ chối", () => {
-  const parsed = zPart.safeParse({
+  const parsed = zScope.safeParse({
     id: "P-chat",
     title: "t",
     version: "0.1.0",
@@ -345,9 +345,9 @@ test("phần khai entry không nằm trong modules → bị từ chối", () => 
 });
 
 test("version phải theo semver", () => {
-  const base = { id: "P-chat", title: "t", modules: ["M-a"], entry: "M-a", exit: "M-a" };
-  assert.equal(zPart.safeParse({ ...base, version: "0.1.0" }).success, true);
-  assert.equal(zPart.safeParse({ ...base, version: "v1" }).success, false);
+  const base = { id: "P-chat", title: "t", modules: ["M-a"], entry: "M-a" };
+  assert.equal(zScope.safeParse({ ...base, version: "0.1.0" }).success, true);
+  assert.equal(zScope.safeParse({ ...base, version: "v1" }).success, false);
 });
 
 /* --- Module.skills (N11) ---------------------------------------------------- */

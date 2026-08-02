@@ -6,8 +6,7 @@ import type {
   Fact,
   Goal,
   Module,
-  Part,
-  Sprint,
+  Scope,
   Task,
 } from "../model/index.js";
 import type { LoadedYaml } from "../util/yaml.js";
@@ -39,11 +38,10 @@ export interface Graph {
   root: string;
   config: Config;
   goals: Map<string, Sourced<Goal>>;
-  sprints: Map<string, Sourced<Sprint>>;
   designs: Map<string, Sourced<Design>>;
   tasks: Map<string, Sourced<Task>>;
-  /** Sơ đồ khối: phần và khối. */
-  parts: Map<string, Sourced<Part>>;
+  /** Phạm vi công việc — ranh giới của cả việc lẫn tri thức. */
+  scopes: Map<string, Sourced<Scope>>;
   modules: Map<string, Sourced<Module>>;
   facts: Map<string, Sourced<Fact>>;
   claims: Map<string, Sourced<Claim>>;

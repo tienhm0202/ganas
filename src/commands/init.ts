@@ -17,10 +17,9 @@ import { GanasError } from "../util/errors.js";
 /** Thư mục con tạo sẵn — thư mục rỗng giúp người mới biết chỗ đặt file. */
 const SUBDIRS = [
   DIRS.goals,
-  DIRS.sprints,
   DIRS.designs,
   DIRS.tasks,
-  DIRS.parts,
+  DIRS.scopes,
   DIRS.modules,
   DIRS.facts,
   DIRS.claims,
@@ -123,20 +122,13 @@ export async function run(argv: Argv): Promise<number> {
   track("CLAUDE.md", claudeMdResult);
   track("AGENTS.md", await writeNew(join(cwd, "AGENTS.md"), T.agentsMd(vars), force));
 
-  // Goal + sprint mẫu để graph có hình hài ngay, và để `validate` có gì mà kiểm.
+  // Goal mẫu để graph có hình hài ngay, và để `validate` có gì mà kiểm. Phạm vi
+  // KHÔNG sinh mẫu: nó cần ranh giới code thật, mà `ganas scope new` mới hỏi
+  // được. Một phạm vi placeholder sẽ thành cái thùng rác đầu tiên của dự án.
   const goalId = "G-001";
-  const sprintId = `S-${new Date().toISOString().slice(0, 7)}`;
   track(
     `${GANAS_DIR}/${DIRS.goals}/${goalId}.yaml`,
     await writeNew(ganasPath(cwd, DIRS.goals, `${goalId}.yaml`), T.sampleGoal(goalId, vars), force),
-  );
-  track(
-    `${GANAS_DIR}/${DIRS.sprints}/${sprintId}.yaml`,
-    await writeNew(
-      ganasPath(cwd, DIRS.sprints, `${sprintId}.yaml`),
-      T.sampleSprint(sprintId, goalId),
-      force,
-    ),
   );
 
   await ensureGitignore(cwd);

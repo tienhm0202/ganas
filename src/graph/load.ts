@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import type { z, ZodIssue, ZodTypeAny } from "zod";
 
 import {
+  LATEST_SCHEMA_VERSION,
   zClaimFile,
   zConfig,
   zDecisionFile,
@@ -12,8 +13,7 @@ import {
   zFactFile,
   zGoal,
   zModule,
-  zPart,
-  zSprint,
+  zScope,
   zTask,
 } from "../model/index.js";
 import { GanasError } from "../util/errors.js";
@@ -53,7 +53,7 @@ interface CollectResult<T> {
   sources: Map<string, LoadedYaml>;
 }
 
-/** Nạp thư mục mà mỗi file chứa đúng một bản ghi (goal, sprint, design, task). */
+/** Nạp thư mục mà mỗi file chứa đúng một bản ghi (goal, design, task, phạm vi, khối). */
 async function collectSingle<S extends ZodTypeAny>(
   dir: string,
   schema: S,
@@ -169,11 +169,27 @@ export async function loadGraph(root: string): Promise<Graph> {
   const loadedConfig = await readYamlFile(configFile);
   const parsedConfig = zConfig.safeParse(loadedConfig.value);
   if (!parsedConfig.success) {
+    const where = (path: readonly (string | number)[]): string => {
+      const line = lineOfPath(loadedConfig, path);
+      return `${relative(root, configFile)}${line ? `:${line}` : ""}`;
+    };
+
+    // Version tương lai phải nói thẳng là "nâng cấp ganas". Để zod báo
+    // "expected 1 | 2" thì người đọc tưởng file của mình hỏng, và cách sửa sai
+    // nhất — hạ số version xuống — là cách phá dữ liệu nhanh nhất.
+    const declared = (loadedConfig.value as { version?: unknown } | null)?.version;
+    if (typeof declared === "number" && declared > LATEST_SCHEMA_VERSION) {
+      throw new GanasError(
+        `${where(["version"])}: dự án này dùng schema .ganas v${declared}, ` +
+          `bản ganas đang chạy chỉ hiểu tới v${LATEST_SCHEMA_VERSION} — nâng cấp ganas.\n` +
+          `  Đừng hạ \`version\` trong config.yaml để chạy tạm: bản cũ sẽ đọc sai ` +
+          `những trường nó chưa biết.`,
+      );
+    }
+
     const first = parsedConfig.error.issues[0]!;
-    const line = lineOfPath(loadedConfig, first.path);
     throw new GanasError(
-      `${relative(root, configFile)}${line ? `:${line}` : ""}: config không hợp lệ — ` +
-        `${first.path.join(".")}: ${first.message}`,
+      `${where(first.path)}: config không hợp lệ — ` + `${first.path.join(".")}: ${first.message}`,
     );
   }
 
@@ -182,32 +198,29 @@ export async function loadGraph(root: string): Promise<Graph> {
   const gitignoreFile = join(root, ".gitignore");
   const gitignoreRaw = existsSync(gitignoreFile) ? await readFile(gitignoreFile, "utf8") : null;
 
-  const [goals, sprints, designs, tasks, parts, modules, facts, claims, decisions] =
-    await Promise.all([
-      collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
-      collectSingle(ganasPath(root, DIRS.sprints), zSprint, root, "sprint"),
-      collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
-      collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
-      collectSingle(ganasPath(root, DIRS.parts), zPart, root, "phần"),
-      collectSingle(ganasPath(root, DIRS.modules), zModule, root, "khối"),
-      collectArray([ganasPath(root, DIRS.facts)], zFactFile, root, "fact"),
-      collectArray(
-        [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
-        zClaimFile,
-        root,
-        "claim",
-      ),
-      collectArray([ganasPath(root, DIRS.decisions)], zDecisionFile, root, "decision"),
-    ]);
+  const [goals, designs, tasks, scopes, modules, facts, claims, decisions] = await Promise.all([
+    collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
+    collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
+    collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
+    collectSingle(ganasPath(root, DIRS.scopes), zScope, root, "phạm vi"),
+    collectSingle(ganasPath(root, DIRS.modules), zModule, root, "khối"),
+    collectArray([ganasPath(root, DIRS.facts)], zFactFile, root, "fact"),
+    collectArray(
+      [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
+      zClaimFile,
+      root,
+      "claim",
+    ),
+    collectArray([ganasPath(root, DIRS.decisions)], zDecisionFile, root, "decision"),
+  ]);
 
   return {
     root,
     config: parsedConfig.data,
     goals: goals.items,
-    sprints: sprints.items,
     designs: designs.items,
     tasks: tasks.items,
-    parts: parts.items,
+    scopes: scopes.items,
     modules: modules.items,
     facts: facts.items,
     claims: claims.items,
@@ -216,10 +229,9 @@ export async function loadGraph(root: string): Promise<Graph> {
     gitignoreRaw,
     sources: new Map([
       ...goals.sources,
-      ...sprints.sources,
       ...designs.sources,
       ...tasks.sources,
-      ...parts.sources,
+      ...scopes.sources,
       ...modules.sources,
       ...facts.sources,
       ...claims.sources,
@@ -227,10 +239,9 @@ export async function loadGraph(root: string): Promise<Graph> {
     ]),
     loadDiagnostics: [
       ...goals.diagnostics,
-      ...sprints.diagnostics,
       ...designs.diagnostics,
       ...tasks.diagnostics,
-      ...parts.diagnostics,
+      ...scopes.diagnostics,
       ...modules.diagnostics,
       ...facts.diagnostics,
       ...claims.diagnostics,

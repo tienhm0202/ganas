@@ -63,8 +63,8 @@ export async function run(argv: Argv): Promise<number> {
   if (counts.info) parts.push(`${counts.info} ghi chú`);
 
   const size =
-    `${graph.goals.size} goal · ${graph.sprints.size} sprint · ${graph.designs.size} design · ` +
-    `${graph.tasks.size} task · ${graph.parts.size} phần · ${graph.modules.size} khối · ` +
+    `${graph.goals.size} goal · ${graph.designs.size} design · ${graph.tasks.size} task · ` +
+    `${graph.scopes.size} phạm vi · ${graph.modules.size} khối · ` +
     `${graph.facts.size} fact · ${graph.claims.size} claim`;
 
   if (parts.length === 0) {

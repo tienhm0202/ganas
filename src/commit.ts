@@ -24,7 +24,7 @@ export function buildCommitMessage(graph: Graph, task: Task, gate: GateResult): 
   const context = [
     `phục vụ ${task.serves.join(", ")}`,
     design ? `design ${design.id} — ${design.title}` : `design ${task.implements}`,
-    `sprint ${task.sprint}`,
+    `phạm vi ${task.scope}`,
   ].join(" · ");
 
   lines.push("", context);

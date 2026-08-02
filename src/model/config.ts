@@ -21,7 +21,7 @@ export const ENFORCEMENT_RULES = [
   "schema",
   /** Kết thúc phiên khi exit_contract chưa thoả. */
   "exit_contract",
-  /** Tạo/đóng task không neo được vào sprint/goal. */
+  /** Tạo/đóng task không neo được vào phạm vi/goal. */
   "task_link",
   /** Sửa code trong zone chưa survey. */
   "zone_survey",
@@ -35,9 +35,21 @@ export type EnforcementRule = (typeof ENFORCEMENT_RULES)[number];
 export const MODEL_TIER = ["main", "verifier", "scribe"] as const;
 export type ModelTier = (typeof MODEL_TIER)[number];
 
+/**
+ * Phiên bản schema `.ganas/` mà bản ganas này hiểu được.
+ *
+ * Chưa cần cơ chế migrate: ganas chưa có installed base, nên schema mới cứ đổi
+ * thẳng. Điều PHẢI có ngay là lối thoát cho ngày có installed base — một dự án
+ * ghi version tương lai phải nhận thông điệp "nâng cấp ganas", chứ không phải
+ * một lỗi zod trần khiến người ta hạ số version xuống để chạy tạm.
+ */
+export const LATEST_SCHEMA_VERSION = 1;
+
 export const zConfig = z.object({
-  /** Phiên bản schema của .ganas/ — dùng cho migrate về sau. */
-  version: z.literal(1).default(1),
+  version: z
+    .literal(LATEST_SCHEMA_VERSION)
+    .default(LATEST_SCHEMA_VERSION)
+    .describe("phiên bản schema .ganas/"),
   project: zNonEmpty,
 
   /** Mức mặc định cho mọi luật. */

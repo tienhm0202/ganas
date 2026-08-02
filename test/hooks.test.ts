@@ -9,13 +9,14 @@ import { loadGraph } from "../src/graph/load.js";
 import * as handlers from "../src/hooks/handlers.js";
 import { renderBrief } from "../src/render/brief.js";
 import { moduleTargets, runTarget } from "../src/verify/run.js";
-import { cleanup, design, goal, makeProject, sprint, task } from "./helpers.js";
+import { cleanup, design, goal, makeProject, moduleYaml, scope, task } from "./helpers.js";
 
 /** Dự án đủ để hook chạy: spine hợp lệ + exit_contract mà ta điều khiển được. */
 async function project(over: Record<string, string> = {}, config?: string): Promise<string> {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/designs/D-001.yaml": design(),
     ".ganas/tasks/T-001.yaml": task("T-001", {
       extra: "", // exit_contract mặc định là `true` ⇒ luôn đạt
@@ -73,11 +74,13 @@ test("dự án không dùng ganas thì hook im lặng đi tiếp", async () => {
 /* --- PostToolUse ---------------------------------------------------------- */
 
 const BAD_CLAIM = `- id: C-001
+  scope: P-thu
   statement: "Hệ thống dùng Redis"
   provenance: session
 `;
 
 const GOOD_CLAIM = `- id: C-001
+  scope: P-thu
   statement: "Hệ thống dùng Redis"
   anchors: ["src/cache.ts#L10"]
   provenance: session
@@ -175,7 +178,7 @@ title: "Task chưa xong"
 serves:
   - G-001
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 status: todo
 exit_contract:
   - kind: command
@@ -223,7 +226,7 @@ title: "Task chờ người duyệt"
 serves:
   - G-001
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 status: todo
 exit_contract:
   - kind: command
@@ -254,7 +257,7 @@ test("gate chấm được tiêu chí artifact có must_contain", async () => {
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: artifact
     path: .ganas/facts/accounting.yaml
@@ -301,7 +304,7 @@ verify:
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 touches:
   - M-a
 exit_contract:
@@ -336,7 +339,7 @@ test("gate: tiêu chí verification trỏ target không tồn tại → fail rõ
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: verification
     target: M-khong-co/V-x

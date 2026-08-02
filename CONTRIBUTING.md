@@ -54,7 +54,7 @@ Mọi `z.object({...})` mới thêm vào `src/model/` phải kết thúc bằng
 Nói cách khác: không có `.strict()`, một lỗi gõ tên field (rất dễ xảy ra khi
 model sinh YAML) sẽ bị zod âm thầm bỏ qua thay vì báo lỗi — field coi như
 không tồn tại, và không ai biết cho tới khi hành vi sai lệch xuất hiện ở xa
-chỗ gõ nhầm. Mọi schema object mới trong `src/model/*.ts` (goal, sprint,
+chỗ gõ nhầm. Mọi schema object mới trong `src/model/*.ts` (goal, scope,
 design, task, module, part, v.v.) đều tuân theo cùng một khuôn: object trước,
 `.strict()` ngay sau.
 
@@ -66,7 +66,6 @@ Mọi ID trong ganas có tiền tố cố định, định nghĩa ở `src/model
 | Tiền tố | Loại | Ví dụ |
 | --- | --- | --- |
 | `G-` | Goal | `G-001` |
-| `S-` | Sprint | `S-2026-08` |
 | `D-` | Design | `D-001` |
 | `T-` | Task | `T-001` |
 | `F-` | Fact | `F-ACC-007` |
@@ -74,7 +73,7 @@ Mọi ID trong ganas có tiền tố cố định, định nghĩa ở `src/model
 | `LC-` | Legacy claim | `LC-007` |
 | `DEC-` | Decision | `DEC-004` |
 | `M-` | Module | `M-intent` |
-| `P-` | Part | `P-chat-core` |
+| `P-` | Phạm vi công việc (Scope) | `P-chat-core` |
 | `V-` | Verification | `V-intent-smoke` |
 
 Lưu ý: **Decision dùng `DEC-`, không phải `D-`** — `D-` đã là tiền tố của
@@ -123,7 +122,7 @@ Script trong `package.json`:
 Dùng `node:test` — không dùng vitest/jest. Helper dựng project test nằm ở
 `test/helpers.ts`: `makeProject()` dựng một `.ganas/` tạm từ map
 đường-dẫn→nội-dung, `check()` nạp + validate rồi trả về toàn bộ diagnostic,
-và các builder YAML mặc định-hợp-lệ `goal()`/`sprint()`/`design()`/`task()`
+và các builder YAML mặc định-hợp-lệ `goal()`/`scope()`/`design()`/`task()`/`moduleYaml()`
 (ghi đè phần cần làm sai để test ca lỗi). Pattern chuẩn: dựng project tạm
 trong thư mục temp, dọn bằng `cleanup(root)` trong khối `finally` (xem
 `check()` trong `test/helpers.ts`) để không rò thư mục tạm khi test throw.

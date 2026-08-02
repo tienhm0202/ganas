@@ -233,14 +233,13 @@ test("contractEdges liệt kê mọi cạnh contract khai trong verify", async (
 
 test("renderDiagram in ra subgraph phần, cạnh depends_on, và nhãn hợp đồng", async () => {
   const { root, graph } = await graphOf({
-    ".ganas/parts/P-x.yaml": `id: P-x
-title: "Phần X"
+    ".ganas/scopes/P-x.yaml": `id: P-x
+title: "Phạm vi X"
 version: 0.1.0
 modules:
   - M-a
   - M-b
 entry: M-a
-exit: M-b
 `,
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
       outputs: [{ name: "text", shape: "string" }],

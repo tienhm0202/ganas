@@ -28,7 +28,7 @@ export async function run(argv: Argv): Promise<number> {
     if (blocked.length === 0) {
       process.stdout.write(
         `Không còn task nào chưa xong.\n\n` +
-          `Thêm task mới vào .ganas/tasks/ (nhớ khai serves, implements, sprint, exit_contract),\n` +
+          `Thêm task mới vào .ganas/tasks/ (nhớ khai serves, implements, scope, exit_contract),\n` +
           `rồi chạy: ganas validate\n`,
       );
       return 0;

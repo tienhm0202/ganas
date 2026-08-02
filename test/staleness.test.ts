@@ -8,7 +8,7 @@ import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
 import type { Freshness } from "../src/model/index.js";
 import { factTarget, moduleTargets, runTarget } from "../src/verify/run.js";
-import { cleanup, goal, makeProject } from "./helpers.js";
+import { check, cleanup, goal, makeProject } from "./helpers.js";
 
 const RUN = (root: string) => ({ root, by: "test" });
 
@@ -41,6 +41,7 @@ async function factProject(probeRun: string, dependsOn = '["src/**"]'): Promise<
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-A-001
+  scope: P-thu
   statement: "file src/a.ts tồn tại"
   verify:
     run: ${JSON.stringify(probeRun)}
@@ -261,6 +262,7 @@ test("skip_if khớp → unavailable, và lý do nói rõ KHÔNG phải fail", a
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-A-001
+  scope: P-thu
   statement: "cần công cụ không có"
   verify:
     run: "ganas-khong-ton-tai"
@@ -333,7 +335,7 @@ test("brief in ĐÚNG lý do cho từng trường hợp, không nói chung chung
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         context_contract: { facts: ["F-A-001"] },
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -376,7 +378,7 @@ verify:
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         touches: ["M-a", "M-ghost"],
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -407,7 +409,7 @@ test("brief không có mục 'Khối chạm tới' khi task không touches gì",
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         exit_contract: [{ kind: "command", run: "true" }],
       }),
       file: ".ganas/tasks/T-001.yaml",
@@ -434,7 +436,7 @@ test("brief gợi ý model đã resolve khi task.model được gán", async () 
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         model: "verifier",
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -461,7 +463,7 @@ test("brief không nhắc gì tới model khi task.model không được gán", 
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         exit_contract: [{ kind: "command", run: "true" }],
       }),
       file: ".ganas/tasks/T-001.yaml",
@@ -487,7 +489,7 @@ test("brief vẫn liệt kê skills khi chỉ task.skills được gán, không 
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         skills: ["gate"],
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -531,7 +533,7 @@ verify:
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         touches: ["M-a"],
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -572,7 +574,7 @@ verify:
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         skills: ["adflex-legal-chunking"],
         touches: ["M-a"],
         exit_contract: [{ kind: "command", run: "true" }],
@@ -612,7 +614,7 @@ verify:
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         touches: ["M-a"],
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -665,7 +667,7 @@ test("brief ngắn (task tối thiểu) thì không có cảnh báo độ dài",
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         exit_contract: [{ kind: "command", run: "true" }],
       }),
       file: ".ganas/tasks/T-001.yaml",
@@ -706,7 +708,7 @@ test("brief phình to (nhiều must_read/open_questions) thì cảnh báo độ 
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         context_contract: { must_read: mustRead, open_questions: openQuestions },
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -754,7 +756,7 @@ test("cảnh báo độ dài nằm TRƯỚC phần biến động, không bị �
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         context_contract: { must_read: mustRead, open_questions: openQuestions },
         exit_contract: [{ kind: "command", run: "true" }],
       }),
@@ -793,7 +795,7 @@ test("brief liệt kê tiêu chí kind verification trong Điều kiện hoàn t
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
-        sprint: "S-2026-08",
+        scope: "P-thu",
         exit_contract: [
           { kind: "command", run: "true" },
           { kind: "verification", target: "M-intent/V-intent-eval" },
@@ -811,4 +813,100 @@ test("brief liệt kê tiêu chí kind verification trong Điều kiện hoàn t
   } finally {
     await cleanup(root);
   }
+});
+
+/* --- Nghiệm thu mức PHẠM VI: trước M1′ nó không bao giờ stale ------------- */
+
+/**
+ * Bug được sửa ở M1′: `scopeTargets()` từng khai `context: scope.modules` — toàn
+ * ID khối, không có `*` hay `/`, nên `globsOf()` lọc sạch và context rỗng. Hệ
+ * quả: nghiệm thu ở mức phạm vi pass một lần rồi xanh VĨNH VIỄN, kể cả khi toàn
+ * bộ code trong phạm vi đã bị viết lại. Đó là lời hứa rỗng — đúng loại lỗi mà
+ * ganas sinh ra để chống, nằm ngay trong ganas.
+ */
+async function scopeProject(): Promise<string> {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/scopes/P-x.yaml": `id: P-x
+title: "Luồng ghép"
+version: 0.1.0
+owner: "@ai"
+status: active
+modules: [M-a]
+entry: M-a
+acceptance:
+  - id: V-e2e
+    kind: probe
+    run: "test -f src/a/index.ts"
+`,
+    ".ganas/modules/M-a.yaml": `id: M-a
+scope: P-x
+title: "Khối A"
+nature: code
+paths: ["src/a/**"]
+status: implemented
+verify:
+  - id: V-unit
+    kind: probe
+    run: "test -f src/a/index.ts"
+`,
+  });
+  await mkdir(join(root, "src", "a"), { recursive: true });
+  await writeFile(join(root, "src", "a", "index.ts"), "export const a = 1;\n", "utf8");
+  return root;
+}
+
+async function verifyScope(root: string, scopeId: string) {
+  const graph = await loadGraph(root);
+  const { scopeTargets } = await import("../src/verify/run.js");
+  return runTarget(scopeTargets(graph.scopes.get(scopeId)!, graph)[0]!, RUN(root));
+}
+
+test("⭐ nghiệm thu phạm vi STALE khi code của khối thành viên đổi", async () => {
+  const root = await scopeProject();
+  try {
+    const run = await verifyScope(root, "P-x");
+    assert.equal(run.result, "pass");
+    assert.equal((await stateOf(root, "P-x/V-e2e")).freshness, "fresh");
+
+    // Viết lại code trong phạm vi, mốc thời gian sau lần verify.
+    const later = new Date(Date.now() + 60_000);
+    const file = join(root, "src", "a", "index.ts");
+    await writeFile(file, "export const a = 2;\n", "utf8");
+    await utimes(file, later, later);
+
+    const after = await stateOf(root, "P-x/V-e2e");
+    assert.equal(
+      after.freshness,
+      "stale",
+      "code trong phạm vi đổi thì nghiệm thu luồng ghép không còn nói về luồng đó nữa",
+    );
+    assert.match(after.reason, /src\/a\/index\.ts/, "phải nêu ĐÚNG file nào đã đổi");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("phạm vi active mà thiếu nghiệm thu / thiếu người ký đều bị cảnh báo", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/scopes/P-tron.yaml": `id: P-tron
+title: "Phạm vi thùng rác"
+version: 0.1.0
+status: active
+modules: [M-a]
+entry: M-a
+`,
+    ".ganas/modules/M-a.yaml": `id: M-a
+scope: P-tron
+title: "Khối A"
+nature: code
+paths: ["src/a/**"]
+`,
+  });
+  assert.ok(
+    codes.includes("scope/without-acceptance"),
+    "không có cách nghiệm thu thì chỉ là cái nhãn",
+  );
+  assert.ok(codes.includes("scope/without-owner"), "không ai ký thì không ai nghiệm thu được");
 });

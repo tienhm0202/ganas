@@ -225,19 +225,6 @@ acceptance:
 ${approved}`;
 }
 
-export function sampleSprint(id: string, goalId: string): string {
-  const now = new Date();
-  const end = new Date(now.getTime() + 14 * 86_400_000);
-  return `id: ${id}
-title: "Sprint đầu tiên"
-goals:
-  - ${goalId}
-starts_at: ${now.toISOString()}
-ends_at: ${end.toISOString()}
-status: active
-`;
-}
-
 export function readme(): string {
   return `# .ganas/
 
@@ -246,10 +233,9 @@ Kho trạng thái và tri thức của dự án, do \`ganas\` quản lý.
 | Thư mục | Chứa gì |
 |---|---|
 | \`goals/\` | Mục tiêu — mỗi file một goal. Phải có người duyệt. |
-| \`sprints/\` | Lát cắt thời gian của goal |
 | \`designs/\` | Cách tiếp cận. Bắt buộc khai \`serves\` — design không neo vào goal là không hợp lệ. |
 | \`tasks/\` | Đơn vị việc vừa một phiên. Có context_contract và exit_contract. |
-| \`parts/\` | Phần — đơn vị đóng gói bàn giao, có version và bộ nghiệm thu riêng |
+| \`scopes/\` | Phạm vi công việc — ranh giới code + người ký + nghiệm thu. Fact/claim chỉ đúng TRONG một phạm vi. |
 | \`modules/\` | Khối của sơ đồ: contract vào/ra, \`depends_on\` = cạnh, \`verify\` = bằng chứng |
 | \`facts/\` | Điều kiểm chứng được, có probe chạy lại được |
 | \`claims/\` | Điều được tin nhưng chưa kiểm chứng, có anchor |

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { zGlob, zHandle, zIsoDate, zModuleId, zNonEmpty, zPartId } from "./common.js";
+import { zGlob, zHandle, zIsoDate, zModuleId, zNonEmpty, zScopeId } from "./common.js";
 import { zVerification } from "./verification.js";
 
 /**
@@ -44,7 +44,9 @@ export const zModule = z
   .object({
     id: zModuleId,
     title: zNonEmpty,
-    part: zPartId.optional().describe("phần chứa khối này; thiếu = khối lẻ, sẽ bị cảnh báo"),
+    scope: zScopeId
+      .optional()
+      .describe("phạm vi công việc chứa khối này; thiếu = khối lẻ, sẽ bị cảnh báo"),
     nature: z.enum(MODULE_NATURE),
 
     /** Code của khối nằm ở đâu. Cũng là căn cứ tính STALE khi file đổi. */

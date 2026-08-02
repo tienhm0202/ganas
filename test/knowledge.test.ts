@@ -10,6 +10,7 @@ test("claim không có anchor bị từ chối — không bằng chứng thì kh
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/claims/linh-tinh.yaml": `- id: C-001
+  scope: P-thu
   statement: "Hệ thống dùng Redis làm cache"
   provenance: session`,
   });
@@ -22,6 +23,7 @@ test("claim có anchors rỗng cũng bị từ chối", async () => {
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/claims/a.yaml": `- id: C-001
+  scope: P-thu
   statement: "..."
   anchors: []
   provenance: session`,
@@ -33,6 +35,7 @@ test("claim có anchor hợp lệ thì qua", async () => {
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/claims/a.yaml": `- id: C-001
+  scope: P-thu
   statement: "API handler nằm ở src/api/handlers/"
   anchors:
     - "src/api/handlers/index.ts#L1"
@@ -50,6 +53,7 @@ test("claim đổi trust mà không kèm verdict bị từ chối", async () => 
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/claims/a.yaml": `- id: C-001
+  scope: P-thu
   statement: "..."
   anchors: ["src/a.ts#L1"]
   provenance: session
@@ -63,6 +67,7 @@ test("claim thăng cấp thành fact không tồn tại bị bắt", async () =>
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/claims/a.yaml": `- id: C-001
+  scope: P-thu
   statement: "..."
   anchors: ["src/a.ts#L1"]
   provenance: session
@@ -81,6 +86,7 @@ test("claim import từ tài liệu cũ phải dùng tiền tố LC-", async () 
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/legacy/imported/claude-md.yaml": `- id: C-001
+  scope: P-thu
   statement: "từ CLAUDE.md cũ"
   anchors: ["CLAUDE.md#L34"]
   provenance: imported`,
@@ -95,6 +101,7 @@ test("LC- mà khai provenance khác imported bị từ chối", async () => {
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/legacy/imported/a.yaml": `- id: LC-007
+  scope: P-thu
   statement: "..."
   anchors: ["CLAUDE.md#L34"]
   provenance: session`,
@@ -106,6 +113,7 @@ test("legacy claim bị bác bỏ được nêu ra — đó là ảo giác đang
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/legacy/imported/a.yaml": `- id: LC-007
+  scope: P-thu
   statement: "API handler nằm ở src/api/handlers/"
   anchors: ["CLAUDE.md#L34"]
   provenance: imported
@@ -125,6 +133,7 @@ test("fact chưa verify lần nào bị cảnh báo — nó vẫn chỉ là ni�
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-API-001
+  scope: P-thu
   statement: "handler nằm ở src/api/handlers/"
   verify:
     run: "test -d src/api/handlers"`,
@@ -136,6 +145,7 @@ test("fact có probe fail là LỖI — phát biểu đang sai", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-API-001
+  scope: P-thu
   statement: "handler nằm ở src/api/handlers/"
   verify:
     run: "test -d src/api/handlers"
@@ -159,6 +169,7 @@ test("task đòi fact không tồn tại bị bắt", async () => {
 function makeFact(overrides: Record<string, unknown> = {}) {
   return zFact.parse({
     id: "F-X-001",
+    scope: "P-thu",
     statement: "s",
     verify: { run: "true" },
     ...overrides,
@@ -210,6 +221,7 @@ test("last_verified_at ở tương lai bị từ chối — đây là đường 
   const future = new Date(Date.now() + 86_400_000).toISOString();
   const parsed = zFact.safeParse({
     id: "F-X-001",
+    scope: "P-thu",
     statement: "s",
     verify: { run: "true" },
     last_verified_at: future,
@@ -221,6 +233,7 @@ test("last_verified_at ở tương lai bị từ chối — đây là đường 
 test("khai last_result mà không có last_verified_at bị từ chối", () => {
   const parsed = zFact.safeParse({
     id: "F-X-001",
+    scope: "P-thu",
     statement: "s",
     verify: { run: "true" },
     last_result: "pass",
@@ -253,7 +266,15 @@ test("decision không khai context lẫn consequence vẫn parse được", () =
   assert.equal(parsed.consequence, undefined);
 });
 
-test("rationale không còn là trường hợp lệ — bị bỏ qua thầm lặng vì zDecision không .strict()", () => {
-  const parsed = zDecision.parse({ ...baseDecision, rationale: "lý do cũ" });
-  assert.equal((parsed as Record<string, unknown>).rationale, undefined);
+test("⭐ trường lạ trong decision bị TỪ CHỐI, không bị nuốt im lặng", () => {
+  // Trước M0 zDecision thiếu `.strict()` nên `rationale` (trường đã bỏ ở N12)
+  // bị vứt đi không một tiếng động — người viết tưởng đã khai, thực ra chưa.
+  const parsed = zDecision.safeParse({ ...baseDecision, rationale: "lý do cũ" });
+  assert.ok(!parsed.success, "trường lạ phải là lỗi, không phải bị bỏ qua");
+  assert.match(parsed.error.issues[0]!.code, /unrecognized_keys/);
+});
+
+test("decision khai sai tên trường phạm vi báo lỗi thay vì im lặng bỏ qua", () => {
+  const parsed = zDecision.safeParse({ ...baseDecision, scop: "P-x" });
+  assert.equal(parsed.success, false);
 });

@@ -5,7 +5,6 @@ export * from "./design.js";
 export * from "./goal.js";
 export * from "./knowledge.js";
 export * from "./module.js";
-export * from "./part.js";
-export * from "./sprint.js";
+export * from "./scope.js";
 export * from "./task.js";
 export * from "./verification.js";

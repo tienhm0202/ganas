@@ -33,11 +33,11 @@ export function selectNextTask(graph: Graph): Candidate | null {
 
   const rank = (c: Candidate): number => {
     const t = c.task.value;
-    const sprint = graph.sprints.get(t.sprint)?.value;
+    const scope = graph.scopes.get(t.scope)?.value;
     let score = 0;
     if (t.status === "in_progress") score -= 1000; // việc dở luôn đứng trước
-    if (sprint?.status === "active") score -= 100;
-    if (sprint?.status === "closed") score += 100; // sprint đã đóng thì để sau
+    if (scope?.status === "active") score -= 100;
+    if (scope?.status === "delivered") score += 100; // phạm vi đã bàn giao thì để sau
     if (t.estimated_context === "small") score -= 1;
     return score;
   };

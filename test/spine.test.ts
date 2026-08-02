@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
 import { zTask } from "../src/model/index.js";
-import { check, cleanup, design, goal, makeProject, sprint, task, validSpine } from "./helpers.js";
+import { check, cleanup, design, goal, makeProject, task, validSpine } from "./helpers.js";
 
 test("graph hợp lệ không có lỗi", async () => {
   const { diagnostics } = await check(validSpine());
@@ -102,7 +102,6 @@ test("task phục vụ goal mà design của nó không phục vụ → spine đ
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal("G-001"),
     ".ganas/goals/G-002.yaml": goal("G-002"),
-    ".ganas/sprints/S-2026-08.yaml": sprint("S-2026-08", ["G-001", "G-002"]),
     ".ganas/designs/D-001.yaml": design("D-001", ["G-001"]),
     ".ganas/tasks/T-001.yaml": task("T-001", { serves: ["G-002"] }),
   });
@@ -118,7 +117,7 @@ title: "Task không có điều kiện done"
 serves:
   - G-001
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 status: todo`;
   const { diagnostics } = await check(files);
   assert.ok(diagnostics.some((d) => d.severity === "error" && d.message.includes("exit_contract")));
@@ -163,10 +162,10 @@ test("ID trùng giữa hai file bị bắt", async () => {
 test("task trỏ sprint/design không tồn tại đều bị bắt", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/tasks/T-001.yaml": task("T-001", { implements: "D-999", sprint: "S-2099-01" }),
+    ".ganas/tasks/T-001.yaml": task("T-001", { implements: "D-999", scope: "P-thu" }),
   });
   assert.ok(codes.includes("spine/task-missing-design"));
-  assert.ok(codes.includes("spine/task-missing-sprint"));
+  assert.ok(codes.includes("scope/task-scope-not-found"));
 });
 
 /* --- .gitignore: local-only phải được loại trừ ---------------------------- */
@@ -234,7 +233,7 @@ function minimalTaskInput(extra: Record<string, unknown> = {}) {
     title: "t",
     serves: ["G-001"],
     implements: "D-001",
-    sprint: "S-2026-08",
+    scope: "P-thu",
     exit_contract: [{ kind: "command", run: "true" }],
     ...extra,
   };

@@ -183,21 +183,21 @@ export interface DiagramOptions {
 export function renderDiagram(graph: Graph, opts: DiagramOptions = {}): string {
   const lines: string[] = ["flowchart LR"];
 
-  const inPart = new Set<string>();
-  for (const [partId, sourced] of graph.parts) {
-    const p = sourced.value;
-    lines.push(`  subgraph ${nodeId(partId)}["${partId} (${p.version})"]`);
-    for (const moduleId of p.modules) {
+  const inScope = new Set<string>();
+  for (const [scopeId, sourced] of graph.scopes) {
+    const sc = sourced.value;
+    lines.push(`  subgraph ${nodeId(scopeId)}["${scopeId} (${sc.version})"]`);
+    for (const moduleId of sc.modules) {
       const mod = graph.modules.get(moduleId)?.value;
-      inPart.add(moduleId);
+      inScope.add(moduleId);
       lines.push(`    ${nodeId(moduleId)}["${moduleLabel(moduleId, mod)}"]`);
     }
     lines.push("  end");
   }
 
-  const loose = [...graph.modules.keys()].filter((id) => !inPart.has(id));
+  const loose = [...graph.modules.keys()].filter((id) => !inScope.has(id));
   if (loose.length > 0) {
-    lines.push(`  subgraph unmapped["(chưa gán phần)"]`);
+    lines.push(`  subgraph unmapped["(chưa gán phạm vi)"]`);
     for (const moduleId of loose) {
       lines.push(
         `    ${nodeId(moduleId)}["${moduleLabel(moduleId, graph.modules.get(moduleId)?.value)}"]`,

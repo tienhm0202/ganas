@@ -12,7 +12,7 @@ import { runShell } from "./util/exec.js";
  *
  *  1. Ephemeral, local (`runs/*.md` của phiên đã kết thúc, session mồ côi
  *     trong `state.json`) — xoá thẳng. Không chia sẻ, không phải bằng chứng.
- *  2. Shared nhưng đã đóng (task `done`, sprint `closed`) — ARCHIVE (dời vào
+ *  2. Shared nhưng đã đóng (task `done`) — ARCHIVE (dời vào
  *     thư mục con `done/`/`closed/`), không xoá. `listYaml()` không đệ quy
  *     nên tự động biến mất khỏi graph mà không cần sửa `load.ts`. Giữ trong
  *     git history.
@@ -46,7 +46,6 @@ export interface PrunePlan {
   staleRuns: StaleRun[];
   deadSessions: DeadSession[];
   doneTasks: ArchivableRecord[];
-  closedSprints: ArchivableRecord[];
 }
 
 export interface PlanPruneOptions {
@@ -57,13 +56,14 @@ export interface PlanPruneOptions {
 /**
  * Tính kế hoạch dọn, KHÔNG đụng gì tới đĩa.
  *
- * Task/sprint chỉ được đưa vào kế hoạch nếu archive nó không làm treo tham
+ * Task chỉ được đưa vào kế hoạch nếu archive nó không làm treo tham
  * chiếu nào còn sống: task còn bị `blocked_by` chặn tới thì giữ lại (archive
  * xong `blocked_by` trỏ vào chỗ không còn tồn tại, `openBlockers` sẽ coi là
- * CHẶN VĨNH VIỄN — tệ hơn nhiều so với việc chưa dọn). Sprint chỉ archive
- * được nếu không còn task nào SỐNG SÓT sau đợt dọn này trỏ `sprint:` vào nó
- * — gần như mọi sprint closed đều có task done trỏ vào, nên phải tính sau
- * khi đã biết tập task sẽ bị archive trong CHÍNH lần chạy này.
+ * CHẶN VĨNH VIỄN — tệ hơn nhiều so với việc chưa dọn).
+ *
+ * Phạm vi công việc KHÔNG bao giờ được archive, kể cả khi đã `delivered`: khối
+ * vẫn khai `scope:` trỏ vào nó và fact vẫn còn hiệu lực trong nó. Phạm vi là
+ * ranh giới của tri thức, mà tri thức sống lâu hơn đợt bàn giao.
  */
 export async function planPrune(
   root: string,
@@ -118,23 +118,11 @@ export async function planPrune(
     archivingTaskIds.add(t.value.id);
   }
 
-  /* --- tầng 2: sprint closed, không còn task SỐNG SÓT nào trỏ vào ---------- */
+  // Phạm vi KHÔNG được archive dù đã `delivered`: khối vẫn khai `scope` trỏ vào
+  // nó và fact vẫn còn hiệu lực trong nó. Dọn đi là tạo tham chiếu treo — đúng
+  // vết xe mà `blocked_by` ở tầng trên đã phải né.
 
-  const sprintsStillReferenced = new Set<string>();
-  for (const t of graph.tasks.values()) {
-    if (archivingTaskIds.has(t.value.id)) continue; // task này cũng bị dọn trong lần này — không tính
-    sprintsStillReferenced.add(t.value.sprint);
-  }
-
-  const closedSprints: ArchivableRecord[] = [];
-  for (const s of graph.sprints.values()) {
-    if (s.value.status !== "closed") continue;
-    if (Date.parse(s.value.ends_at) > cutoff) continue;
-    if (sprintsStillReferenced.has(s.value.id)) continue;
-    closedSprints.push({ id: s.value.id, file: s.file });
-  }
-
-  return { staleRuns, deadSessions, doneTasks, closedSprints };
+  return { staleRuns, deadSessions, doneTasks };
 }
 
 /** Bọc pathspec cho shell — dùng chung kiểu với `commit.ts`. */
@@ -178,5 +166,4 @@ export async function applyPrune(root: string, plan: PrunePlan): Promise<void> {
   }
 
   for (const t of plan.doneTasks) await archive(root, t.file, "done");
-  for (const s of plan.closedSprints) await archive(root, s.file, "closed");
 }

@@ -24,6 +24,7 @@ const VERIFIED_AT = "2025-06-01T00:00:00.000Z";
 
 function factYaml(over: { at?: string; result?: string } = {}): string {
   return `- id: F-A-001
+  scope: P-thu
   statement: "file a.ts tồn tại"
   verify:
     run: "test -f src/a.ts"
@@ -129,6 +130,7 @@ test("fact chưa từng verify thì không đòi sổ cái", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-A-001
+  scope: P-thu
   statement: "s"
   verify:
     run: "test -f src/a.ts"

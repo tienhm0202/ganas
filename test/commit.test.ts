@@ -10,7 +10,7 @@ import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
 import { zTask } from "../src/model/index.js";
 import { runShell } from "../src/util/exec.js";
-import { cleanup, design, goal, makeProject, sprint } from "./helpers.js";
+import { cleanup, design, goal, makeProject, moduleYaml, scope } from "./helpers.js";
 
 /* --- buildCommitMessage: thuần, không cần git thật ------------------------ */
 
@@ -26,7 +26,7 @@ test("buildCommitMessage: không bao giờ nhắc AI/trợ lý, lấy đúng d�
       title: "Sửa nhận diện ý định",
       serves: ["G-001"],
       implements: "D-001",
-      sprint: "S-2026-08",
+      scope: "P-thu",
       exit_contract: [{ kind: "command", run: "true" }],
     });
     const gate = await evaluateGate(graph, task, await computeFreshness(graph));
@@ -65,7 +65,7 @@ verify:
       title: "t",
       serves: ["G-001"],
       implements: "D-001",
-      sprint: "S-2026-08",
+      scope: "P-thu",
       touches: ["M-a", "M-khong-co"],
       exit_contract: [{ kind: "command", run: "true" }],
     });
@@ -90,12 +90,13 @@ test("ganas commit: gate chưa đạt thì KHÔNG commit gì cả", async () => 
   const root = await gitProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": `id: T-001
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: command
     run: "false"
@@ -120,12 +121,13 @@ test("ganas commit: gate đạt thì commit thật, message không nhắc AI", a
   const root = await gitProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": `id: T-001
 title: "Sửa gì đó"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: command
     run: "true"
@@ -164,12 +166,13 @@ test("ganas commit --dry-run: in message, không tạo commit", async () => {
   const root = await gitProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": `id: T-001
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: command
     run: "true"
@@ -194,7 +197,7 @@ test("ganas commit: khối chạm tới có code thật cũng được add cùng
   const root = await gitProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scope(),
     ".ganas/modules/M-a.yaml": `id: M-a
 title: "Khối A"
 nature: code
@@ -209,7 +212,7 @@ verify:
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 touches:
   - M-a
 exit_contract:

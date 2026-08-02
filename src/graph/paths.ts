@@ -8,11 +8,11 @@ export const GANAS_DIR = ".ganas";
 /** Thư mục con trong .ganas/ — một chỗ khai báo duy nhất để lệnh khác dùng lại. */
 export const DIRS = {
   goals: "goals",
-  sprints: "sprints",
   designs: "designs",
   tasks: "tasks",
+  /** Phạm vi công việc — đơn vị bàn giao, cũng là ranh giới của tri thức. */
+  scopes: "scopes",
   /** Sơ đồ khối — cũng chính là bản đồ hệ thống (thay cho `zones` cũ). */
-  parts: "parts",
   modules: "modules",
   facts: "facts",
   claims: "claims",

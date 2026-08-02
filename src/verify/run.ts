@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { parseDocument } from "yaml";
 
 import type { Graph, Sourced } from "../graph/types.js";
-import type { Fact, Module, Part, Verification } from "../model/index.js";
+import type { Fact, Module, Scope, Verification } from "../model/index.js";
 import { judge, runShell } from "../util/exec.js";
 import { AdapterError, readEvalResult } from "./adapters.js";
 import {
@@ -88,16 +88,29 @@ export function moduleTargets(sourced: Sourced<Module>): Target[] {
   }));
 }
 
-export function partTargets(sourced: Sourced<Part>): Target[] {
-  const p = sourced.value;
-  return p.acceptance.map((v) => ({
-    id: `${p.id}/${v.id}`,
-    label: `${p.id}/${v.id}`,
+/**
+ * Target cho nghiệm thu mức phạm vi.
+ *
+ * `context` phải là GLOB của code trong phạm vi, không phải danh sách ID khối:
+ * `globsOf()` (graph/freshness.ts) chỉ nhận phần tử có `*` hoặc `/`, nên khai ID
+ * khối ở đây khiến context rỗng và nghiệm thu phạm vi KHÔNG BAO GIỜ stale — pass
+ * một lần rồi xanh vĩnh viễn dù code trong phạm vi đã đổi hết. Đó là lời hứa
+ * rỗng, và là loại lỗi mà chính ganas sinh ra để chống.
+ */
+export function scopeTargets(sourced: Sourced<Scope>, graph: Graph): Target[] {
+  const s = sourced.value;
+  const context = s.modules.flatMap((id) => {
+    const m = graph.modules.get(id)?.value;
+    return m ? [...m.paths, ...m.entrypoints] : [];
+  });
+  return s.acceptance.map((v) => ({
+    id: `${s.id}/${v.id}`,
+    label: `${s.id}/${v.id}`,
     kind: v.kind,
     definition: v,
     verification: v,
-    statement: p.title,
-    context: p.modules,
+    statement: s.title,
+    context,
   }));
 }
 
@@ -105,7 +118,7 @@ export function allTargets(graph: Graph): Target[] {
   return [
     ...[...graph.facts.values()].map(factTarget),
     ...[...graph.modules.values()].flatMap(moduleTargets),
-    ...[...graph.parts.values()].flatMap(partTargets),
+    ...[...graph.scopes.values()].flatMap((s) => scopeTargets(s, graph)),
   ];
 }
 

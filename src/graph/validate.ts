@@ -14,7 +14,7 @@ import type { Diagnostic, Graph, Sourced } from "./types.js";
  *
  * Luật hình thức (thiếu field bắt buộc) đã do zod chặn ở tầng schema. Ở đây là
  * các luật cần nhìn cả graph: liên kết treo, mục tiêu mồ côi, vòng lặp, và tính
- * nhất quán giữa task / design / sprint.
+ * nhất quán giữa task / design / phạm vi.
  */
 
 /** Định vị dòng của một field trong file nguồn của bản ghi. */
@@ -138,22 +138,6 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     });
   }
 
-  /* --- Sprint --------------------------------------------------------- */
-
-  for (const sprint of graph.sprints.values()) {
-    sprint.value.goals.forEach((goalId, i) => {
-      if (!graph.goals.has(goalId)) {
-        diags.push({
-          severity: "error",
-          code: "spine/sprint-missing-goal",
-          message: `sprint ${sprint.value.id} chứa goal ${goalId} không tồn tại`,
-          file: sprint.file,
-          line: at(graph, sprint, "goals", i),
-        });
-      }
-    });
-  }
-
   /* --- Task: liên kết + nhất quán spine -------------------------------- */
 
   for (const task of graph.tasks.values()) {
@@ -200,27 +184,32 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       }
     }
 
-    const sprint = graph.sprints.get(t.sprint);
-    if (!sprint) {
+    const scope = graph.scopes.get(t.scope);
+    if (!scope) {
       diags.push({
         severity: "error",
-        code: "spine/task-missing-sprint",
-        message: `task ${t.id} thuộc sprint ${t.sprint} không tồn tại`,
+        code: "scope/task-scope-not-found",
+        message: `task ${t.id} thuộc phạm vi ${t.scope} không tồn tại`,
         file: task.file,
-        line: at(graph, task, "sprint"),
+        line: at(graph, task, "scope"),
+        hint: `Tạo phạm vi bằng \`ganas scope new\`, hoặc chuyển task sang phạm vi đã có.`,
       });
     } else {
-      const outside = t.serves.filter((g) => !sprint.value.goals.includes(g));
+      // Task chạm khối ngoài phạm vi của nó thì không ai nghiệm thu được nó:
+      // bản sao của `spine/task-goal-not-in-design` cho trục HỆ THỐNG.
+      const outside = t.touches.filter((m) => !scope.value.modules.includes(m));
       if (outside.length > 0) {
         diags.push({
-          severity: "warning",
-          code: "spine/task-goal-not-in-sprint",
+          severity: "error",
+          code: "scope/task-touches-outside-scope",
           message:
-            `task ${t.id} phục vụ ${outside.join(", ")} nhưng sprint ${t.sprint} ` +
-            `không nhận goal đó`,
+            `task ${t.id} chạm khối ${outside.join(", ")} nhưng phạm vi ${t.scope} ` +
+            `không chứa khối đó (phạm vi chứa: ${scope.value.modules.join(", ")})`,
           file: task.file,
-          line: at(graph, task, "sprint"),
-          hint: `Sprint đang làm việc ngoài phạm vi đã cam kết — thêm goal vào sprint hoặc dời task.`,
+          line: at(graph, task, "touches"),
+          hint:
+            `Hoặc thêm khối vào phạm vi ${t.scope}, hoặc chẻ task — một task chạm hai ` +
+            `phạm vi thì không ai nghiệm thu được nó.`,
         });
       }
     }
@@ -305,53 +294,82 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     }
   }
 
-  /* --- Sơ đồ khối: phần, khối, cạnh ------------------------------------ */
+  /* --- Phạm vi công việc ----------------------------------------------- */
 
-  for (const part of graph.parts.values()) {
-    const p = part.value;
-    p.modules.forEach((moduleId, i) => {
+  for (const scope of graph.scopes.values()) {
+    const sc = scope.value;
+
+    sc.modules.forEach((moduleId, i) => {
       if (!graph.modules.has(moduleId)) {
         diags.push({
           severity: "error",
-          code: "spine/part-missing-module",
-          message: `phần ${p.id} chứa khối ${moduleId} không tồn tại`,
-          file: part.file,
-          line: at(graph, part, "modules", i),
+          code: "scope/missing-module",
+          message: `phạm vi ${sc.id} chứa khối ${moduleId} không tồn tại`,
+          file: scope.file,
+          line: at(graph, scope, "modules", i),
         });
       }
     });
+
+    // Hai luật chống "phạm vi thùng rác": một khoanh vùng không ai ký và không
+    // có cách nghiệm thu thì chỉ là cái nhãn, và nó sẽ hút mọi thứ vô chủ vào.
+    if (sc.status === "active" && sc.acceptance.length === 0) {
+      diags.push({
+        severity: "warning",
+        code: "scope/without-acceptance",
+        message: `phạm vi ${sc.id} đang active nhưng không có tiêu chí nghiệm thu nào`,
+        file: scope.file,
+        line: at(graph, scope, "acceptance"),
+        hint:
+          `Nghiệm thu mức phạm vi chạy trên LUỒNG ĐÃ GHÉP — một luồng có thể đúng ` +
+          `ở từng khối mà vẫn sai khi ghép. Thiếu nó thì "bàn giao xong" là ý kiến.`,
+      });
+    }
+
+    if (sc.status === "active" && !sc.owner) {
+      diags.push({
+        severity: "warning",
+        code: "scope/without-owner",
+        message: `phạm vi ${sc.id} đang active nhưng không ai ký nghiệm thu`,
+        file: scope.file,
+        line: at(graph, scope, "id"),
+        hint: `Khai \`owner: "@ten"\` — không ai ký thì không ai nghiệm thu được.`,
+      });
+    }
   }
+
+  /* --- Sơ đồ khối: khối và cạnh ---------------------------------------- */
 
   for (const module of graph.modules.values()) {
     const m = module.value;
 
-    if (m.part === undefined) {
+    if (m.scope === undefined) {
       diags.push({
         severity: "warning",
-        code: "spine/module-without-part",
-        message: `khối ${m.id} không thuộc phần nào — sẽ không nằm trong bộ bàn giao nào`,
+        code: "scope/module-without-scope",
+        message: `khối ${m.id} không thuộc phạm vi nào — sẽ không nằm trong bộ bàn giao nào`,
         file: module.file,
         line: at(graph, module, "id"),
       });
     } else {
-      const part = graph.parts.get(m.part);
-      if (!part) {
+      const scope = graph.scopes.get(m.scope);
+      if (!scope) {
         diags.push({
           severity: "error",
-          code: "spine/module-missing-part",
-          message: `khối ${m.id} khai thuộc phần ${m.part} nhưng phần đó không tồn tại`,
+          code: "scope/module-scope-not-found",
+          message: `khối ${m.id} khai thuộc phạm vi ${m.scope} nhưng phạm vi đó không tồn tại`,
           file: module.file,
-          line: at(graph, module, "part"),
+          line: at(graph, module, "scope"),
         });
-      } else if (!part.value.modules.includes(m.id)) {
+      } else if (!scope.value.modules.includes(m.id)) {
         // Hai chiều phải khớp nhau, nếu không sơ đồ nói một đằng, khối nói một nẻo.
         diags.push({
           severity: "error",
-          code: "spine/module-part-mismatch",
-          message: `khối ${m.id} khai thuộc phần ${m.part}, nhưng phần đó không liệt kê nó trong \`modules\``,
+          code: "scope/module-scope-mismatch",
+          message: `khối ${m.id} khai thuộc phạm vi ${m.scope}, nhưng phạm vi đó không liệt kê nó trong \`modules\``,
           file: module.file,
-          line: at(graph, module, "part"),
-          hint: `Thêm ${m.id} vào \`modules\` của ${m.part}, hoặc sửa \`part\` của khối.`,
+          line: at(graph, module, "scope"),
+          hint: `Thêm ${m.id} vào \`modules\` của ${m.scope}, hoặc sửa \`scope\` của khối.`,
         });
       }
     }
@@ -431,22 +449,22 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     }
   }
 
-  // Khối mồ côi: không tới được từ `entry` của phần. Cạnh xuôi = ngược `depends_on`.
-  for (const part of graph.parts.values()) {
-    const p = part.value;
-    const inPart = new Set(p.modules);
+  // Khối mồ côi: không tới được từ `entry` của phạm vi. Cạnh xuôi = ngược `depends_on`.
+  for (const scope of graph.scopes.values()) {
+    const sc = scope.value;
+    const inScope = new Set<string>(sc.modules);
     const forward = new Map<string, string[]>();
-    for (const id of inPart) forward.set(id, []);
-    for (const id of inPart) {
+    for (const id of inScope) forward.set(id, []);
+    for (const id of inScope) {
       const mod = graph.modules.get(id);
       if (!mod) continue;
       for (const dep of mod.value.depends_on) {
-        if (inPart.has(dep)) forward.get(dep)!.push(id);
+        if (inScope.has(dep)) forward.get(dep)!.push(id);
       }
     }
 
     const seen = new Set<string>();
-    const queue = inPart.has(p.entry) ? [p.entry] : [];
+    const queue = inScope.has(sc.entry) ? [sc.entry] : [];
     while (queue.length) {
       const cur = queue.shift()!;
       if (seen.has(cur)) continue;
@@ -454,15 +472,15 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       for (const next of forward.get(cur) ?? []) queue.push(next);
     }
 
-    for (const id of p.modules) {
+    for (const id of sc.modules) {
       if (!seen.has(id) && graph.modules.has(id)) {
         diags.push({
           severity: "warning",
-          code: "spine/module-orphaned",
-          message: `khối ${id} không tới được từ ${p.entry} — nó nằm ngoài luồng của phần ${p.id}`,
-          file: part.file,
-          line: at(graph, part, "modules"),
-          hint: `Nối nó vào sơ đồ qua \`depends_on\`, hoặc bỏ khỏi \`modules\` của phần.`,
+          code: "scope/module-orphaned",
+          message: `khối ${id} không tới được từ ${sc.entry} — nó nằm ngoài luồng của phạm vi ${sc.id}`,
+          file: scope.file,
+          line: at(graph, scope, "modules"),
+          hint: `Nối nó vào sơ đồ qua \`depends_on\`, hoặc bỏ khỏi \`modules\` của phạm vi.`,
         });
       }
     }

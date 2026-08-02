@@ -8,7 +8,7 @@ import { loadGraph } from "../src/graph/load.js";
 import { generateHandoff, parseTranscript, renderHandoff, runsPath } from "../src/handoff.js";
 import * as handlers from "../src/hooks/handlers.js";
 import { zTask } from "../src/model/index.js";
-import { cleanup, design, goal, makeProject, sprint } from "./helpers.js";
+import { cleanup, design, goal, makeProject, moduleYaml, scope } from "./helpers.js";
 
 /* --- parseTranscript: trích cơ học từ JSONL -------------------------------- */
 
@@ -101,13 +101,16 @@ async function baseGraph() {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/claims/c.yaml": `- id: C-001
+  scope: P-thu
   statement: "Redis dùng port 6380 không phải 6379"
   anchors: ["src/config.ts#L10"]
   provenance: session
   source_session: sess-1`,
     ".ganas/facts/f.yaml": `- id: F-A-001
+  scope: P-thu
   statement: "module retry có unit test"
   verify:
     run: "true"
@@ -128,7 +131,7 @@ test("renderHandoff: chỉ gom claim/fact gắn ĐÚNG session, có mục câu h
       title: "Sửa retry",
       serves: ["G-001"],
       implements: "D-001",
-      sprint: "S-2026-08",
+      scope: "P-thu",
       context_contract: { open_questions: ["Timeout nên là bao nhiêu giây?"] },
       exit_contract: [{ kind: "command", run: "true" }],
     });
@@ -173,7 +176,7 @@ test("renderHandoff: fact/claim của SESSION KHÁC không bị gom nhầm", asy
       title: "t",
       serves: ["G-001"],
       implements: "D-001",
-      sprint: "S-2026-08",
+      scope: "P-thu",
       exit_contract: [{ kind: "command", run: "true" }],
     });
     const gate = await evaluateGate(graph, task, await computeFreshness(graph));
@@ -199,7 +202,7 @@ test("generateHandoff ghi đúng .ganas/runs/<session>.md", async () => {
       title: "t",
       serves: ["G-001"],
       implements: "D-001",
-      sprint: "S-2026-08",
+      scope: "P-thu",
       exit_contract: [{ kind: "command", run: "true" }],
     });
     const gate = await evaluateGate(graph, task, await computeFreshness(graph));
@@ -226,7 +229,7 @@ test("sessionEnd tự ghi handoff cho phiên đang bind, rồi mới giải phó
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: command
     run: "true"
@@ -255,7 +258,7 @@ test("preCompact báo đã ghi handoff trong systemMessage", async () => {
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: command
     run: "true"
@@ -299,7 +302,7 @@ test("ganas handoff --session --task: sinh file, --json trả path", async () =>
 title: "t"
 serves: [G-001]
 implements: D-001
-sprint: S-2026-08
+scope: P-thu
 exit_contract:
   - kind: command
     run: "true"

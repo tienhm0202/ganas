@@ -1,21 +1,31 @@
 # ganas
 
-> Control layer cho các phiên Claude Code: xương sống Goal → Design → Task,
-> sơ đồ khối (Part/Module) làm bản đồ hệ thống, ba loại tri thức có bằng
-> chứng (Fact/Claim/Decision), sổ cái xác minh append-only, và hook cưỡng
-> chế các luật đó trong lúc agent làm việc. Mã nguồn và tài liệu bằng tiếng
-> Việt.
+> Dịch từ ngôn ngữ người dùng sang ngôn ngữ quản lý dự án, để dự án chạy ổn
+> định và hiệu quả trong thời gian dài. Đơn vị dịch là **phạm vi công việc**
+> (Scope): bàn giao cái gì, code nằm ở đâu, làm sao biết là xong, ai ký. Mọi
+> thứ khác neo vào nó — xương sống Goal → Design → Task, sơ đồ khối
+> (Scope/Module) làm bản đồ hệ thống, ba loại tri thức có bằng chứng
+> (Fact/Claim/Decision), sổ cái xác minh append-only, và hook cưỡng chế các
+> luật đó trong lúc agent làm việc. Mã nguồn và tài liệu bằng tiếng Việt.
 
-Ganas giải quyết hai vấn đề của phiên agent kéo dài: mất ngữ cảnh giữa các
-lần mở lại, và agent "ảo giác" — tuyên bố đã kiểm chứng một điều mà thực ra
-chỉ suy diễn từ trí nhớ. Câu trả lời không phải tóm tắt tự do, mà là dữ liệu
-có cấu trúc cộng bằng chứng truy lại được (probe chạy thật, anchor trỏ vào
-file/commit/URL cụ thể, chữ ký người cho quyết định).
+Hai điều ganas bảo đảm — phát biểu đúng bằng thứ code làm được, không hơn:
+
+1. **Không có thứ gì chưa kiểm chứng được trình cho phiên sau như là sự thật.**
+2. **Phiên sau không phải khám phá lại những gì phiên trước đã kiểm chứng
+   được** — trong cùng một phạm vi công việc.
+
+Điều ganas KHÔNG bảo đảm được, và không hứa: rằng mọi thứ phiên trước học được
+đều tới tay phiên sau. Không hook nào kiểm được sự tồn tại của thứ đã không
+được ghi.
+
+Phạm vi có mặt vì một phát biểu chỉ đúng bên trong ranh giới của nó; ra ngoài
+là chưa biết. Không có phạm vi thì kho fact càng lớn càng thành máy sinh ảo
+giác — và ảo giác đó mang dấu kiểm chứng của chính hệ thống đóng lên.
 
 ## Docs
 
 - [docs/CONCEPTS.md](docs/CONCEPTS.md): Tham chiếu đầy đủ mô hình dữ liệu —
-  Goal/Design/Task, Part/Module/Verification, Fact/Claim/Decision, sổ cái,
+  Goal/Design/Task, Scope/Module/Verification, Fact/Claim/Decision, sổ cái,
   11 trạng thái freshness, sơ đồ quan hệ mermaid. Đọc trước nếu cần hiểu
   toàn cảnh trước khi thao tác.
 - [docs/COMMANDS.md](docs/COMMANDS.md): Tham chiếu đầy đủ CLI — mọi lệnh

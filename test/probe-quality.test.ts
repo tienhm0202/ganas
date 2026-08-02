@@ -182,6 +182,7 @@ test("fact có probe `true` → validate báo lỗi verify/tautological", async 
   const { diagnostics } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-A-001
+  scope: P-thu
   statement: "mọi thứ đều ổn"
   verify:
     run: "true"
@@ -214,6 +215,7 @@ test("probe hợp lệ không sinh cảnh báo chất lượng nào", async () =
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/facts/a.yaml": `- id: F-A-001
+  scope: P-thu
   statement: "file src/a.ts tồn tại"
   verify:
     run: "test -f src/a.ts"

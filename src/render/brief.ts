@@ -73,7 +73,7 @@ export function renderBrief(input: BriefInput): string {
   const design = graph.designs.get(t.implements);
   parts.push(
     `# ${t.id} — ${t.title}\n\n` +
-      `sprint \`${t.sprint}\` · design \`${t.implements}\` · phục vụ ${t.serves.map((g) => `\`${g}\``).join(", ")}` +
+      `phạm vi \`${t.scope}\` · design \`${t.implements}\` · phục vụ ${t.serves.map((g) => `\`${g}\``).join(", ")}` +
       (t.status === "in_progress"
         ? `\n\n**Đây là việc đang dở** — nối tiếp, đừng bắt đầu lại.`
         : ""),

@@ -11,6 +11,7 @@ import {
   zLegacyClaimId,
   zNonEmpty,
   zProbe,
+  zScopeId,
 } from "./common.js";
 
 /* ------------------------------------------------------------------------- *
@@ -35,6 +36,13 @@ export const zFact = z
   .object({
     id: zFactId,
     statement: zNonEmpty,
+    /**
+     * Phạm vi mà phát biểu này đúng. Bắt buộc, và KHÔNG suy tự động từ
+     * `depends_on` ∩ `module.paths`: fact không có `depends_on` sẽ mất phạm vi,
+     * fact chạm hai khối sẽ có hai phạm vi — đúng thứ mush cần tránh. Công cụ
+     * chỉ GỢI Ý (`ganas scope assign`), người quyết.
+     */
+    scope: zScopeId,
     verify: zProbe,
     /** Glob các file mà fact này phụ thuộc. Đổi file ⇒ fact thành STALE. */
     depends_on: z.array(zGlob).default([]),
@@ -94,6 +102,8 @@ export const zClaim = z
   .object({
     id: z.union([zClaimId, zLegacyClaimId]),
     statement: zNonEmpty,
+    /** Phạm vi mà giả thuyết này nói về. Bắt buộc, như fact. */
+    scope: zScopeId,
     anchors: zAnchors,
     provenance: z.enum(PROVENANCE),
     trust: z.enum(TRUST).default("unverified"),
@@ -159,21 +169,35 @@ export const zClaimFile = z.array(zClaim);
 /**
  * Decision là ràng buộc do người đặt. Model không được tạo, không được đổi —
  * chỉ được đọc và tuân theo, hoặc nêu mâu thuẫn để người xử lý.
+ *
+ * `.strict()` ở đây không phải hình thức: thiếu nó, một trường viết sai tên
+ * (`rationale` cũ, `scope` gõ nhầm) bị zod vứt đi KHÔNG một tiếng động — người
+ * viết tưởng đã khai, thực ra chưa. Đó đúng là loại ảo giác do công cụ gây ra
+ * mà `zProbe` đã chặn bằng cùng cách (xem comment ở `common.ts`).
  */
-export const zDecision = z.object({
-  id: zDecisionId,
-  statement: zNonEmpty,
-  /** Bắt buộc. Không có người ký thì không phải quyết định. */
-  decided_by: zHandle,
-  decided_at: zIsoDate,
-  link: z.string().optional().describe("ticket / biên bản / link chat"),
-  /** Điều gì buộc phải chọn — bối cảnh, ràng buộc, lựa chọn khác đã cân nhắc. */
-  context: z.string().optional(),
-  /** Phải sống với gì sau khi chọn — đánh đổi, rủi ro chấp nhận, việc kéo theo. */
-  consequence: z.string().optional(),
-  supersedes: z.array(zDecisionId).default([]),
-  notes: z.string().optional(),
-});
+export const zDecision = z
+  .object({
+    id: zDecisionId,
+    statement: zNonEmpty,
+    /**
+     * Phạm vi áp dụng. **Tuỳ chọn, thiếu = áp cho toàn dự án** — ngược với
+     * fact/claim, và có lý do: fact ngoài phạm vi mà được tin ⇒ ảo giác; còn
+     * decision bị thu hẹp nhầm ⇒ model vi phạm một ràng buộc người đã chốt,
+     * tệ hơn. Mặc định an toàn của mỗi loại nằm ở hai phía đối nhau.
+     */
+    scope: zScopeId.optional(),
+    /** Bắt buộc. Không có người ký thì không phải quyết định. */
+    decided_by: zHandle,
+    decided_at: zIsoDate,
+    link: z.string().optional().describe("ticket / biên bản / link chat"),
+    /** Điều gì buộc phải chọn — bối cảnh, ràng buộc, lựa chọn khác đã cân nhắc. */
+    context: z.string().optional(),
+    /** Phải sống với gì sau khi chọn — đánh đổi, rủi ro chấp nhận, việc kéo theo. */
+    consequence: z.string().optional(),
+    supersedes: z.array(zDecisionId).default([]),
+    notes: z.string().optional(),
+  })
+  .strict();
 
 export type Decision = z.infer<typeof zDecision>;
 

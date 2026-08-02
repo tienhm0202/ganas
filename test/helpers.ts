@@ -63,15 +63,43 @@ ${APPROVED}
 ${extra}`;
 }
 
-export function sprint(id = "S-2026-08", goals = ["G-001"], extra = ""): string {
+/**
+ * Phạm vi công việc mặc định. Kèm sẵn một khối để `modules`/`entry` hợp lệ —
+ * phạm vi rỗng không phải phạm vi.
+ */
+export function scope(
+  id = "P-thu",
+  opts: { modules?: string[]; entry?: string; status?: string; extra?: string } = {},
+): string {
+  const modules = opts.modules ?? ["M-a"];
   return `id: ${id}
-title: "Sprint thử"
-goals:
-${goals.map((g) => `  - ${g}`).join("\n")}
-starts_at: 2026-08-01T00:00:00Z
-ends_at: 2026-08-15T00:00:00Z
-status: active
-${extra}`;
+title: "Phạm vi thử"
+version: 0.1.0
+owner: "@nguoi-duyet"
+status: ${opts.status ?? "active"}
+modules:
+${modules.map((m) => `  - ${m}`).join("\n")}
+entry: ${opts.entry ?? modules[0]}
+acceptance:
+  - id: V-thu-smoke
+    kind: probe
+    run: "test -d src"
+${opts.extra ?? ""}`;
+}
+
+/** Khối tối thiểu hợp lệ, khai `scope` khớp hai chiều với `scope()`. */
+export function moduleYaml(
+  id = "M-a",
+  opts: { scope?: string; paths?: string[]; extra?: string } = {},
+): string {
+  const paths = opts.paths ?? ["src/a/**"];
+  return `id: ${id}
+title: "Khối thử"
+scope: ${opts.scope ?? "P-thu"}
+nature: code
+paths:
+${paths.map((x) => `  - "${x}"`).join("\n")}
+${opts.extra ?? ""}`;
 }
 
 export function design(id = "D-001", serves = ["G-001"], extra = ""): string {
@@ -86,7 +114,7 @@ ${extra}`;
 
 export function task(
   id = "T-001",
-  opts: { serves?: string[]; implements?: string; sprint?: string; extra?: string } = {},
+  opts: { serves?: string[]; implements?: string; scope?: string; extra?: string } = {},
 ): string {
   const serves = opts.serves ?? ["G-001"];
   return `id: ${id}
@@ -94,7 +122,7 @@ title: "Task thử"
 serves:
 ${serves.map((g) => `  - ${g}`).join("\n")}
 implements: ${opts.implements ?? "D-001"}
-sprint: ${opts.sprint ?? "S-2026-08"}
+scope: ${opts.scope ?? "P-thu"}
 status: todo
 exit_contract:
   - kind: command
@@ -102,12 +130,13 @@ exit_contract:
 ${opts.extra ?? ""}`;
 }
 
-/** Graph tối thiểu hợp lệ: goal → sprint → design → task. */
+/** Graph tối thiểu hợp lệ: goal → design → task, neo trong phạm vi P-thu. */
 export function validSpine(): Record<string, string> {
   return {
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/sprints/S-2026-08.yaml": sprint(),
     ".ganas/designs/D-001.yaml": design(),
     ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
   };
 }
