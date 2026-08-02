@@ -12,6 +12,57 @@ khác một trình quản lý task thông thường.
 
 ---
 
+## 0. Dòng chảy — `ganas` trần trả lời "bước kế tiếp là gì"
+
+Bốn luồng phía dưới mô tả dữ liệu chạy qua đâu. Luồng này khác: nó là thứ người
+dùng thật sự gặp. `ganas` không tham số in **đúng một** bước kế tiếp — không phải
+menu 12 lệnh, vì mỗi lựa chọn đẩy sang người dùng là một chỗ đi lạc.
+
+```mermaid
+flowchart TD
+  I["init<br/>chưa có .ganas/"] --> FG["fix-graph<br/>graph có lỗi"]
+  FG --> SC["scope<br/>chưa có phạm vi"]
+  SC --> GO["goal<br/>chưa có mục tiêu active"]
+  GO --> DE["design<br/>chưa có design phục vụ goal"]
+  DE --> EV["evidence<br/>khối chưa có bằng chứng nào"]
+  EV --> TA["task<br/>chưa có task làm được"]
+  TA --> WO["work<br/>chưa mở brief"]
+  WO --> VE["verify<br/>bằng chứng chưa tươi"]
+  VE --> GA["gate<br/>tiêu chí chưa đạt"]
+  GA --> CO["commit<br/>phạm vi task còn bẩn"]
+  CO --> CL["close<br/>chưa đánh dấu done"]
+  CL -.->|vòng sau| TA
+```
+
+**Bước kế tiếp = chặng ĐẦU TIÊN chưa xong.** Thứ tự là thứ tự *phụ thuộc*, không
+phải sở thích: graph hỏng thì mọi kết luận phía sau không tin được nên nó chặn
+trước; không có phạm vi thì task không neo vào đâu.
+
+Bảng chặng nằm ở `STAGES` (`src/flow.ts`) — **dữ liệu, không phải cây `if`**.
+Chuyển việc rẽ nhánh từ đầu người dùng sang một hàm 500 dòng thì chỉ đổi chỗ
+đau. Mỗi chặng là một dòng: điều kiện xong, việc phải làm, vì sao, lệnh (hoặc
+khung YAML dán được cho các chặng chưa có lệnh).
+
+### Hai luật của dòng chảy, và vì sao chúng là test
+
+1. **Mọi chặng phải có việc làm được** — một lệnh hoặc một khung dán được. Chặng
+   không có gì là ngõ cụt.
+2. **Mỗi chặng phải vượt được bằng chính việc nó bảo làm.** Nghe hiển nhiên, và
+   mình vi phạm ngay lần đầu: `work` và `verify` từng dùng chung điều kiện xong,
+   nên chạy `ganas next` không bao giờ qua được `work`.
+
+`test/flow.test.ts` đi trọn một vòng từ repo trống, làm đúng lệnh mà mỗi chặng
+in ra. Nó **là đặc tả**: thêm chặng mà quên đường vượt thì test kẹt và gọi đúng
+tên chặng kẹt.
+
+Ba lỗi thiết kế bị chính test này bắt trong lần viết đầu:
+- `commit` xét cả cây làm việc bẩn ⇒ một file lạc không liên quan cũng làm chặng
+  đó **không bao giờ qua được** trong repo thật. Nay chỉ xét đúng đường dẫn mà
+  `ganas commit` sẽ stage (`pathsToStage`).
+- `work`/`verify` trùng điều kiện (ở trên).
+- thiếu hẳn chặng `evidence`: `ganas scope new` tạo khối với `verify: []`, nên
+  khung task bảo trỏ vào `M-x/<V-id>` mà **chưa có bằng chứng nào để trỏ**.
+
 ## 1. Luồng phiên — từ lúc mở tới lúc đóng
 
 Đây là luồng người dùng không bao giờ gõ tay: hook của Claude Code gọi ganas ở

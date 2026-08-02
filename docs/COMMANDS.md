@@ -58,6 +58,41 @@ có ba mã dùng xuyên suốt toàn bộ CLI (`src/util/errors.ts`, `src/cli.ts
 
 ## Danh sách lệnh
 
+### `ganas flow`
+
+**Cũng chính là `ganas` không tham số.** In ĐÚNG MỘT bước kế tiếp cho trạng thái
+hiện tại của dự án — không phải menu 12 lệnh, vì mỗi lựa chọn đẩy sang người
+dùng là một chỗ đi lạc. Muốn xem toàn bộ lệnh thì `ganas --help`.
+
+Bước kế tiếp = chặng **đầu tiên chưa xong** trong bảng `STAGES` (`src/flow.ts`):
+
+```
+init → fix-graph → scope → goal → design → evidence → task
+     → work → verify → gate → commit → close ⤾
+```
+
+Thứ tự là thứ tự *phụ thuộc*: graph hỏng thì mọi kết luận phía sau không tin
+được nên nó chặn trước; không có phạm vi thì task không neo vào đâu.
+
+Chặng nào có lệnh thì in lệnh; chặng nào phải viết YAML tay (`goal`, `design`,
+`evidence`, `task`) thì in **khung dán được** với ID đã điền sẵn từ graph hiện
+tại — không bắt người dùng đi tra tài liệu giữa chừng.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--all` | In toàn bộ chặng kèm dấu ✓ / → để thấy mình đang ở đâu. |
+| `--json` | Xuất `{stage, action, command, at, total, stages[]}`. |
+
+**Mã thoát:** luôn `0` — kể cả khi mọi chặng đã xong. Dòng chảy hết chặng không
+phải lỗi, nó là "vòng này khép, viết task mới cho vòng sau".
+
+**Ví dụ:**
+```
+ganas                 # bước kế tiếp
+ganas flow --all      # toàn cảnh
+ganas --help          # menu lệnh đầy đủ
+```
+
 ### `ganas init`
 
 Khởi tạo `.ganas/` cho dự án mới (greenfield): tạo cây thư mục con

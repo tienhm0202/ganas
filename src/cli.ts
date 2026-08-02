@@ -11,6 +11,7 @@ import { GanasError } from "./util/errors.js";
 type CommandModule = { run: (argv: Argv) => Promise<number> | number };
 
 const COMMANDS: Record<string, () => Promise<CommandModule>> = {
+  flow: () => import("./commands/flow.js"),
   init: () => import("./commands/init.js"),
   validate: () => import("./commands/validate.js"),
   scope: () => import("./commands/scope.js"),
@@ -31,6 +32,7 @@ Cách dùng:
   ganas <lệnh> [tuỳ chọn]
 
 Lệnh:
+  flow                 Bước kế tiếp của dòng chảy (cũng là \`ganas\` không tham số)
   init                 Khởi tạo .ganas/ cho dự án mới (greenfield)
   validate             Kiểm tra graph: schema, liên kết, luật spine
   scope [new|assign]   Phạm vi công việc: liệt kê, tạo mới (phỏng vấn), vá chỗ quên khai
@@ -67,11 +69,14 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  const name = argv.positional[0];
-  if (!name || argv.flags["help"] || argv.flags["h"]) {
+  if (argv.flags["help"] || argv.flags["h"]) {
     process.stdout.write(HELP);
-    return name ? 0 : 1;
+    return 0;
   }
+
+  // `ganas` trần in ĐÚNG MỘT bước kế tiếp, không in menu 12 lệnh: mỗi lựa chọn
+  // đẩy sang người dùng là một chỗ đi lạc. Muốn menu thì `ganas --help`.
+  const name = argv.positional[0] ?? "flow";
 
   const load = COMMANDS[name];
   if (!load) {

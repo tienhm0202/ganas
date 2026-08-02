@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
  * docs/COMMANDS.md (cũng tự bắt nếu quên).
  */
 const EXPECTED_COMMANDS = [
+  "flow",
   "init",
   "validate",
   "scope",
