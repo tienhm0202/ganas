@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 const EXPECTED_COMMANDS = [
   "init",
   "validate",
+  "scope",
   "brief",
   "next",
   "gate",

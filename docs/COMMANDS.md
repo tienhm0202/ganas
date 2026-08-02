@@ -113,6 +113,79 @@ ganas validate
 ganas validate --strict --json | jq '.counts'
 ```
 
+### `ganas scope [new|assign]`
+
+Phạm vi công việc — đơn vị mà một câu nói của người dùng được **dịch** sang
+ngôn ngữ quản lý dự án: bàn giao cái gì, code nằm ở đâu, làm sao biết là
+xong, ai ký. Task/fact/claim đều phải thuộc về đúng một phạm vi, và **fact
+chỉ được coi là đúng bên trong phạm vi của nó** — ra ngoài là chưa biết.
+
+Không có lệnh con ⇒ **liệt kê**: mỗi phạm vi kèm người ký, số khối/task/fact,
+trạng thái nghiệm thu luồng ghép, và nợ kiểm chứng.
+
+```
+P-dat-lich — Đặt lịch qua Zalo
+  active · nghiệm thu @tien · 1 khối · 1/1 task chưa xong · 1 fact · 0 claim
+  ✓ nghiệm thu: 1/1 còn tươi
+```
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--json` | Xuất mảng phạm vi (`id`, `title`, `status`, `owner`, số khối/task/fact/claim, `acceptance` kèm freshness, `debt`). |
+
+#### `ganas scope new`
+
+Phỏng vấn **4 câu** rồi ghi `scopes/<id>.yaml`. Nếu chưa khối nào có `paths`
+giao với glob vừa khai thì tạo luôn một khối — nếu không, phạm vi mới không
+hợp lệ (`modules` phải có ít nhất một phần tử) và người dùng lại phải gõ tay
+YAML, đúng thứ lệnh này sinh ra để tránh.
+
+Không có TTY (hoặc có `--yes`) thì bốn câu phải đưa qua tuỳ chọn.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--title <chuỗi>` | *Bàn giao cái gì?* Cũng là nguồn để suy `id` (bỏ dấu tiếng Việt → slug). |
+| `--paths <glob,glob>` | *Code nằm ở đâu?* Danh sách glob cách nhau bởi dấu phẩy. |
+| `--accept <lệnh>` | *Làm sao biết là xong?* Thành `acceptance` mức phạm vi, chạy trên luồng đã ghép. |
+| `--owner <@ten>` | *Ai ký nghiệm thu?* Bỏ trống thì `validate` cảnh báo `scope/without-owner`. |
+| `--id <P-...>` | Ghi đè id tự suy. |
+| `--yes, -y` | Không hỏi, đọc hết từ tuỳ chọn. |
+
+**Mã thoát:** `0` nếu tạo được; `2` (GanasError) nếu thiếu một trong bốn câu,
+`owner` sai dạng `@ten`, hoặc id đã tồn tại.
+
+Khối mới luôn được tạo với `nature: code` và lệnh **nói thẳng** rằng nếu vùng
+đó có gọi LLM thì phải đổi sang `nature: llm` (khi đó bắt buộc có eval). Đây
+là chỗ cố ý không đoán: đoán sai `nature` nghĩa là bỏ qua lớp bằng chứng duy
+nhất kiểm được hành vi của LLM.
+
+#### `ganas scope assign`
+
+Tìm fact/claim/task **quên khai `scope`** và gợi ý cái đúng. Quét YAML thô
+chứ không qua graph — vì `scope` là trường bắt buộc, bản ghi thiếu nó không
+nạp được vào graph, mà đó chính là lúc cần lệnh này nhất.
+
+Suy phạm vi bằng `depends_on`/`anchors` giao với `module.paths` (task thì ưu
+tiên `touches`, vì khối đã khai phạm vi rồi nên chắc chắn hơn). Khớp **0 hoặc
+≥2** phạm vi thì **không đoán** — in ra để người quyết. Ghi bằng
+`parseDocument` nên **comment trong YAML được giữ nguyên**.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--write` | Ghi thật. Mặc định là dry-run, không đụng đĩa. |
+
+**Mã thoát:** `0` nếu không còn bản ghi mơ hồ nào; `1` nếu còn bản ghi phải
+người quyết (kể cả khi đã ghi xong phần suy được).
+
+**Ví dụ:**
+```
+ganas scope
+ganas scope new --yes --title "Đặt lịch qua Zalo" \
+  --paths "src/zalo/**,src/booking/**" --accept "npm run test:booking" --owner "@tien"
+ganas scope assign          # xem trước
+ganas scope assign --write  # ghi thật
+```
+
 ### `ganas next`
 
 Chọn task kế tiếp nên làm và in brief đầy đủ của task đó. Ưu tiên task đang

@@ -26,8 +26,16 @@ export async function run(argv: Argv): Promise<number> {
     }
 
     if (blocked.length === 0) {
+      // Phân biệt "đã xong hết" với "chưa có gì": dự án vừa init có 0 task, mà
+      // báo "không còn task nào chưa xong" là nói ngược sự thật — và đó lại là
+      // câu đầu tiên người mới nhìn thấy.
+      const empty = graph.tasks.size === 0;
       process.stdout.write(
-        `Không còn task nào chưa xong.\n\n` +
+        (empty ? `Dự án chưa có task nào.\n\n` : `Không còn task nào chưa xong.\n\n`) +
+          (empty && graph.scopes.size === 0
+            ? `Trước hết cần một phạm vi công việc — task phải thuộc về một cái:\n` +
+              `  ganas scope new\n\n`
+            : "") +
           `Thêm task mới vào .ganas/tasks/ (nhớ khai serves, implements, scope, exit_contract),\n` +
           `rồi chạy: ganas validate\n`,
       );
