@@ -24,6 +24,10 @@ giác — và ảo giác đó mang dấu kiểm chứng của chính hệ thốn
 
 ## Docs
 
+- [docs/INSTALL.md](docs/INSTALL.md): Cài ganas vào Claude Code — marketplace,
+  cách KIỂM CHỨNG là nó thật sự chạy (bảng "component inventory" vẫn hiện đủ kể
+  cả khi ganas hoàn toàn không chạy), và vì sao `plugin/dist/` nằm trong git.
+  Đọc trước tiên nếu chưa cài.
 - [docs/CONCEPTS.md](docs/CONCEPTS.md): Tham chiếu đầy đủ mô hình dữ liệu —
   Goal/Design/Task, Scope/Module/Verification, Fact/Claim/Decision, sổ cái,
   11 trạng thái freshness, sơ đồ quan hệ mermaid. Đọc trước nếu cần hiểu

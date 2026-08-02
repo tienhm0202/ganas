@@ -1,7 +1,13 @@
 node_modules/
-dist/
 *.tsbuildinfo
 coverage/
+
+# `plugin/dist/` CÓ trong git, cố ý. Claude Code cài plugin bằng cách copy đúng
+# thư mục `plugin/` — thứ gì nằm ngoài đó không tồn tại với plugin đã cài. Không
+# commit bản build thì plugin cài xong báo "thành công", hiện đủ skill và hook,
+# rồi im lặng không làm gì. Đó là chế độ hỏng tệ nhất cho một công cụ mà toàn bộ
+# giá trị là cưỡng chế.
+/dist/
 
 # Plan/roadmap không thuộc git — chi tiết từng mốc đã nằm trong commit
 # message (xem git log). Không commit lại PLAN.md dù ở gốc repo hay docs/.

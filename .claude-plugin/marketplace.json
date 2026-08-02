@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ganas",
+  "description": "Dịch từ ngôn ngữ người dùng sang ngôn ngữ quản lý dự án — phạm vi công việc, tri thức có bằng chứng, và hook cưỡng chế trong lúc agent làm việc",
+  "owner": {
+    "name": "Tien Hoang Manh"
+  },
+  "plugins": [
+    {
+      "name": "ganas",
+      "description": "Kiểm soát phiên làm việc: phiên mới biết làm task gì, cần thông tin gì, cần kỹ năng gì — và không ghi được tri thức không có bằng chứng",
+      "source": "./plugin",
+      "category": "workflow"
+    }
+  ]
+}

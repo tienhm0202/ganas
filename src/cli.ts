@@ -1,12 +1,19 @@
-#!/usr/bin/env node
 /**
  * ganas CLI — router.
+ *
+ * KHÔNG có shebang ở đây: bản ship là bundle do `scripts/build.mjs` sinh, và
+ * shebang được banner của nó thêm vào đúng dòng 1. Để shebang ở nguồn thì
+ * esbuild giữ lại và output có HAI dòng `#!` — dòng thứ hai là lỗi cú pháp,
+ * khiến file không `import()` được và plugin im lặng chết.
  *
  * Hook gọi CLI này nhiều lần mỗi phiên, nên module lệnh được nạp bằng dynamic
  * import: chạy `ganas brief` không kéo theo code của init/pack/kb.
  */
 import { type Argv, parseArgs } from "./util/args.js";
 import { GanasError } from "./util/errors.js";
+
+/** Nhúng lúc build (scripts/build.mjs). */
+declare const __GANAS_VERSION__: string;
 
 type CommandModule = { run: (argv: Argv) => Promise<number> | number };
 
@@ -59,13 +66,10 @@ async function main(): Promise<number> {
   const argv = parseArgs(raw);
 
   if (argv.flags["version"] || argv.flags["v"]) {
-    const fs = await import("node:fs/promises");
-    const url = await import("node:url");
-    const path = await import("node:path");
-    const here = path.dirname(url.fileURLToPath(import.meta.url));
-    const raw = await fs.readFile(path.join(here, "..", "package.json"), "utf8");
-    const pkg = JSON.parse(raw) as { version: string };
-    process.stdout.write(`${pkg.version}\n`);
+    // Nhúng lúc build (`--define:__GANAS_VERSION__`), không đọc package.json:
+    // bản ship là một file bundle nằm trong `plugin/dist/`, cạnh nó không có
+    // package.json nào. Đọc file ở đây từng đúng khi build ra `dist/` ở gốc.
+    process.stdout.write(`${__GANAS_VERSION__}\n`);
     return 0;
   }
 

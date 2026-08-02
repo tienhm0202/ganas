@@ -10,7 +10,7 @@ import tseslint from "typescript-eslint";
  * `test/**\/*.ts` cần một tsconfig riêng bao trọn cả hai — xem tsconfig.eslint.json.
  */
 export default defineConfig([
-  globalIgnores(["dist/**", "node_modules/**", "plugin/bin/**"]),
+  globalIgnores(["dist/**", "plugin/dist/**", "node_modules/**", "plugin/bin/**"]),
   {
     files: ["src/**/*.ts", "test/**/*.ts"],
     extends: [js.configs.recommended, tseslint.configs.recommendedTypeChecked],

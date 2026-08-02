@@ -1,4 +1,5 @@
 dist/
+plugin/dist/
 node_modules/
 coverage/
 

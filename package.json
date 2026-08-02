@@ -4,17 +4,16 @@
   "description": "Control layer cho các phiên Claude Code — spine goal/sprint/design/task, tri thức có provenance, cưỡng chế bằng hook",
   "type": "module",
   "bin": {
-    "ganas": "./dist/cli.js"
+    "ganas": "./plugin/dist/cli.js"
   },
   "files": [
-    "dist",
     "plugin"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/build.mjs",
     "dev": "tsx src/cli.ts",
     "test": "tsx --test test/**/*.test.ts",
     "test:coverage": "c8 --include=src/graph/**/*.ts --include=src/verify/**/*.ts --check-coverage --lines 88 --branches 80 -- tsx --test test/**/*.ts",
@@ -38,7 +37,8 @@
     "prettier": "^3.9.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.65.0",
+    "esbuild": "^0.28.1"
   },
   "license": "MIT"
 }
