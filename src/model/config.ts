@@ -23,8 +23,6 @@ export const ENFORCEMENT_RULES = [
   "exit_contract",
   /** Tạo/đóng task không neo được vào phạm vi/goal. */
   "task_link",
-  /** Sửa code trong zone chưa survey. */
-  "zone_survey",
 ] as const;
 export type EnforcementRule = (typeof ENFORCEMENT_RULES)[number];
 
@@ -81,16 +79,6 @@ export const zConfig = z.object({
        * cuốn ngay vào task. Brief vẫn được bơm vào context dù bật hay tắt.
        */
       auto_begin: z.boolean().default(false),
-    })
-    .default({}),
-
-  /** Cách adopt xử lý dự án cũ. */
-  adopt: z
-    .object({
-      /** Nguồn tài liệu cũ được import thành legacy claim. */
-      import_sources: z
-        .array(zNonEmpty)
-        .default(["CLAUDE.md", "AGENTS.md", ".cursor/rules", ".github/copilot-instructions.md"]),
     })
     .default({}),
 });

@@ -309,7 +309,7 @@ export function renderBrief(input: BriefInput): string {
     const rest =
       otherLegacy > 0
         ? `\n\nCòn ${otherLegacy} phát biểu kế thừa khác chưa được đối chất, không liên quan trực tiếp ` +
-          `tới task này. Xem toàn bộ: \`ganas adopt --audit\`.`
+          `tới task này (xem \`.ganas/legacy/imported/\`).`
         : "";
 
     parts.push(

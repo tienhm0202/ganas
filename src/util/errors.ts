@@ -9,13 +9,14 @@ export class GanasError extends Error {
   }
 }
 
-/** Không tìm thấy thư mục .ganas/ — dự án chưa được init/adopt. */
+/** Không tìm thấy thư mục .ganas/ — dự án chưa được init. */
 export class NotInitializedError extends GanasError {
   constructor(from: string) {
     super(
       `không tìm thấy .ganas/ từ "${from}" trở lên.\n` +
-        `  Dự án mới:  ganas init\n` +
-        `  Dự án cũ:   ganas adopt`,
+        `  Khởi tạo:   ganas init\n` +
+        `  Dự án đã có code: ganas init rồi \`ganas scope new\` — trỏ paths vào code\n` +
+        `              hiện có, ganas sẽ dựng khối tương ứng.`,
       2,
     );
     this.name = "NotInitializedError";

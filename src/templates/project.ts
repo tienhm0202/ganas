@@ -21,7 +21,7 @@ version: 1
 project: ${JSON.stringify(v.project)}
 
 # Mức cưỡng chế của hook.
-#   warn    — chỉ cảnh báo, không chặn (shadow mode; mặc định khi adopt dự án cũ)
+#   warn    — chỉ cảnh báo, không chặn (shadow mode; hợp khi mới bắt đầu)
 #   enforce — chặn thao tác sai
 # Dự án mới bắt đầu bằng enforce luôn: chưa có thói quen cũ nào để phá.
 enforcement: enforce
@@ -32,7 +32,6 @@ enforcement_rules: {}
   # schema: enforce
   # exit_contract: enforce
   # task_link: enforce
-  # zone_survey: warn
 
 models:
   main: claude-opus-5

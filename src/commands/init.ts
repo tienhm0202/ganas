@@ -116,7 +116,8 @@ export async function run(argv: Argv): Promise<number> {
     await writeNew(join(cwd, ".claude", "rules", "architecture.md"), T.architectureRuleMd(), force),
   );
 
-  // CLAUDE.md và AGENTS.md: không đè nếu dự án đã có — đó là việc của `ganas adopt`.
+  // CLAUDE.md và AGENTS.md: không đè nếu dự án đã có — nội dung cũ là của người
+  // dùng, trộn vào là mất thứ họ viết mà không hỏi.
   const claudeMdPath = join(cwd, "CLAUDE.md");
   const claudeMdResult = await writeNew(claudeMdPath, T.claudeMd(vars), force);
   track("CLAUDE.md", claudeMdResult);
@@ -140,8 +141,9 @@ export async function run(argv: Argv): Promise<number> {
   if (claudeMdResult === "kept") {
     process.stdout.write(
       `\n  ⚠ CLAUDE.md đã có sẵn nên không bị đè.\n` +
-        `    Dự án cũ nên dùng "ganas adopt" để đối chất tài liệu cũ với code thật,\n` +
-        `    thay vì trộn nội dung cũ vào luồng mới.\n`,
+        `    Nội dung ở đó CHƯA được đối chất với code thật. Muốn đưa vào kho tri\n` +
+        `    thức thì ghi thành claim ở .ganas/legacy/imported/ (tiền tố LC-,\n` +
+        `    provenance: imported) rồi verify dần — đừng coi nó là sự thật sẵn có.\n`,
     );
   }
 

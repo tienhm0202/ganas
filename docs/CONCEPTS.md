@@ -169,9 +169,9 @@ Các field khác của Task:
 `src/model/config.ts` định nghĩa hai mức cưỡng chế toàn cục
 (`ENFORCEMENT = ["warn", "enforce"]`): `warn` chỉ cảnh báo qua
 `systemMessage` (shadow mode), `enforce` khiến hook trả `decision: "block"`.
-Có thể ghi đè riêng từng luật qua `enforcement_rules` (5 luật khai trong
+Có thể ghi đè riêng từng luật qua `enforcement_rules` (4 luật khai trong
 `ENFORCEMENT_RULES`): `knowledge_anchor`, `schema`, `exit_contract`,
-`task_link`, `zone_survey`. Thiếu key nào thì luật đó dùng mức mặc định
+`task_link`. Thiếu key nào thì luật đó dùng mức mặc định
 `enforcement`.
 
 `config.models` ánh xạ 3 tier (`main`/`verifier`/`scribe`) sang model id thật

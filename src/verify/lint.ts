@@ -25,7 +25,7 @@ const ALWAYS_TRUE = [/^true$/, /^:$/, /^exit\s+0$/, /^echo\b[^|;&]*$/, /^printf\
  * Không chạy, dù người dùng có muốn.
  *
  * Probe do model sinh ra rồi ganas chạy — đây là bề mặt thực thi mã. Với
- * `adopt --audit` trên dự án cũ, một lệnh sẽ sinh hàng chục probe cùng lúc.
+ * khảo sát một dự án cũ, một phiên có thể sinh hàng chục probe cùng lúc.
  */
 const DANGEROUS: Array<[RegExp, string]> = [
   [/\brm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rf]/, "xoá đệ quy"],
