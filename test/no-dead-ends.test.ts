@@ -192,3 +192,42 @@ test("⭐ mọi hàm và file mà docs/FLOWS.md nhắc tới đều tồn tại"
     `docs/FLOWS.md nhắc tới thứ không tồn tại:\n${[...new Set(missing)].join("\n")}`,
   );
 });
+
+/* ------------------------------------------------------------------------- *
+ * Luật 5: mỗi câu hỏi chỉ một NGƯỜI QUYẾT
+ * ------------------------------------------------------------------------- */
+
+test("⭐ không ai đọc thẳng sổ cái để tự kết luận độ tươi", async () => {
+  // Lớp lỗi khác hẳn luật 1–4: không tên nào sai cả, chỉ là HAI chỗ cùng trả
+  // lời một câu hỏi rồi một chỗ trôi đi. `needsRun()` từng tự soi sổ cái và bỏ
+  // qua file phụ thuộc, nên brief báo "CẦN VERIFY LẠI" trong khi `ganas verify`
+  // báo "không có gì cần chạy" — suốt từ N4 tới N24.
+  //
+  // Luật: `graph.ledger` là dữ liệu THÔ của quyết định "còn dùng được không".
+  // Chỉ `computeFreshness` được đọc nó cho câu hỏi đó. Ai cần biết độ tươi thì
+  // hỏi nó, đừng tự tính lại một nửa.
+  const ALLOWED: Record<string, string> = {
+    "src/graph/freshness.ts": "người quyết duy nhất của câu hỏi 'còn dùng được không'",
+    "src/graph/validate.ts":
+      "câu hỏi KHÁC: 'YAML khai có bản ghi thật chống lưng không' (unbacked-verification)",
+    "src/commands/verify.ts":
+      "câu hỏi KHÁC: 'lần trước có qua mutation test không' và 'lần trước tốn bao nhiêu'",
+  };
+
+  const offenders: string[] = [];
+  for (const { path, text } of await srcFiles()) {
+    if (path === "src/verify/ledger.ts" || ALLOWED[path]) continue;
+    if (/\bgraph\.ledger\b|\blastFor\(|\bhistoryFor\(|\bentryAt\(/.test(text)) {
+      offenders.push(path);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `Đọc thẳng sổ cái ngoài danh sách cho phép — nhiều khả năng đang tự tính lại\n` +
+      `độ tươi thay vì hỏi computeFreshness(). Nếu đây thật sự là câu hỏi khác,\n` +
+      `thêm vào ALLOWED kèm LÝ DO nói rõ đó là câu hỏi gì.\n` +
+      offenders.join("\n"),
+  );
+});

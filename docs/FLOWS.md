@@ -195,6 +195,50 @@ tamper-proof. Hook là lớp nhắc; cổng thật phải là CI chạy `ganas v
 
 ---
 
+## Người quyết duy nhất — luật quan trọng nhất của các luồng trên
+
+Mỗi câu hỏi của hệ thống có **đúng một** hàm trả lời. Ai cần biết thì hỏi nó,
+không tự tính lại.
+
+| Câu hỏi | Người quyết duy nhất |
+|---|---|
+| Bằng chứng này còn dùng được không? | `computeFreshness()` — `graph/freshness.ts` |
+| Vân tay của bằng chứng này là gì? | `defHash()` — `verify/ledger.ts` |
+| Task này xong chưa? | `evaluateGate()` — `gate.ts` |
+| Task nào tiếp theo? | `selectNextTask()` — `graph/select.ts` |
+| Graph có hợp lệ không? | `validateGraph()` — `graph/validate.ts` |
+| Target này thuộc phạm vi nào? | `scopeOfTarget()` — `verify/run.ts` |
+
+Luật này sinh ra từ một lỗi thật, không phải từ sở thích kiến trúc.
+`needsRunFor()` trong `commands/verify.ts` từng **tự soi sổ cái** để quyết định "có cần chạy lại
+không", và bỏ sót hoàn toàn file phụ thuộc — comment ngay trên nó ghi *"N5 sẽ bổ
+sung: file phụ thuộc đã đổi"* rồi không ai làm, **suốt từ N4 tới N24**.
+
+Hậu quả: sửa code xong, brief báo *"CẦN VERIFY LẠI"* trong khi `ganas verify`
+báo *"không có gì cần chạy"*. Hai đầu ra mâu thuẫn từ cùng một công cụ là cách
+nhanh nhất để người dùng thôi tin cả hai.
+
+Điểm đáng chú ý: **không tên nào sai cả.** Bộ dò ngõ cụt không thấy gì, vì hàm
+đó không nhắc thứ không tồn tại và không khai trường chết. Nó chỉ đơn
+giản là *làm thiếu*. Lớp lỗi này cần luật khác:
+
+- `test/round-trip.test.ts` — **bất biến vòng tròn**: verify xong thì mọi loại
+  bằng chứng phải `fresh`, và `ganas verify` phải nói cùng điều với brief. Nó
+  không kiểm một hàm nào; nó kiểm rằng hai nửa hệ thống còn nói cùng ngôn ngữ.
+- Luật 5 trong `test/no-dead-ends.test.ts` — cấm đọc thẳng `graph.ledger` ngoài
+  danh sách cho phép, và danh sách đó bắt buộc kèm **lý do đó là câu hỏi gì**.
+
+### Vì sao cần cả hai
+
+Vân tay được tính ở **bốn** chỗ: `verify/run.ts` và `graph/trace.ts` ghi vào sổ
+cái, `graph/freshness.ts` và `graph/validate.ts` so lại. Không gì ép bốn chỗ đó
+dùng cùng công thức — sửa ba, quên một, thì loại bằng chứng đó âm thầm thành
+`definition_changed` **vĩnh viễn**, và mỗi bên nhìn riêng đều đúng nên không
+test đơn lẻ nào thấy. Chỉ bất biến vòng tròn thấy được.
+
+Đã kiểm chứng bằng cách gieo đúng hai lỗi lịch sử: bỏ `statement` khỏi vân tay
+ở riêng `trace.ts`, và cho hàm đó tự soi sổ cái lại. Cả hai đều đỏ đúng chỗ.
+
 ## Làm sao biết sơ đồ này chưa mục?
 
 Ba luật trong `test/no-dead-ends.test.ts` chạy cùng `npm test`, chặn bằng máy
@@ -205,6 +249,7 @@ Ba luật trong `test/no-dead-ends.test.ts` chạy cùng `npm test`, chặn bằ
 | Lệnh được nhắc phải tồn tại trong `COMMANDS` | chuỗi chỉ người dùng tới lệnh ma | `ganas adopt --audit` in vào brief **mỗi phiên** |
 | Đường dẫn `.ganas/<x>/` phải có trong `DIRS` | trỏ vào thư mục không tồn tại | — |
 | Mọi trường schema phải có người đọc ngoài `src/model/` | trường khai rồi không ai dùng | `Scope.window`, `Module.risk/survey/surveyed_at`, `Claim.created_at/imported_at`, `Decision.link/consequence` |
+| Không đọc thẳng `graph.ledger` ngoài danh sách cho phép | hai chỗ cùng quyết một câu hỏi | `needsRunFor()` bỏ qua file phụ thuộc suốt N4→N24 |
 
 Chúng nằm trong **test** chứ không nằm trong `CONTRIBUTING.md` là có chủ đích:
 một quy ước viết trong tài liệu sẽ mục ngay lần đầu có người quên, và không ai
