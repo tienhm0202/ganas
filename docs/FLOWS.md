@@ -113,9 +113,16 @@ flowchart TD
 đã đổi" và "file đã sửa" dẫn tới hai hành động khác nhau. Chỉ `fresh` được coi
 là dùng được (`isUsable`).
 
-**Nợ đã biết trong luồng này** (chưa sửa, xem backlog N21–N27): `statement` nằm
-ngoài `defHash` nên đổi phát biểu mà giữ probe vẫn `fresh`; `proof` của mutation
-test không được ghi vào sổ cái; `kind: eval` không đi qua lint lẫn mutation.
+**Đã bịt ở P2 N21–N27:** `statement` nay nằm trong `defHash`; `proof` được ghi
+vào sổ cái và `--no-mutation` không còn thành pass vĩnh viễn; độ cũ tính theo
+**nội dung** file chứ không theo `mtime` (nên `touch -d` không đảo được);
+`ttl_days` của fact thật sự hết hạn; `.ganas/config.yaml` được bảo vệ như sổ cái.
+
+**Còn nợ, ghi thẳng để không quên:** `kind: eval` vẫn KHÔNG đi qua lint lẫn
+mutation test (`run.ts` chỉ chạy chúng cho `kind: probe`) — mà eval chính là
+bằng chứng bắt buộc của khối `nature: llm`. Và sổ cái vẫn chưa có hash chain:
+`readLedger` mới ĐẾM được dòng hỏng, chưa phát hiện được ai sửa lịch sử bằng
+`git checkout` một bản cũ.
 
 ---
 
