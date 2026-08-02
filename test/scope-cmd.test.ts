@@ -212,6 +212,33 @@ test("scope new thiếu câu nào cũng báo đúng câu đó, không tạo file
   }
 });
 
+test("khối mới bám theo id phạm vi, không theo tiêu đề", async () => {
+  const root = await baseProject();
+  try {
+    // Gõ `--id P-ngan` mà nhận về `M-mot-tieu-de-rat-dai-...` là hai cách đặt
+    // tên lệch nhau ngay trong cùng một lệnh.
+    await runCli(root, [
+      "new",
+      "--yes",
+      "--id",
+      "P-ngan",
+      "--title",
+      "Một tiêu đề rất dài không nên thành id khối",
+      "--paths",
+      "src/ngan/**",
+      "--accept",
+      "true",
+      "--owner",
+      "@tien",
+    ]);
+    const graph = await loadGraph(root);
+    assert.deepEqual(graph.scopes.get("P-ngan")!.value.modules, ["M-ngan"]);
+    assert.ok(graph.modules.has("M-ngan"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
 test("scope new từ chối id đã tồn tại", async () => {
   const root = await baseProject();
   try {

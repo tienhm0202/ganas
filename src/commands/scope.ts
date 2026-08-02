@@ -220,8 +220,11 @@ async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
     .filter((m) => m.value.paths.some((p) => paths.some((q) => p === q || matchesAny(p, [q]))))
     .map((m) => m.value.id);
 
+  // Khối mới bám theo ID PHẠM VI, không phải tiêu đề: người gõ `--id P-thanh-toan`
+  // mà nhận về `M-xu-ly-webhook-thanh-toan` là hai cách đặt tên lệch nhau ngay
+  // trong một lệnh. `acceptance.id` cũng suy từ id phạm vi, giữ cho nhất quán.
   const created: string[] = [];
-  const moduleIds = reused.length > 0 ? reused : [`M-${slugify(title)}`];
+  const moduleIds = reused.length > 0 ? reused : [`M-${id.replace(/^P-/, "")}`];
   if (reused.length === 0) {
     const file = ganasPath(root, DIRS.modules, `${moduleIds[0]!}.yaml`);
     await mkdir(dirname(file), { recursive: true });
