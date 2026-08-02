@@ -32,6 +32,10 @@ giác — và ảo giác đó mang dấu kiểm chứng của chính hệ thốn
   (`init`, `validate`, `next`, `brief`, `gate`, `verify`, `trace`, `commit`,
   `handoff`, `prune`, `hook`), từng cờ, mã thoát, ví dụ. Đối chiếu bằng test
   (`test/cli-help.test.ts`) với `src/cli.ts` để không trôi dạt.
+- [docs/FLOWS.md](docs/FLOWS.md): Năm luồng chính vẽ bằng sơ đồ khối theo code
+  hiện hành — luồng phiên (hook), luồng dịch, luồng bằng chứng, luồng tri thức,
+  luồng cưỡng chế. Mỗi node ghi kèm hàm/file thật; nêu thẳng các điểm đứt và
+  giới hạn đã biết. Đọc khi cần biết "dữ liệu chạy qua đâu".
 - [docs/WORKFLOW.md](docs/WORKFLOW.md): Một luồng làm việc đầu-cuối, từng
   bước, với YAML và output THẬT (đã chạy kiểm chứng, không viết theo trí
   nhớ) — từ `ganas init` tới `ganas commit`.

@@ -107,8 +107,6 @@ export const zClaim = z
     anchors: zAnchors,
     provenance: z.enum(PROVENANCE),
     trust: z.enum(TRUST).default("unverified"),
-    created_at: zIsoDate.optional(),
-    imported_at: zIsoDate.optional(),
     /** Phiên nào sinh ra claim này (nếu do phiên ghi). */
     source_session: z.string().optional(),
     /** Kết quả đối chất: probe đã sinh ra, và vì sao kết luận vậy. */

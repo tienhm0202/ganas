@@ -179,11 +179,22 @@ export function renderBrief(input: BriefInput): string {
     .sort((a, b) => a.localeCompare(b))
     .map((id) => graph.decisions.get(id)?.value)
     .filter((d): d is NonNullable<typeof d> => Boolean(d))
-    .map(
-      (d) =>
+    .map((d) => {
+      // Bộ ba ADR: `context` (điều gì buộc phải chọn) và `consequence` (phải
+      // sống với gì) được thêm ở N12 nhưng chưa bao giờ được in ra — tức là
+      // người viết bỏ công ghi mà phiên làm việc không bao giờ đọc được.
+      // Không có chúng, model chỉ thấy KẾT LUẬN mà không thấy ràng buộc sinh ra
+      // nó, nên rất dễ đề xuất lại đúng cái đã bị loại.
+      const detail: string[] = [];
+      if (d.context) detail.push(`  vì: ${d.context}`);
+      if (d.consequence) detail.push(`  đánh đổi: ${d.consequence}`);
+      if (d.link) detail.push(`  nguồn: ${d.link}`);
+      return (
         `\`${d.id}\` — ${d.statement} *(${d.decided_by}, ${d.decided_at.slice(0, 10)}` +
-        `${d.scope === undefined ? ", toàn dự án" : ""})*`,
-    );
+        `${d.scope === undefined ? ", toàn dự án" : ""})*` +
+        (detail.length ? `\n${detail.join("\n")}` : "")
+      );
+    });
 
   if (decisions.length > 0) {
     parts.push(

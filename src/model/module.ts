@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { zGlob, zHandle, zIsoDate, zModuleId, zNonEmpty, zScopeId } from "./common.js";
+import { zGlob, zHandle, zModuleId, zNonEmpty, zScopeId } from "./common.js";
 import { zVerification } from "./verification.js";
 
 /**
@@ -22,7 +22,6 @@ export const MODULE_NATURE = ["llm", "code", "data", "io"] as const;
 export type ModuleNature = (typeof MODULE_NATURE)[number];
 
 export const MODULE_STATUS = ["unmapped", "surveyed", "implemented", "verified"] as const;
-export const MODULE_RISK = ["low", "medium", "high"] as const;
 
 /** Một cổng vào/ra của khối. `shape` là mô tả tự do, đủ để người và model đối chiếu. */
 export const zPort = z.object({
@@ -58,11 +57,7 @@ export const zModule = z
     depends_on: z.array(zModuleId).default([]),
 
     status: z.enum(MODULE_STATUS).default("unmapped"),
-    risk: z.enum(MODULE_RISK).default("medium"),
     owner: zHandle.optional(),
-
-    surveyed_at: zIsoDate.optional(),
-    survey: z.string().optional().describe("đường dẫn file survey"),
 
     /** Rỗng ⇒ khối `unverified` ⇒ mọi luồng đi qua nó đều không tin được. */
     verify: z.array(zVerification).default([]),

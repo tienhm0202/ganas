@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { zHandle, zIsoDate, zModuleId, zNonEmpty, zScopeId } from "./common.js";
+import { zHandle, zModuleId, zNonEmpty, zScopeId } from "./common.js";
 import { zVerification } from "./verification.js";
 
 /**
@@ -46,24 +46,6 @@ export const zScope = z
      */
     owner: zHandle.optional(),
     status: z.enum(SCOPE_STATUS).default("draft"),
-
-    /**
-     * Lát cắt thời gian, thay vai trò Sprint cũ. Tuỳ chọn: phạm vi không có hạn
-     * chót vẫn là phạm vi hợp lệ, còn một sprint không có ngày thì vô nghĩa.
-     */
-    window: z
-      .object({ starts_at: zIsoDate, ends_at: zIsoDate })
-      .strict()
-      .optional()
-      .superRefine((w, ctx) => {
-        if (w && Date.parse(w.ends_at) <= Date.parse(w.starts_at)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["ends_at"],
-            message: "ends_at phải sau starts_at",
-          });
-        }
-      }),
 
     /** Ranh giới code của phạm vi, gián tiếp qua `module.paths`. */
     modules: z.array(zModuleId).min(1, "phạm vi phải chứa ít nhất một khối"),
