@@ -309,7 +309,11 @@ export function renderBrief(input: BriefInput): string {
     const rest =
       otherLegacy > 0
         ? `\n\nCòn ${otherLegacy} phát biểu kế thừa khác chưa được đối chất, không liên quan trực tiếp ` +
-          `tới task này (xem \`.ganas/legacy/imported/\`).`
+          // Phải nêu CẢ HAI thư mục: claim `imported` được nạp từ `claims/` lẫn
+          // `legacy/imported/` (graph/load.ts) và không luật nào ép nó nằm ở
+          // đâu. Chỉ một chỗ là chỉ sai chỗ cho một nửa trường hợp — cùng loại
+          // lỗi với việc trỏ vào một lệnh không tồn tại, chỉ nhẹ hơn.
+          `tới task này (xem \`.ganas/claims/\` và \`.ganas/legacy/imported/\`).`
         : "";
 
     parts.push(

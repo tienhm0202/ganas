@@ -251,3 +251,65 @@ test("liên tục phạm vi KHÔNG thắng được việc đang dở", async ()
     await cleanup(root);
   }
 });
+
+/* --- Brief không được chỉ vào chỗ không có thật -------------------------- */
+
+/**
+ * `ganas adopt` từng được in vào brief MỌI phiên (`Xem toàn bộ:
+ * ganas adopt --audit`) trong khi lệnh đó chưa bao giờ tồn tại trong `cli.ts`.
+ * Agent làm theo hướng dẫn của chính công cụ sẽ nhận "không có lệnh".
+ *
+ * Hai test dưới khoá cả hai dạng của cùng một lỗi: trỏ vào LỆNH không có, và
+ * trỏ vào CHỖ không chứa thứ đang nói tới.
+ */
+async function withLegacyClaim(dir: string): Promise<string> {
+  return makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    [`.ganas/${dir}/cu.yaml`]: `- id: LC-001
+  scope: P-thu
+  statement: "Tài liệu cũ nói vậy"
+  anchors: ["CLAUDE.md#L12"]
+  provenance: imported
+`,
+  });
+}
+
+test("⭐ brief chỉ nhắc lệnh ganas CÓ THẬT trong cli.ts", async () => {
+  const root = await withLegacyClaim("claims");
+  try {
+    const brief = await briefOf(root);
+    const { readFile } = await import("node:fs/promises");
+    const cli = await readFile(new URL("../src/cli.ts", import.meta.url), "utf8");
+    const known = [...cli.matchAll(/^\s*([a-z-]+):\s*\(\)\s*=>\s*import\(/gm)].map((m) => m[1]!);
+
+    for (const [, name] of brief.matchAll(/`ganas ([a-z-]+)/g)) {
+      assert.ok(
+        known.includes(name!),
+        `brief nhắc \`ganas ${name}\` nhưng cli.ts không có lệnh đó — ` +
+          `công cụ chống ảo giác không được tự sinh ảo giác về chính nó`,
+      );
+    }
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ brief trỏ đúng chỗ chứa tri thức kế thừa, dù nó nằm ở thư mục nào", async () => {
+  // Claim `imported` nạp từ CẢ `claims/` lẫn `legacy/imported/`, và không luật
+  // nào ép nó nằm ở đâu — nên nêu một chỗ là chỉ sai chỗ cho một nửa trường hợp.
+  for (const dir of ["claims", "legacy/imported"]) {
+    const root = await withLegacyClaim(dir);
+    try {
+      const brief = await briefOf(root);
+      assert.match(brief, /phát biểu kế thừa khác/, `phải đếm được claim ở ${dir}`);
+      assert.match(brief, /`\.ganas\/claims\/`/);
+      assert.match(brief, /`\.ganas\/legacy\/imported\/`/);
+    } finally {
+      await cleanup(root);
+    }
+  }
+});
