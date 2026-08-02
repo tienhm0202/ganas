@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.tsbuildinfo
 coverage/
+
+# Plan/roadmap không thuộc git — chi tiết từng mốc đã nằm trong commit
+# message (xem git log). Không commit lại PLAN.md dù ở gốc repo hay docs/.
+PLAN.md
+docs/PLAN.md

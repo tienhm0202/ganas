@@ -52,8 +52,9 @@ thể, một chữ ký người cho quyết định.
 
 Lưu ý phạm vi: một số ý tưởng từng bàn trong quá trình phát triển ganas (ví
 dụ `ganas suggest`/RAG cục bộ) **chưa được xây** — tài liệu này chỉ mô tả
-những gì thực sự tồn tại trong source code hiện tại (tính tới N12 trong
-`PLAN.md`).
+những gì thực sự tồn tại trong source code hiện tại. Lịch sử quyết định
+thiết kế từng mốc nằm trong `git log` (commit message), không phải một file
+kế hoạch riêng — dự án không giữ plan trong git.
 
 ## 2. Xương sống (spine): Goal → Design → Task
 

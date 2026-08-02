@@ -31,5 +31,6 @@ file/commit/URL cụ thể, chữ ký người cho quyết định).
 - [CONTRIBUTING.md](CONTRIBUTING.md): Cho người/agent SỬA CODE ganas (khác
   ba file trên — dành cho người DÙNG ganas). Quy ước comment, `.strict()`,
   bảng tiền tố ID, luật `hint` bắt buộc, tooling, quy ước test.
-- [PLAN.md](PLAN.md): Roadmap phát triển ganas theo thời gian (N1–N13) —
-  lịch sử quyết định thiết kế, không phải tài liệu tham chiếu ổn định.
+
+Lịch sử quyết định thiết kế theo từng mốc phát triển nằm trong `git log`
+(commit message) — dự án cố ý không giữ file kế hoạch/roadmap trong git.

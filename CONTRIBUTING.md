@@ -1,8 +1,8 @@
 # Đóng góp code cho ganas
 
 Tài liệu này dành cho người (hoặc agent) sửa code trong repo `ganas` này.
-Không phải hướng dẫn dùng ganas trong dự án khác — cái đó ở `docs/` (chưa có,
-xem N13 trong `PLAN.md`).
+Không phải hướng dẫn dùng ganas trong dự án khác — cái đó ở `docs/`
+(`CONCEPTS.md`, `COMMANDS.md`, `WORKFLOW.md`).
 
 ## 1. Quy ước comment/docstring
 
