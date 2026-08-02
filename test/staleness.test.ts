@@ -141,13 +141,30 @@ test("file trong depends_on sửa sau lần verify → stale, nêu ĐÚNG file n
   const root = await factProject("test -f src/a.ts");
   try {
     await verifyFact(root, "F-A-001");
-    // Đẩy mtime lên tương lai để không phụ thuộc độ phân giải đồng hồ.
+    // Đổi NỘI DUNG thật, và đẩy mtime lên tương lai để không phụ thuộc độ phân
+    // giải đồng hồ của filesystem.
+    const file = join(root, "src", "a.ts");
+    await writeFile(file, "export const a = 2;\n", "utf8");
     const future = new Date(Date.now() + 60_000);
-    await utimes(join(root, "src", "a.ts"), future, future);
+    await utimes(file, future, future);
 
     const s = await stateOf(root, "F-A-001");
     assert.equal(s.freshness, "stale");
     assert.match(s.reason, /src\/a\.ts/, "phải chỉ đích danh file, không nói chung chung");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ đổi MỖI mtime mà không đổi nội dung thì KHÔNG stale", async () => {
+  const root = await factProject("test -f src/a.ts");
+  try {
+    await verifyFact(root, "F-A-001");
+    const future = new Date(Date.now() + 60_000);
+    await utimes(join(root, "src", "a.ts"), future, future);
+    // Trước P2 N24 độ cũ tính bằng mtime, nên chạm vào đồng hồ là đổi kết luận.
+    // Nay vân tay là NỘI DUNG: file không đổi thì bằng chứng vẫn còn nói đúng.
+    assert.equal((await stateOf(root, "F-A-001")).freshness, "fresh");
   } finally {
     await cleanup(root);
   }

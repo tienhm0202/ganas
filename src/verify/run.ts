@@ -7,6 +7,7 @@ import { parseDocument } from "yaml";
 import type { Graph, Sourced } from "../graph/types.js";
 import type { Fact, Module, Scope, Verification } from "../model/index.js";
 import { judge, runShell } from "../util/exec.js";
+import { listProjectFiles, matchesAny } from "../util/glob.js";
 import { AdapterError, readEvalResult } from "./adapters.js";
 import {
   appendEntry,
@@ -34,6 +35,15 @@ export interface Target {
   verification?: Verification | undefined;
   statement: string;
   context: string[];
+  /**
+   * Hết hạn theo thời gian. Tường minh trên Target chứ KHÔNG đọc ra từ
+   * `definition`: với fact thì `definition` là `f.verify` (một `zProbe`, không
+   * có `ttl_days`), còn `ttl_days` nằm ở cấp fact. Trước P2 N26 chỗ này đọc
+   * bằng `(definition as { ttl_days?: number })` — đúng chữ, sai cấp, nên luôn
+   * `undefined` và ttl của FACT chưa từng hoạt động. Ép kiểu `as` đã vô hiệu
+   * hoá đúng cái type checker lẽ ra phải bắt được.
+   */
+  ttlDays: number;
 }
 
 export interface RunOutcome {
@@ -72,6 +82,7 @@ export function factTarget(sourced: Sourced<Fact>): Target {
     fact: sourced,
     statement: f.statement,
     context: f.depends_on,
+    ttlDays: f.ttl_days,
   };
 }
 
@@ -85,6 +96,7 @@ export function moduleTargets(sourced: Sourced<Module>): Target[] {
     verification: v,
     statement: m.title,
     context: [...m.paths, ...m.entrypoints],
+    ttlDays: v.ttl_days,
   }));
 }
 
@@ -111,6 +123,7 @@ export function scopeTargets(sourced: Sourced<Scope>, graph: Graph): Target[] {
     verification: v,
     statement: s.title,
     context,
+    ttlDays: v.ttl_days,
   }));
 }
 
@@ -214,7 +227,12 @@ async function runProbe(target: Target, run: string, opts: RunOptions): Promise<
     return { target, result: "fail", reason: verdict.reason };
   }
 
-  if (opts.skipMutation) return { target, result: "pass", proof: "unproven" };
+  // KHÔNG gán `proof` khi bỏ qua bóp méo. Ba trạng thái phải phân biệt được:
+  //   proof vắng mặt  — chưa hề chạy mutation test (`--no-mutation`)
+  //   proof "unproven" — đã chạy, nhưng ganas không nhận ra dạng để bóp méo
+  //   proof "proven"   — đã chạy, và bản bóp méo thật sự fail
+  // Gộp hai cái đầu làm một thì `--no-mutation` trông y hệt một lần chạy đủ.
+  if (opts.skipMutation) return { target, result: "pass" };
 
   // Probe pass rồi mới bóp méo: pass mà bản bóp méo cũng pass thì "pass" vô nghĩa.
   const proof = await proveCanFail(run, expect, { cwd: opts.root });
@@ -296,15 +314,32 @@ async function runEval(target: Target, run: string, opts: RunOptions): Promise<R
  * Ghi sổ cái và ghi ngược YAML
  * ------------------------------------------------------------------------- */
 
+/**
+ * Vân tay nội dung của mọi file khớp `context`. `undefined` khi target không
+ * khai glob nào — không có gì để theo dõi thì đừng ghi một hash rỗng, vì hash
+ * rỗng trông y hệt "đã kiểm và không có file nào".
+ */
+export async function depsHash(context: string[], root: string): Promise<string | undefined> {
+  const globs = context.filter((c) => c.includes("*") || c.includes("/"));
+  if (globs.length === 0) return undefined;
+  const files = (await listProjectFiles(root)).filter((p) => matchesAny(p, globs)).sort();
+  const parts: string[] = [];
+  for (const rel of files) parts.push(`${rel}:${await fileHash(join(root, rel))}`);
+  return sha256(parts.join("\n"));
+}
+
 async function record(target: Target, outcome: RunOutcome, opts: RunOptions): Promise<LedgerEntry> {
   const ctx = await runContext(opts.root, opts.by);
   const v = target.verification;
 
+  const depsFingerprint = await depsHash(target.context, opts.root);
   const entry: LedgerEntry = {
     target: target.id,
     kind: target.kind,
     at: new Date().toISOString(),
-    def: defHash(target.definition),
+    def: defHash(target.definition, target.statement),
+    ...(depsFingerprint === undefined ? {} : { deps: depsFingerprint }),
+    ...(outcome.proof === "proven" || outcome.proof === "unproven" ? { proof: outcome.proof } : {}),
     result: outcome.result,
     ...ctx,
   };

@@ -4,9 +4,9 @@ import { join } from "node:path";
 import type { ExitCriterion } from "../model/index.js";
 import { evalWeakness, formatAnchor, freshnessOf } from "../model/index.js";
 import { lineOfPath } from "../util/yaml.js";
-import { defHash, entryAt } from "../verify/ledger.js";
+import { defHash, entryAt, LEDGER_FILE, ledgerCorruption } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
-import { LOCAL_ONLY } from "./paths.js";
+import { GANAS_DIR, LOCAL_ONLY } from "./paths.js";
 import type { Diagnostic, Graph, Sourced } from "./types.js";
 
 /**
@@ -570,15 +570,19 @@ export function validateGraph(graph: Graph): Diagnostic[] {
             `Chỉ \`ganas verify ${f.id}\` mới được đặt trường này. Xoá \`last_verified_at\` ` +
             `và \`last_result\` rồi chạy verify thật.`,
         });
-      } else if (entry.def !== defHash(f.verify)) {
-        // Verify bằng probe thật rồi thay ruột. Không có luật này thì sổ cái chỉ
-        // chặn được cửa trước, cửa sau vẫn mở toang.
+      } else if (entry.def !== defHash(f.verify, f.statement)) {
+        // Verify bằng probe thật rồi thay ruột (hoặc đổi `statement` mà giữ
+        // probe). Không có luật này thì sổ cái chỉ chặn được cửa trước.
+        //
+        // `error` chứ không phải `warning`: đây là điều kiện để CI ĐỎ được. Hook
+        // fail-open và `.ganas/config.yaml` sửa được, nên cổng thật của mô hình
+        // này là CI chạy `ganas validate` — mà cổng chỉ đóng khi có `error`.
         diags.push({
-          severity: "warning",
+          severity: "error",
           code: "knowledge/definition-changed",
           message:
-            `fact ${f.id}: probe đã bị sửa sau lần verify lúc ${f.last_verified_at} — ` +
-            `kết quả cũ đo một phép kiểm khác, không còn nói về probe hiện tại`,
+            `fact ${f.id}: định nghĩa hoặc phát biểu đã đổi sau lần verify lúc ` +
+            `${f.last_verified_at} — kết quả cũ đo một thứ khác, không còn nói về fact hiện tại`,
           file: fact.file,
           line: at(graph, fact, "verify", "run"),
           hint: `Chạy lại: ganas verify ${f.id}`,
@@ -666,6 +670,24 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         hint: `Đây là một hiểu nhầm đã tồn tại trong dự án. Giữ lại để phiên sau không tin lại.`,
       });
     }
+  }
+
+  /* --- Sổ cái hỏng ------------------------------------------------------ */
+
+  const corrupt = ledgerCorruption(graph.root);
+  if (corrupt > 0) {
+    diags.push({
+      severity: "error",
+      code: "knowledge/ledger-corrupt",
+      message:
+        `${corrupt} dòng trong ${LEDGER_FILE} không đọc được — sổ cái là gốc tin cậy ` +
+        `của mọi kết luận "đã kiểm chứng"`,
+      file: `${GANAS_DIR}/${LEDGER_FILE}`,
+      hint:
+        `Dòng hỏng bị bỏ qua khi tính độ tươi, nên fact dựa vào chúng âm thầm quay ` +
+        `lại "chưa verify". Xem git history của file này: một dòng rách có thể là ` +
+        `lỗi ghi, cũng có thể là dấu vết ai đó sửa lịch sử.`,
+    });
   }
 
   /* --- .gitignore: local-only phải được loại trừ ----------------------- */

@@ -1,58 +1,13 @@
-import { readdir, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 
 import type { Fact, Freshness } from "../model/index.js";
-import { runShell } from "../util/exec.js";
-import { matchesAny } from "../util/glob.js";
+import { listProjectFiles, matchesAny } from "../util/glob.js";
 import { defHash, fileHash, historyFor, lastFor, type LedgerEntry } from "../verify/ledger.js";
-import { allTargets, type Target } from "../verify/run.js";
+import { allTargets, depsHash, type Target } from "../verify/run.js";
 import type { Graph } from "./types.js";
 
 /** Thư mục bỏ qua khi không có git — không phải mã nguồn dự án. */
-const SKIP_DIRS = new Set([
-  ".git",
-  "node_modules",
-  "dist",
-  "build",
-  "out",
-  "target",
-  "vendor",
-  ".next",
-  ".venv",
-  "__pycache__",
-  ".ganas",
-]);
-
-/** Danh sách file của dự án. Ưu tiên git: nhanh và tôn trọng .gitignore. */
-async function listProjectFiles(root: string): Promise<string[]> {
-  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
-    cwd: root,
-    timeoutMs: 20_000,
-  });
-  if (git.code === 0 && git.stdout.length > 0) {
-    return git.stdout.split("\0").filter(Boolean);
-  }
-  return walk(root, root, []);
-}
-
-async function walk(root: string, dir: string, acc: string[]): Promise<string[]> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return acc;
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      await walk(root, full, acc);
-    } else if (entry.isFile()) {
-      acc.push(relative(root, full).split(sep).join("/"));
-    }
-  }
-  return acc;
-}
 
 /* ------------------------------------------------------------------------- *
  * Trạng thái của một bằng chứng
@@ -96,9 +51,11 @@ function decide(args: {
   ttlDays: number;
   depsChangedAt?: number | undefined;
   changedFile?: string | undefined;
+  /** Vân tay nội dung file phụ thuộc HIỆN TẠI (undefined = target không khai glob). */
+  depsNow?: string | undefined;
   now: number;
 }): { freshness: Freshness; reason: string; action?: string } {
-  const { entry, currentDef, current, ttlDays, depsChangedAt, changedFile, now } = args;
+  const { entry, currentDef, current, ttlDays, depsChangedAt, changedFile, depsNow, now } = args;
 
   if (!entry) {
     return {
@@ -181,7 +138,21 @@ function decide(args: {
 
   const verifiedAt = Date.parse(entry.at);
 
-  if (depsChangedAt !== undefined && depsChangedAt > verifiedAt) {
+  // Ưu tiên vân tay NỘI DUNG: `mtime` lùi được bằng `touch -d`, hash thì không.
+  // Chỉ rơi về so mtime với bản ghi cũ (trước P2 N24) chưa có trường `deps`.
+  if (entry.deps !== undefined && depsNow !== undefined) {
+    if (entry.deps !== depsNow) {
+      // `changedFile` suy từ mtime chỉ dùng để GỌI TÊN file, không để quyết
+      // định stale. Ai lùi mtime bằng `touch` thì mất tên file nhưng vẫn stale.
+      return {
+        freshness: "stale",
+        reason: changedFile
+          ? `\`${changedFile}\` đã đổi sau lần verify gần nhất`
+          : "nội dung file phụ thuộc đã đổi sau lần verify gần nhất",
+        action: "chạy lại `ganas verify`",
+      };
+    }
+  } else if (depsChangedAt !== undefined && depsChangedAt > verifiedAt) {
     return {
       freshness: "stale",
       reason: changedFile
@@ -253,9 +224,10 @@ export async function computeFreshness(
 
     const decision = decide({
       entry,
-      currentDef: defHash(target.definition),
+      depsNow: await depsHash(target.context, graph.root),
+      currentDef: defHash(target.definition, target.statement),
       current: await currentFingerprint(target, graph.root),
-      ttlDays: (target.definition as { ttl_days?: number }).ttl_days ?? 0,
+      ttlDays: target.ttlDays,
       depsChangedAt,
       changedFile,
       now,

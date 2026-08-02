@@ -1,3 +1,8 @@
+import { readdir } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
+
+import { runShell } from "./exec.js";
+
 /**
  * Matcher glob tối giản — đủ cho `depends_on` và `zone.paths`, không kéo thêm
  * phụ thuộc (hook gọi CLI liên tục nên mỗi module nạp thêm đều tính vào latency).
@@ -103,4 +108,55 @@ export function matchesAny(path: string, patterns: readonly string[]): boolean {
     if (regexes.some((re) => re.test(normalized))) return true;
   }
   return false;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Liệt kê file dự án — dùng chung cho freshness (so độ cũ) và verify (vân tay
+ * nội dung ghi vào sổ cái). Đặt ở util để `verify/run.ts` dùng được mà không
+ * tạo vòng import với `graph/freshness.ts`.
+ * ------------------------------------------------------------------------- */
+
+const SKIP_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "target",
+  "vendor",
+  ".next",
+  ".venv",
+  "__pycache__",
+  ".ganas",
+]);
+
+/** Danh sách file của dự án. Ưu tiên git: nhanh và tôn trọng .gitignore. */
+export async function listProjectFiles(root: string): Promise<string[]> {
+  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
+    cwd: root,
+    timeoutMs: 20_000,
+  });
+  if (git.code === 0 && git.stdout.length > 0) {
+    return git.stdout.split("\0").filter(Boolean);
+  }
+  return walk(root, root, []);
+}
+
+async function walk(root: string, dir: string, acc: string[]): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return acc;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      await walk(root, full, acc);
+    } else if (entry.isFile()) {
+      acc.push(relative(root, full).split(sep).join("/"));
+    }
+  }
+  return acc;
 }

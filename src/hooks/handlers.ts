@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { evaluateGate } from "../gate.js";
 import { computeFreshness } from "../graph/freshness.js";
 import { loadGraph } from "../graph/load.js";
-import { findGanasRoot, GANAS_DIR } from "../graph/paths.js";
+import { CONFIG_FILE, findGanasRoot, GANAS_DIR, ganasPath } from "../graph/paths.js";
 import { selectNextTask } from "../graph/select.js";
 import type { Diagnostic } from "../graph/types.js";
 import { validateGraph } from "../graph/validate.js";
@@ -120,6 +120,13 @@ const LEDGER_REASON =
   `đừng ghi kết quả bằng tay. Nếu probe đang fail thì đó là thông tin cần giữ, không phải ` +
   `thứ cần che đi.`;
 
+const CONFIG_REASON =
+  `\`.ganas/${CONFIG_FILE}\` giữ mức cưỡng chế của cả dự án. Ghi \`enforcement: warn\` ` +
+  `vào đó là tự tắt mọi hàng rào trong đúng phiên đang bị hàng rào chặn — vòng lặp ` +
+  `mà không luật nào bên trong ganas phá được.\n\n` +
+  `Mức cưỡng chế là quyết định của NGƯỜI, sửa ngoài phiên agent. Nếu một luật đang ` +
+  `chặn sai thì nêu ra để người xử lý, đừng hạ luật xuống.`;
+
 const SKILL_DIR = `.claude/skills/`;
 
 const SKILL_WRITE_REASON =
@@ -146,6 +153,7 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
     if (typeof raw === "string") {
       const abs = isAbsolute(raw) ? raw : resolve(cwd, raw);
       if (abs === ledgerPath(root)) return denyPreTool(LEDGER_REASON);
+      if (abs === ganasPath(root, CONFIG_FILE)) return denyPreTool(CONFIG_REASON);
 
       if (input.agent_id) {
         const rel = relative(root, abs).split("\\").join("/");
@@ -158,11 +166,10 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
   // Bash đi vòng qua được kiểm tra file_path ở trên: `echo … >> verify-ledger.jsonl`.
   if (input.tool_name === "Bash" || input.tool_name === "PowerShell") {
     const command = input.tool_input?.["command"];
-    if (typeof command === "string" && command.includes(LEDGER_FILE)) {
+    if (typeof command === "string" && SHELL_WRITE_HINTS.some((h) => command.includes(h))) {
       // Đọc thì cho — chỉ chặn khi có dấu hiệu ghi đè.
-      if (SHELL_WRITE_HINTS.some((hint) => command.includes(hint))) {
-        return denyPreTool(LEDGER_REASON);
-      }
+      if (command.includes(LEDGER_FILE)) return denyPreTool(LEDGER_REASON);
+      if (command.includes(`${GANAS_DIR}/${CONFIG_FILE}`)) return denyPreTool(CONFIG_REASON);
     }
   }
 

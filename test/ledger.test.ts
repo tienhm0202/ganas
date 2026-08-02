@@ -8,6 +8,7 @@ import { validateGraph } from "../src/graph/validate.js";
 import * as handlers from "../src/hooks/handlers.js";
 import {
   appendEntry,
+  defHash,
   definitionHash,
   entryAt,
   historyFor,
@@ -20,12 +21,13 @@ import {
 import { cleanup, goal, makeProject } from "./helpers.js";
 
 const PROBE = { run: "test -f src/a.ts", expect: "exit_zero" as const };
+const STATEMENT = "file a.ts tồn tại";
 const VERIFIED_AT = "2025-06-01T00:00:00.000Z";
 
 function factYaml(over: { at?: string; result?: string } = {}): string {
   return `- id: F-A-001
   scope: P-thu
-  statement: "file a.ts tồn tại"
+  statement: "${STATEMENT}"
   verify:
     run: "test -f src/a.ts"
   last_verified_at: ${over.at ?? VERIFIED_AT}
@@ -38,7 +40,7 @@ function entry(over: Partial<LedgerEntry> = {}): LedgerEntry {
     target: "F-A-001",
     kind: "probe",
     at: VERIFIED_AT,
-    def: definitionHash(PROBE),
+    def: defHash(PROBE, STATEMENT),
     result: "pass",
     by: "session:test",
     ...over,

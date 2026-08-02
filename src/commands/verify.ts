@@ -2,7 +2,7 @@ import type { Graph } from "../graph/types.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import type { LedgerResult } from "../verify/ledger.js";
-import { defHash, lastFor } from "../verify/ledger.js";
+import { lastFor } from "../verify/ledger.js";
 import {
   allTargets,
   type RunOutcome,
@@ -31,16 +31,34 @@ const LABEL: Record<LedgerResult, string> = {
 /**
  * Target có cần chạy lại không.
  *
- * Bản N4 mới dựa vào sổ cái (chưa chạy bao giờ / định nghĩa đã đổi / lần trước
- * chưa đạt). N5 sẽ bổ sung: file phụ thuộc đã đổi, model / prompt / dataset đã đổi.
+ * Dùng ĐÚNG `computeFreshness` mà brief dùng, không tự tính lại một nửa. Trước
+ * P2 N24 hàm này chỉ soi sổ cái (chưa chạy / định nghĩa đổi / lần trước trượt)
+ * và bỏ qua hoàn toàn file phụ thuộc — comment cũ ghi "N5 sẽ bổ sung" rồi không
+ * ai làm. Hậu quả: sửa code xong, brief báo "CẦN VERIFY LẠI" trong khi
+ * `ganas verify` báo "không có gì cần chạy". Hai đầu ra mâu thuẫn từ cùng một
+ * công cụ là cách nhanh nhất để người dùng thôi tin cả hai.
  */
-function needsRun(target: Target, graph: Graph): string | null {
+export function needsRunFor(
+  target: Target,
+  graph: Graph,
+  freshness: Map<string, { freshness: string; reason: string }>,
+): string | null {
+  const state = freshness.get(target.id);
+  if (state && state.freshness !== "fresh") return state.reason;
+
   const last = lastFor(graph.ledger, target.id);
   if (!last) return "chưa chạy lần nào";
-  if (last.def !== defHash(target.definition)) return "định nghĩa đã đổi từ lần chạy trước";
-  if (last.result !== "pass") return `lần trước: ${LABEL[last.result]}`;
 
-  const ttl = (target.definition as { ttl_days?: number }).ttl_days ?? 0;
+  // `pass` mà KHÔNG có `proof` = lần trước chạy với `--no-mutation`. Trước P2
+  // N22 dòng đó không phân biệt được với dòng đã qua bóp méo, nên một probe
+  // rỗng ruột chạy tắt một lần là `pass` VĨNH VIỄN — `needsRun` thấy pass là
+  // bỏ qua mãi mãi. Chỉ chạy lại đúng những lần đã bỏ qua bóp méo, không phạt
+  // các probe mà ganas không nhận ra dạng để bóp méo (`proof: "unproven"`).
+  if (target.kind === "probe" && last.proof === undefined) {
+    return "lần trước bỏ qua mutation test — chưa chứng minh được probe có thể fail";
+  }
+
+  const ttl = target.ttlDays;
   if (ttl > 0 && Date.now() - Date.parse(last.at) > ttl * 86_400_000) {
     return `quá hạn ${ttl} ngày`;
   }
@@ -71,7 +89,7 @@ function matches(target: Target, wanted: string): boolean {
 }
 
 export async function run(argv: Argv): Promise<number> {
-  const { root, graph } = await openProject(argv);
+  const { root, graph, freshness } = await openProject(argv);
 
   const wanted = argv.positional;
   const tier = option(argv, "tier") ?? "smoke";
@@ -117,7 +135,7 @@ export async function run(argv: Argv): Promise<number> {
       .filter(
         (t) => tier === "all" || tierOf(t) === tier || (tier === "full" && tierOf(t) === "smoke"),
       )
-      .map((target) => ({ target, why: needsRun(target, graph) ?? "" }))
+      .map((target) => ({ target, why: needsRunFor(target, graph, freshness) ?? "" }))
       .filter((s) => wantAll || s.why !== "")
       .map((s) => ({ target: s.target, why: s.why || "chạy lại theo yêu cầu" }));
   }

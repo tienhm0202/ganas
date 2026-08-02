@@ -19,6 +19,13 @@ export interface ContractEdge {
   to: string;
   verificationId: string;
   verification: ContractVerification;
+  /**
+   * Tiêu đề khối nguồn — chính là `statement` mà `moduleTargets()` gán cho cùng
+   * target này. Phải khớp, nếu không vân tay ghi bởi `trace` sẽ khác vân tay mà
+   * `computeFreshness` tính ra, và mọi cạnh contract vừa chạy xong đã bị coi là
+   * `definition_changed`.
+   */
+  statement: string;
 }
 
 export interface PortIssue {
@@ -39,7 +46,13 @@ export function contractEdges(graph: Graph): ContractEdge[] {
   for (const [id, sourced] of graph.modules) {
     for (const v of sourced.value.verify) {
       if (v.kind === "contract") {
-        out.push({ from: id, to: v.to, verificationId: v.id, verification: v });
+        out.push({
+          from: id,
+          to: v.to,
+          verificationId: v.id,
+          verification: v,
+          statement: sourced.value.title,
+        });
       }
     }
   }
@@ -152,7 +165,7 @@ export async function recordEdgeChecks(
       target: `${check.edge.from}/${check.edge.verificationId}`,
       kind: "contract",
       at: new Date().toISOString(),
-      def: defHash(check.edge.verification),
+      def: defHash(check.edge.verification, check.edge.statement),
       result: check.result,
       output: check.reason ? sha256(check.reason) : undefined,
       ...ctx,
