@@ -39,13 +39,18 @@ bằng tay.`;
  */
 const BRIEF_LENGTH_WARNING_CHARS = 14_000;
 
-/** Legacy claim liên quan tới task: anchor trỏ vào file mà task phải đọc. */
+/**
+ * Legacy claim liên quan tới task: cùng phạm vi VÀ anchor trỏ vào file mà task
+ * phải đọc. Lọc phạm vi trước — một hiểu nhầm cũ về vùng code khác không phải
+ * thứ phiên này cần cân nhắc.
+ */
 export function relevantLegacyClaims(graph: Graph, task: Task): Claim[] {
   const paths = new Set(task.context_contract.must_read.map((m) => m.path));
   const out: Claim[] = [];
   for (const sourced of graph.claims.values()) {
     const c = sourced.value;
     if (c.provenance !== "imported" || c.trust !== "unverified") continue;
+    if (c.scope !== task.scope) continue;
     const touches = c.anchors.some((a) => a.kind === "file" && paths.has(a.path));
     if (touches) out.push(c);
   }
@@ -89,6 +94,46 @@ export function renderBrief(input: BriefInput): string {
 
   /* --- Mục tiêu -------------------------------------------------------- */
 
+  /* --- Phạm vi công việc: ranh giới của cả việc lẫn tri thức -------------- */
+
+  const scope = graph.scopes.get(t.scope);
+  if (!scope) {
+    parts.push(
+      `## Phạm vi công việc\n\n` +
+        `⚠ Task khai \`scope: ${t.scope}\` nhưng phạm vi đó **KHÔNG TỒN TẠI** ` +
+        `(graph đang hỏng, chạy \`ganas validate\`).`,
+    );
+  } else {
+    const sc = scope.value;
+    const members = sc.modules.map((id) => {
+      const mod = graph.modules.get(id)?.value;
+      const where = mod ? [...mod.paths, ...mod.entrypoints] : [];
+      return (
+        `\`${id}\`${mod ? ` — ${mod.title}` : " — ⚠ KHÔNG TÌM THẤY"}` +
+        (where.length ? `\n  ${where.map((p) => `\`${p}\``).join(", ")}` : "")
+      );
+    });
+
+    const acceptance = sc.acceptance.map((a) => {
+      const info = freshness.get(`${sc.id}/${a.id}`);
+      const state = info ? `${info.freshness} — ${info.reason}` : "chưa tính được độ tươi";
+      return `\`${a.id}\` (${a.kind}) — ${state}`;
+    });
+
+    parts.push(
+      `## Phạm vi công việc\n\n` +
+        `### ${sc.id} — ${sc.title}\n\n` +
+        `phiên bản \`${sc.version}\` · trạng thái \`${sc.status}\`` +
+        (sc.owner ? ` · nghiệm thu: ${sc.owner}` : " · ⚠ chưa ai ký nghiệm thu") +
+        `\n\n**Ranh giới code:**\n${bullet(members)}` +
+        (acceptance.length
+          ? `\n\n**Nghiệm thu luồng ghép:**\n${bullet(acceptance)}`
+          : `\n\n⚠ Phạm vi này chưa có tiêu chí nghiệm thu nào — "bàn giao xong" sẽ là ý kiến.`) +
+        `\n\n> Mọi phát biểu bên dưới chỉ được coi là đúng **trong phạm vi này**.\n` +
+        `> Ra ngoài là **chưa biết** — không phải sai, mà là chưa ai kiểm.`,
+    );
+  }
+
   const goalBlocks: string[] = [];
   for (const goalId of t.serves) {
     const goal = graph.goals.get(goalId)?.value;
@@ -112,17 +157,40 @@ export function renderBrief(input: BriefInput): string {
   /* --- Design ---------------------------------------------------------- */
 
   if (design) {
-    const decisions = design.value.decisions
-      .map((id) => graph.decisions.get(id)?.value)
-      .filter((d): d is NonNullable<typeof d> => Boolean(d))
-      .map((d) => `${d.id} — ${d.statement} *(${d.decided_by}, ${d.decided_at.slice(0, 10)})*`);
-
     parts.push(
       `## Design đang hiện thực\n\n` +
-        `### ${design.value.id} — ${design.value.title}\n\n${design.value.summary}` +
-        (decisions.length
-          ? `\n\n**Quyết định đã chốt — không được đi ngược:**\n${bullet(decisions)}`
-          : ""),
+        `### ${design.value.id} — ${design.value.title}\n\n${design.value.summary}`,
+    );
+  }
+
+  /* --- Quyết định đã chốt ------------------------------------------------ *
+   * Hai đường vào, hợp lại: design dẫn tường minh, VÀ mọi decision áp cho
+   * phạm vi này (kể cả decision không scope — thiếu scope = áp toàn dự án).
+   * Trước N15 chỉ có đường qua `design.decisions`, nên một ràng buộc người đã
+   * chốt mà design quên dẫn thì không bao giờ tới được phiên làm việc. */
+
+  const decisionIds = new Set(design?.value.decisions ?? []);
+  for (const sourced of graph.decisions.values()) {
+    const d = sourced.value;
+    if (d.scope === undefined || d.scope === t.scope) decisionIds.add(d.id);
+  }
+
+  const decisions = [...decisionIds]
+    .sort((a, b) => a.localeCompare(b))
+    .map((id) => graph.decisions.get(id)?.value)
+    .filter((d): d is NonNullable<typeof d> => Boolean(d))
+    .map(
+      (d) =>
+        `\`${d.id}\` — ${d.statement} *(${d.decided_by}, ${d.decided_at.slice(0, 10)}` +
+        `${d.scope === undefined ? ", toàn dự án" : ""})*`,
+    );
+
+  if (decisions.length > 0) {
+    parts.push(
+      `## Quyết định đã chốt — không được đi ngược\n\n` +
+        `Người đã quyết. Model không được tạo, không được sửa — chỉ tuân theo, ` +
+        `hoặc nêu mâu thuẫn để người xử lý.\n\n` +
+        bullet(decisions),
     );
   }
 
@@ -157,6 +225,7 @@ export function renderBrief(input: BriefInput): string {
 
   const usable: string[] = [];
   const needsRecheck: string[] = [];
+  const outOfScope: string[] = [];
 
   for (const factId of t.context_contract.facts) {
     const info = freshness.get(factId);
@@ -168,6 +237,19 @@ export function renderBrief(input: BriefInput): string {
     if (!f) continue;
 
     const anchors = f.anchors.length ? `  nguồn: ${f.anchors.map(formatAnchor).join(", ")}\n` : "";
+
+    // Phạm vi xét TRƯỚC độ tươi: một fact tươi nhưng thuộc phạm vi khác vẫn
+    // không nói gì về vùng đang làm. Nhưng nó KHÔNG bị giấu — đổi "ảo giác"
+    // lấy "quên" là cùng một tổn thất, chỉ khó phát hiện hơn.
+    if (f.scope !== t.scope) {
+      outOfScope.push(
+        `\`${f.id}\` — ${f.statement}\n${anchors}` +
+          `  LÝ DO: phạm vi \`${f.scope}\` ≠ \`${t.scope}\` — chưa chắc đúng ở đây` +
+          (info.freshness === "fresh" ? "" : ` (và: ${info.reason})`) +
+          `\n  kiểm lại trong phạm vi này rồi hãy dựa vào: \`ganas verify ${f.id}\``,
+      );
+      continue;
+    }
 
     if (info.freshness === "fresh") {
       usable.push(`\`${f.id}\` — ${f.statement}\n${anchors}  ${info.reason}`);
@@ -198,6 +280,16 @@ export function renderBrief(input: BriefInput): string {
         `Những điều dưới đây **không** được coi là sự thật cho tới khi chạy lại probe.\n` +
         `Nếu công việc phụ thuộc vào chúng, verify trước rồi hãy sửa code.\n\n` +
         bullet(needsRecheck),
+    );
+  }
+
+  if (outOfScope.length > 0) {
+    parts.push(
+      `## ⚠ NGOÀI PHẠM VI — CHƯA CHẮC ĐÚNG Ở ĐÂY\n\n` +
+        `Những điều dưới đây đã được kiểm chứng, nhưng **trong một phạm vi khác**.\n` +
+        `Chúng không sai — chỉ là chưa ai kiểm rằng chúng còn đúng trong \`${t.scope}\`.\n` +
+        `Đừng dựa vào chúng như sự thật ở đây; muốn dùng thì kiểm lại trong phạm vi này.\n\n` +
+        bullet(outOfScope),
     );
   }
 

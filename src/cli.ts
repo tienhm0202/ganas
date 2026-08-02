@@ -35,8 +35,8 @@ Lệnh:
   next                 Chọn task kế tiếp và in brief đầy đủ
   brief [task]         In brief của một task
   gate [task]          Chấm điều kiện hoàn thành của task
-  verify [target...]   Chạy bằng chứng: probe và eval, ghi sổ cái
-  trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng
+  verify [target...]   Chạy bằng chứng: probe và eval, ghi sổ cái (--scope lọc theo phạm vi)
+  trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng (--scope)
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng
   handoff --session id Ghi bản ghi tiếp nối của phiên, dẫn xuất từ transcript
   prune                Dọn ephemeral cũ, archive task done (mặc định dry-run)

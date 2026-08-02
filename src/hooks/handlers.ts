@@ -43,8 +43,12 @@ export async function sessionStart(input: HookInput): Promise<HookOutput> {
   const bound = sessionId ? await taskForSession(root, sessionId) : null;
   const existing = bound ? graph.tasks.get(bound) : undefined;
 
+  // Phải chọn task mới thì ở lại phạm vi cũ nếu còn việc: brief của phạm vi đó
+  // đã nạp rồi, nhảy sang phạm vi khác là dựng lại ngữ cảnh từ đầu.
   const picked =
-    existing && existing.value.status !== "done" ? { task: existing } : selectNextTask(graph);
+    existing && existing.value.status !== "done"
+      ? { task: existing }
+      : selectNextTask(graph, { preferScope: existing?.value.scope });
 
   if (!picked) {
     return {

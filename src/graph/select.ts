@@ -21,13 +21,23 @@ export function candidates(graph: Graph): Candidate[] {
     .map((task) => ({ task, blockers: openBlockers(graph, task.value) }));
 }
 
+export interface SelectOptions {
+  /**
+   * Phạm vi mà phiên trước đang làm. Task cùng phạm vi được ưu tiên — brief đã
+   * nạp ranh giới code, fact và quyết định của phạm vi đó, nên ở lại là tái
+   * dùng được toàn bộ; nhảy sang phạm vi khác là dựng lại ngữ cảnh từ đầu.
+   */
+  preferScope?: string | undefined;
+}
+
 /**
  * Chọn task kế tiếp.
  *
  * Thứ tự ưu tiên có chủ đích: task đang dở trước, để một phiên mới nối tiếp
  * việc dở thay vì mở mặt trận mới — đó là nguồn gốc của việc bỏ dở nửa chừng.
+ * Kế đó là liên tục phạm vi, vì cùng lý do ở quy mô lớn hơn một task.
  */
-export function selectNextTask(graph: Graph): Candidate | null {
+export function selectNextTask(graph: Graph, opts: SelectOptions = {}): Candidate | null {
   const open = candidates(graph).filter((c) => c.blockers.length === 0);
   if (open.length === 0) return null;
 
@@ -38,6 +48,7 @@ export function selectNextTask(graph: Graph): Candidate | null {
     if (t.status === "in_progress") score -= 1000; // việc dở luôn đứng trước
     if (scope?.status === "active") score -= 100;
     if (scope?.status === "delivered") score += 100; // phạm vi đã bàn giao thì để sau
+    if (opts.preferScope !== undefined && t.scope === opts.preferScope) score -= 50;
     if (t.estimated_context === "small") score -= 1;
     return score;
   };

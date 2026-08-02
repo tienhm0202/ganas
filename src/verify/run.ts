@@ -114,6 +114,18 @@ export function scopeTargets(sourced: Sourced<Scope>, graph: Graph): Target[] {
   }));
 }
 
+/**
+ * Phạm vi mà một target thuộc về. `undefined` = không xác định được (khối chưa
+ * gán phạm vi) — khi lọc thì coi như KHÔNG khớp, để `--scope` không âm thầm
+ * kéo theo thứ nằm ngoài ranh giới người dùng vừa nêu.
+ */
+export function scopeOfTarget(target: Target, graph: Graph): string | undefined {
+  if (target.fact) return target.fact.value.scope;
+  const owner = target.id.split("/")[0]!;
+  if (graph.scopes.has(owner)) return owner;
+  return graph.modules.get(owner)?.value.scope;
+}
+
 export function allTargets(graph: Graph): Target[] {
   return [
     ...[...graph.facts.values()].map(factTarget),

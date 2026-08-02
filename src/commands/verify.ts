@@ -3,7 +3,13 @@ import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import type { LedgerResult } from "../verify/ledger.js";
 import { defHash, lastFor } from "../verify/ledger.js";
-import { allTargets, type RunOutcome, runTarget, type Target } from "../verify/run.js";
+import {
+  allTargets,
+  type RunOutcome,
+  runTarget,
+  scopeOfTarget,
+  type Target,
+} from "../verify/run.js";
 import { openProject } from "./_common.js";
 
 const MARK: Record<LedgerResult, string> = {
@@ -75,11 +81,20 @@ export async function run(argv: Argv): Promise<number> {
   const budget = maxCost === undefined ? Infinity : Number(maxCost);
   if (Number.isNaN(budget)) throw new GanasError(`--max-cost-usd không phải số: ${maxCost}`);
 
-  const all = allTargets(graph);
+  const scopeFilter = option(argv, "scope");
+  if (scopeFilter !== undefined && !graph.scopes.has(scopeFilter)) {
+    throw new GanasError(`không có phạm vi nào tên "${scopeFilter}" — xem \`ganas validate\``);
+  }
+
+  const all = allTargets(graph).filter(
+    (t) => scopeFilter === undefined || scopeOfTarget(t, graph) === scopeFilter,
+  );
   if (all.length === 0) {
     process.stdout.write(
-      `Chưa có gì để verify.\n\n` +
-        `Thêm \`verify:\` vào khối trong .ganas/modules/, hoặc fact trong .ganas/facts/.\n`,
+      scopeFilter !== undefined
+        ? `Phạm vi ${scopeFilter} chưa có bằng chứng nào để verify.\n`
+        : `Chưa có gì để verify.\n\n` +
+            `Thêm \`verify:\` vào khối trong .ganas/modules/, hoặc fact trong .ganas/facts/.\n`,
     );
     return 0;
   }

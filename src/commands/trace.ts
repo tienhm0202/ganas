@@ -6,6 +6,7 @@ import {
   renderDiagram,
 } from "../graph/trace.js";
 import { type Argv, flag, option } from "../util/args.js";
+import { GanasError } from "../util/errors.js";
 import type { LedgerResult } from "../verify/ledger.js";
 import { openProject } from "./_common.js";
 
@@ -26,14 +27,31 @@ function edgeLine(check: EdgeCheck): string {
 export async function run(argv: Argv): Promise<number> {
   const { root, graph } = await openProject(argv);
 
-  const checks = await checkAllEdges(graph, root);
+  const scopeFilter = option(argv, "scope");
+  if (scopeFilter !== undefined && !graph.scopes.has(scopeFilter)) {
+    throw new GanasError(`không có phạm vi nào tên "${scopeFilter}" — xem \`ganas validate\``);
+  }
+  // Cạnh chỉ thuộc phạm vi khi CẢ HAI đầu nằm trong đó: một cạnh bắc qua ranh
+  // giới là việc của người nhìn toàn cảnh, không phải của người đang làm trong
+  // một phạm vi — và bỏ sót nó ở đây an toàn hơn là gán nhầm nó cho một bên.
+  const inScope = (moduleId: string): boolean =>
+    scopeFilter === undefined || graph.modules.get(moduleId)?.value.scope === scopeFilter;
+
+  const checks = (await checkAllEdges(graph, root)).filter(
+    (c) => inScope(c.edge.from) && inScope(c.edge.to),
+  );
   const dryRun = flag(argv, "dry-run");
   if (!dryRun) {
     const by = option(argv, "session") ? `session:${option(argv, "session")}` : "cli";
     await recordEdgeChecks(graph, checks, { root, by });
   }
 
-  const debt = computeDebt(graph, checks);
+  const debt = computeDebt(graph, checks).filter(
+    (d) =>
+      scopeFilter === undefined ||
+      ((d.moduleId !== undefined ? inScope(d.moduleId) : true) &&
+        (d.edge === undefined || (inScope(d.edge.from) && inScope(d.edge.to)))),
+  );
 
   if (flag(argv, "json")) {
     process.stdout.write(
