@@ -11,7 +11,14 @@ import { validateGraph } from "../graph/validate.js";
 import { generateHandoff } from "../handoff.js";
 import { enforcementFor, type EnforcementRule } from "../model/index.js";
 import { renderBrief } from "../render/brief.js";
-import { bindSession, releaseSession, taskForSession } from "../state.js";
+import {
+  bindSession,
+  clearTouched,
+  markTouched,
+  releaseSession,
+  sessionRecord,
+  taskForSession,
+} from "../state.js";
 import { LEDGER_FILE, ledgerPath } from "../verify/ledger.js";
 import { ALLOW, type HookInput, type HookOutput } from "./io.js";
 
@@ -156,7 +163,6 @@ const SKILL_WRITE_REASON =
  * tin cậy của cả hệ thống, và không ai có thói quen cũ nào ghi vào file mà ganas
  * vừa tạo ra.
  */
-// eslint-disable-next-line @typescript-eslint/require-await -- phải khớp chữ ký `Handler` dùng chung (Promise<HookOutput>) dù nhánh này thuần đồng bộ.
 export async function preToolUse(input: HookInput): Promise<HookOutput> {
   const cwd = input.cwd ?? process.cwd();
   const root = findGanasRoot(cwd);
@@ -184,6 +190,12 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
       // Đọc thì cho — chỉ chặn khi có dấu hiệu ghi đè.
       if (command.includes(LEDGER_FILE)) return denyPreTool(LEDGER_REASON);
       if (command.includes(`${GANAS_DIR}/${CONFIG_FILE}`)) return denyPreTool(CONFIG_REASON);
+
+      // `sed -i`, `>` — sửa file mà không đi qua PostToolUse của Write/Edit. Đánh
+      // dấu ở PRE vì với Bash đây là lần duy nhất ganas nhìn thấy nội dung lệnh.
+      // Đánh dấu nhầm (lệnh sau đó fail) chỉ tốn thêm một lần chấm gate; bỏ sót
+      // thì cả một đợt sửa code thoát khỏi exit_contract.
+      if (input.session_id) await markTouched(root, input.session_id);
     }
   }
 
@@ -197,12 +209,16 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
 export async function postToolUse(input: HookInput): Promise<HookOutput> {
   if (!input.tool_name || !WRITE_TOOLS.has(input.tool_name)) return ALLOW;
 
-  const raw = input.tool_input?.["file_path"];
-  if (typeof raw !== "string") return ALLOW;
-
   const cwd = input.cwd ?? process.cwd();
   const root = findGanasRoot(cwd);
   if (!root) return ALLOW;
+
+  // Trước cả bộ lọc `.ganas/` bên dưới: ghi code cũng là làm việc, và đó chính
+  // là thứ Stop hook cần biết để phân biệt lượt sửa với lượt hỏi đáp.
+  if (input.session_id) await markTouched(root, input.session_id);
+
+  const raw = input.tool_input?.["file_path"];
+  if (typeof raw !== "string") return ALLOW;
 
   const abs = isAbsolute(raw) ? raw : resolve(cwd, raw);
   const rel = relative(root, abs).split("\\").join("/");
@@ -244,15 +260,34 @@ export async function stop(input: HookInput): Promise<HookOutput> {
   const root = findGanasRoot(input.cwd ?? process.cwd());
   if (!root) return ALLOW;
 
-  const taskId = await taskForSession(root, input.session_id);
-  if (!taskId) return ALLOW;
+  const sessionId = input.session_id;
+  if (!sessionId) return ALLOW;
 
+  // Chỉ chấm khi CHÍNH phiên này đã ghi file kể từ lần chấm gần nhất.
+  //
+  // Stop hook chạy ở cuối mọi lượt, phần lớn trong số đó là hỏi đáp: người dùng
+  // hỏi một câu, Claude trả lời, không file nào đổi. Chấm exit_contract ở đó thì
+  // đương nhiên trượt (chưa ai làm gì) và cái giá phải trả là thật — một lượt
+  // trả lời thừa để thoát khỏi `decision: "block"`, cộng với `npm test`/`tsc`
+  // trong exit_contract chạy lại từ đầu cho một lượt không đụng tới code.
+  //
+  // Không dùng `taskForSession`: cú rơi về `current_task` của nó khiến một phiên
+  // chưa bind bị chấm theo task của phiên khác.
+  const session = await sessionRecord(root, sessionId);
+  if (!session?.touched_at) return ALLOW;
+
+  const taskId = session.task;
   const graph = await loadGraph(root);
   const task = graph.tasks.get(taskId);
   if (!task) return ALLOW;
 
+  // Hạ cờ NGAY khi đã quyết định chấm: dù kết quả là chặn hay cho qua, đợt sửa
+  // này đã được chấm rồi. Những lượt hỏi đáp sau đó im lặng cho tới lần ghi file
+  // kế tiếp — còn nếu Claude sửa tiếp thật thì cờ lại được dựng lên và chấm lại.
+  await clearTouched(root, sessionId);
+
   const freshness = await computeFreshness(graph);
-  const result = await evaluateGate(graph, task.value, freshness, input.session_id);
+  const result = await evaluateGate(graph, task.value, freshness, sessionId);
   if (result.ok && result.pendingHuman.length === 0) return ALLOW;
 
   const unmetText = result.unmet

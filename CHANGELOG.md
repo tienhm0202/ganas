@@ -4,6 +4,23 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## Chưa phát hành
+
+- **Stop hook thôi làm phiền lượt hỏi đáp** — trước đây hook chấm
+  `exit_contract` ở cuối **mọi** lượt trả lời, kể cả lượt người dùng chỉ hỏi
+  một câu và không file nào đổi. Gate đương nhiên trượt, nên mỗi câu hỏi tốn
+  thêm một lượt trả lời để thoát khỏi `decision: "block"`, và mọi tiêu chí
+  `kind: command` (`npm test`, `tsc`…) chạy lại từ đầu cho một lượt không đụng
+  tới code. Giờ `postToolUse` đặt cờ `touched_at` vào bản ghi phiên khi có ghi
+  file (`preToolUse` làm tương tự cho `sed -i`, `>` qua Bash), `stop` chỉ chấm
+  khi thấy cờ rồi hạ nó xuống: một đợt sửa được chấm đúng một lần, hỏi bao
+  nhiêu câu sau đó cũng không đánh thức gate.
+- **Stop hook không mượn task của phiên khác** — nó đọc thẳng
+  `state.sessions[id]` thay vì `taskForSession()`, hàm này rơi về
+  `current_task` khi phiên chưa bind. Cú rơi đó vẫn giữ cho CLI/MCP (nơi không
+  có session id), nhưng với hook thì nó khiến một phiên mở lên chỉ để hỏi bị
+  chấm theo `exit_contract` của việc nó không hề làm.
+
 ## v0.2.0 — 2026-08-04
 
 - **Tier model ra thành chỉ dẫn giao việc, không còn là dòng gợi ý** — brief

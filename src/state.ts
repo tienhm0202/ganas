@@ -15,6 +15,18 @@ import { ganasPath, STATE_FILE } from "./graph/paths.js";
 export interface SessionRecord {
   task: string;
   started_at: string;
+  /**
+   * Lần ghi file gần nhất của phiên này mà Stop hook CHƯA chấm.
+   *
+   * Có field này vì Stop hook chạy ở cuối MỌI lượt trả lời, kể cả lượt người
+   * dùng chỉ hỏi một câu. Chấm exit_contract ở lượt đó là sai hai đường: nó
+   * chặn một lượt không có gì để chặn, và nó chạy thật các lệnh trong
+   * `exit_contract` (`npm test`, `tsc`…) cho một lượt không đụng tới code.
+   *
+   * Nên: đặt khi có ghi file, xoá ngay sau khi chấm. Vắng mặt ⇒ chưa làm gì
+   * kể từ lần chấm trước ⇒ không có gì để chấm.
+   */
+  touched_at?: string;
 }
 
 export interface State {
@@ -77,4 +89,36 @@ export async function taskForSession(root: string, sessionId?: string): Promise<
   const state = await readState(root);
   if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
   return state.current_task;
+}
+
+/**
+ * Bản ghi của ĐÚNG phiên này, không rơi về `current_task`.
+ *
+ * `taskForSession` rơi về `current_task` để CLI/MCP — nơi không có session id —
+ * vẫn biết đang làm gì. Với hook thì cú rơi đó là sai: một phiên mở lên chỉ để
+ * hỏi (chưa bind, hoặc bind vào task khác) sẽ thừa hưởng task của phiên gần
+ * nhất và bị chấm theo exit_contract của việc mà nó không hề làm.
+ */
+export async function sessionRecord(
+  root: string,
+  sessionId: string,
+): Promise<SessionRecord | null> {
+  const state = await readState(root);
+  return state.sessions[sessionId] ?? null;
+}
+
+/** Đánh dấu phiên vừa ghi file. Không tạo bản ghi mới: phiên chưa bind thì không có gì để chấm. */
+export async function markTouched(root: string, sessionId: string): Promise<void> {
+  const state = await readState(root);
+  const rec = state.sessions[sessionId];
+  if (!rec || rec.touched_at) return; // đã có cờ rồi thì khỏi ghi lại đĩa mỗi lần Edit
+  rec.touched_at = new Date().toISOString();
+  await writeState(root, state);
+}
+
+/** Hạ cờ sau khi đã chấm — lượt hỏi đáp tiếp theo lại đi qua Stop hook mà không tốn gì. */
+export async function clearTouched(root: string, sessionId: string): Promise<void> {
+  await updateState(root, (s) => {
+    delete s.sessions[sessionId]?.touched_at;
+  });
 }

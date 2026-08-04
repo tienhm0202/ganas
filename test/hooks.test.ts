@@ -185,13 +185,120 @@ exit_contract:
     run: "exit 1"
 `;
 
+/** Một lượt có sửa code — điều kiện để Stop hook chấm gate. */
+function touch(root: string, session = "s1") {
+  return handlers.postToolUse({
+    cwd: root,
+    session_id: session,
+    tool_name: "Write",
+    tool_input: { file_path: "src/index.ts" },
+  });
+}
+
 test("Stop chặn khi exit_contract chưa thoả", async () => {
   const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
   try {
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
     const out = await handlers.stop({ cwd: root, session_id: "s1" });
     assert.equal(out.decision, "block");
     assert.match(out.reason!, /chưa thoả điều kiện hoàn thành/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Stop im lặng ở lượt hỏi đáp — phiên chưa ghi file nào thì không có gì để chấm", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    const out = await handlers.stop({ cwd: root, session_id: "s1" });
+    assert.deepEqual(out, {}, "hỏi một câu mà bị chặn vì chưa sửa code là chặn sai");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Stop chấm MỘT lần cho mỗi đợt sửa, không chấm lại ở lượt hỏi đáp kế tiếp", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
+    assert.equal((await handlers.stop({ cwd: root, session_id: "s1" })).decision, "block");
+
+    // Lượt sau chỉ hỏi đáp: cờ đã hạ, không chấm nữa.
+    assert.deepEqual(await handlers.stop({ cwd: root, session_id: "s1" }), {});
+
+    // Sửa tiếp thì cờ dựng lại và gate lại có hiệu lực.
+    await touch(root);
+    assert.equal((await handlers.stop({ cwd: root, session_id: "s1" })).decision, "block");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Stop bỏ qua phiên chưa bind — không mượn task của phiên khác qua current_task", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" }); // s1 bind T-001
+    await touch(root, "s2");
+    const out = await handlers.stop({ cwd: root, session_id: "s2" });
+    assert.deepEqual(out, {}, "phiên mở ra để hỏi không chịu exit_contract của việc nó không làm");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Stop chặn cả khi sửa file bằng Bash (`sed -i`), không chỉ Write/Edit", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.preToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Bash",
+      tool_input: { command: "sed -i 's/a/b/' src/index.ts" },
+    });
+    const out = await handlers.stop({ cwd: root, session_id: "s1" });
+    assert.equal(out.decision, "block", "sửa file qua shell vẫn là sửa file");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("sub-agent sửa code vẫn tính cho phiên cha — gate không im lặng biến mất", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    // Hook trong sub-agent nhận session_id của phiên cha kèm agent_id. Đây là
+    // cách giao việc mà chính ganas khuyến nghị (brief mục "Giao việc"), nên nếu
+    // chỗ này không tính thì gate tắt lặng lẽ ở đúng luồng chuẩn.
+    await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      agent_id: "a1",
+      agent_type: "general-purpose",
+      tool_name: "Edit",
+      tool_input: { file_path: "src/index.ts" },
+    });
+    const out = await handlers.stop({ cwd: root, session_id: "s1" });
+    assert.equal(out.decision, "block");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Bash chỉ đọc không tính là đã làm việc", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.preToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Bash",
+      tool_input: { command: "git log --oneline | head -20" },
+    });
+    assert.deepEqual(await handlers.stop({ cwd: root, session_id: "s1" }), {});
   } finally {
     await cleanup(root);
   }
@@ -201,6 +308,7 @@ test("Stop KHÔNG chặn lần hai — stop_hook_active chống nhốt người 
   const root = await project({ ".ganas/tasks/T-001.yaml": FAILING_TASK });
   try {
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
     const out = await handlers.stop({ cwd: root, session_id: "s1", stop_hook_active: true });
     assert.deepEqual(out, {}, "chặn liên tục sẽ khiến người dùng không thoát ra được");
   } finally {
@@ -212,6 +320,7 @@ test("Stop cho qua khi mọi tiêu chí tự động đã đạt", async () => {
   const root = await project();
   try {
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
     const out = await handlers.stop({ cwd: root, session_id: "s1" });
     assert.equal(out.decision, undefined);
   } finally {
@@ -237,6 +346,7 @@ exit_contract:
   });
   try {
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
     const out = await handlers.stop({ cwd: root, session_id: "s1" });
     assert.equal(
       out.decision,

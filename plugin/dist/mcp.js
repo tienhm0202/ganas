@@ -16938,8 +16938,11 @@ var init_exec = __esm({
 var state_exports = {};
 __export(state_exports, {
   bindSession: () => bindSession,
+  clearTouched: () => clearTouched,
+  markTouched: () => markTouched,
   readState: () => readState,
   releaseSession: () => releaseSession,
+  sessionRecord: () => sessionRecord,
   taskForSession: () => taskForSession,
   updateState: () => updateState,
   writeState: () => writeState
@@ -16989,6 +16992,22 @@ async function taskForSession(root, sessionId) {
   const state = await readState(root);
   if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
   return state.current_task;
+}
+async function sessionRecord(root, sessionId) {
+  const state = await readState(root);
+  return state.sessions[sessionId] ?? null;
+}
+async function markTouched(root, sessionId) {
+  const state = await readState(root);
+  const rec = state.sessions[sessionId];
+  if (!rec || rec.touched_at) return;
+  rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+  await writeState(root, state);
+}
+async function clearTouched(root, sessionId) {
+  await updateState(root, (s) => {
+    delete s.sessions[sessionId]?.touched_at;
+  });
 }
 var EMPTY;
 var init_state = __esm({

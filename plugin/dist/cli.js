@@ -14567,8 +14567,11 @@ var init_commit = __esm({
 var state_exports = {};
 __export(state_exports, {
   bindSession: () => bindSession,
+  clearTouched: () => clearTouched,
+  markTouched: () => markTouched,
   readState: () => readState,
   releaseSession: () => releaseSession,
+  sessionRecord: () => sessionRecord,
   taskForSession: () => taskForSession,
   updateState: () => updateState,
   writeState: () => writeState
@@ -14618,6 +14621,22 @@ async function taskForSession(root, sessionId) {
   const state = await readState(root);
   if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
   return state.current_task;
+}
+async function sessionRecord(root, sessionId) {
+  const state = await readState(root);
+  return state.sessions[sessionId] ?? null;
+}
+async function markTouched(root, sessionId) {
+  const state = await readState(root);
+  const rec = state.sessions[sessionId];
+  if (!rec || rec.touched_at) return;
+  rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+  await writeState(root, state);
+}
+async function clearTouched(root, sessionId) {
+  await updateState(root, (s) => {
+    delete s.sessions[sessionId]?.touched_at;
+  });
 }
 var EMPTY;
 var init_state = __esm({
@@ -17541,17 +17560,19 @@ async function preToolUse(input) {
     if (typeof command === "string" && SHELL_WRITE_HINTS.some((h) => command.includes(h))) {
       if (command.includes(LEDGER_FILE)) return denyPreTool(LEDGER_REASON);
       if (command.includes(`${GANAS_DIR}/${CONFIG_FILE}`)) return denyPreTool(CONFIG_REASON);
+      if (input.session_id) await markTouched(root, input.session_id);
     }
   }
   return ALLOW;
 }
 async function postToolUse(input) {
   if (!input.tool_name || !WRITE_TOOLS.has(input.tool_name)) return ALLOW;
-  const raw = input.tool_input?.["file_path"];
-  if (typeof raw !== "string") return ALLOW;
   const cwd = input.cwd ?? process.cwd();
   const root = findGanasRoot(cwd);
   if (!root) return ALLOW;
+  if (input.session_id) await markTouched(root, input.session_id);
+  const raw = input.tool_input?.["file_path"];
+  if (typeof raw !== "string") return ALLOW;
   const abs = isAbsolute(raw) ? raw : resolve3(cwd, raw);
   const rel = relative5(root, abs).split("\\").join("/");
   if (!rel.startsWith(`${GANAS_DIR}/`)) return ALLOW;
@@ -17573,13 +17594,17 @@ async function stop(input) {
   if (input.stop_hook_active) return ALLOW;
   const root = findGanasRoot(input.cwd ?? process.cwd());
   if (!root) return ALLOW;
-  const taskId = await taskForSession(root, input.session_id);
-  if (!taskId) return ALLOW;
+  const sessionId = input.session_id;
+  if (!sessionId) return ALLOW;
+  const session = await sessionRecord(root, sessionId);
+  if (!session?.touched_at) return ALLOW;
+  const taskId = session.task;
   const graph = await loadGraph(root);
   const task = graph.tasks.get(taskId);
   if (!task) return ALLOW;
+  await clearTouched(root, sessionId);
   const freshness = await computeFreshness(graph);
-  const result = await evaluateGate(graph, task.value, freshness, input.session_id);
+  const result = await evaluateGate(graph, task.value, freshness, sessionId);
   if (result.ok && result.pendingHuman.length === 0) return ALLOW;
   const unmetText = result.unmet.map((u) => `  \u2717 ${u.label}${u.reason ? `
       ${u.reason}` : ""}`).join("\n");

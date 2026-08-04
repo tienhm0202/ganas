@@ -88,11 +88,22 @@ flowchart TD
   POST -->|hợp lệ| WORK
 
   WORK --> STOP["Stop hook<br/>handlers.stop"]
-  STOP --> GATE["evaluateGate()<br/>gate.ts"]
+  STOP -->|"phiên chưa ghi file<br/>từ lần chấm trước"| QUIET["im lặng đi tiếp<br/>(lượt hỏi đáp)"]
+  STOP -->|"đã ghi file"| GATE["evaluateGate()<br/>gate.ts"]
   GATE -->|chưa thoả| BLOCK["chặn kết thúc phiên"]
   GATE -->|thoả| END["SessionEnd<br/>generateHandoff()"]
   BLOCK --> WORK
+  QUIET --> WORK
 ```
+
+**Vì sao có nhánh `QUIET`:** Stop hook chạy ở cuối **mọi** lượt trả lời, mà phần
+lớn lượt là hỏi đáp — không file nào đổi. Chấm `exit_contract` ở đó thì đương
+nhiên trượt (chưa ai làm gì), và cái giá là thật: một lượt trả lời thừa để thoát
+khỏi `decision: "block"`, cộng với việc mọi tiêu chí `kind: command` (`npm test`,
+`tsc`…) chạy lại từ đầu. Nên `handlers.postToolUse` đặt cờ `touched_at` vào bản
+ghi phiên mỗi khi có ghi file (`preToolUse` làm việc tương tự cho `sed -i`, `>`
+qua Bash), còn `handlers.stop` chỉ chấm khi thấy cờ đó rồi hạ nó xuống. Một đợt
+sửa được chấm đúng một lần; hỏi bao nhiêu câu sau đó cũng không đánh thức gate.
 
 **Điểm đứt đã biết, ghi ở đây để không ai tưởng nó liền:** `generateHandoff()`
 ghi `.ganas/runs/<session>.md`, nhưng **không code nào đọc lại file đó**.

@@ -123,7 +123,9 @@ vi task thuộc về. Một task chạm hai phạm vi thì không ai nghiệm th
 - `open_questions`: câu hỏi còn bỏ ngỏ, dạng chuỗi tự do.
 
 **`exit_contract`** — điều kiện "done" kiểm chứng được; Stop hook chấm dựa
-vào đây, chưa thoả thì phiên không "xong" được. Đúng **5 loại**
+vào đây, chưa thoả thì phiên không "xong" được. Chỉ chấm ở những lượt phiên
+**thật sự có ghi file** — lượt hỏi đáp thuần đi qua hook mà không tốn gì (xem
+`docs/FLOWS.md`). Đúng **5 loại**
 (`zExitCriterion`, discriminated union theo `kind`, `src/model/task.ts`):
 
 | `kind` | Field riêng | Ý nghĩa |
