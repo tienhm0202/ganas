@@ -34,6 +34,42 @@ export const MODEL_TIER = ["main", "verifier", "scribe"] as const;
 export type ModelTier = (typeof MODEL_TIER)[number];
 
 /**
+ * Harness đang chạy ganas — khai trong `config.yaml`, `install-target.mjs` ghi
+ * lúc cài.
+ *
+ * Cần khai vì tier model chỉ là DỮ LIỆU; biến nó thành hành động thì mỗi
+ * harness một kiểu: Claude Code tạo được sub-agent và chỉ định được model
+ * ngay trong tool call, còn Cursor/Zed/Windsurf chỉ nối với ganas qua MCP —
+ * MCP không có khái niệm sinh agent con hay đổi model của phiên, model do
+ * NGƯỜI chọn trong picker.
+ *
+ * Đánh đổi đã biết: một repo mở bằng nhiều editor chỉ khai được một giá trị.
+ * Khai cái mà bạn thật sự giao việc từ đó; khai sai thì hậu quả là brief
+ * hướng dẫn nhầm cách giao, không phải hỏng dữ liệu.
+ */
+export const HARNESS = ["claude-code", "cursor", "zed", "windsurf", "other"] as const;
+export type Harness = (typeof HARNESS)[number];
+
+/** Harness tạo được sub-agent và chỉ định được model cho nó ngay trong phiên. */
+export function canDispatchSubagent(harness: Harness): boolean {
+  return harness === "claude-code";
+}
+
+/**
+ * Alias model mà công cụ tạo sub-agent của Claude Code (Agent tool) nhận —
+ * `opus`/`sonnet`/`haiku`/`fable` — suy từ id thật khai trong `config.models`.
+ *
+ * Phải suy, không hardcode: `config.models` là id đầy đủ (`claude-sonnet-5`)
+ * vì đó là thứ dùng được ở mọi harness, còn Agent tool chỉ nhận họ model. Suy
+ * hụt (id lạ, model của hãng khác) thì trả `undefined` — brief in id thật và
+ * để người đọc tự chọn, thà không gợi ý còn hơn gợi ý một alias không tồn tại
+ * khiến tool call hỏng.
+ */
+export function agentModelAlias(modelId: string): string | undefined {
+  return /(opus|sonnet|haiku|fable)/i.exec(modelId)?.[1]?.toLowerCase();
+}
+
+/**
  * Phiên bản schema `.ganas/` mà bản ganas này hiểu được.
  *
  * Chưa cần cơ chế migrate: ganas chưa có installed base, nên schema mới cứ đổi
@@ -49,6 +85,13 @@ export const zConfig = z.object({
     .default(LATEST_SCHEMA_VERSION)
     .describe("phiên bản schema .ganas/"),
   project: zNonEmpty,
+
+  /**
+   * Harness giao việc. Mặc định `claude-code`: đó là harness ganas cưỡng chế
+   * được đầy đủ (hook + skill), và là mặc định của `ganas init`. Dự án cũ
+   * không khai field này vẫn chạy như trước.
+   */
+  harness: z.enum(HARNESS).default("claude-code"),
 
   /** Mức mặc định cho mọi luật. */
   enforcement: z.enum(ENFORCEMENT).default("warn"),

@@ -27,16 +27,21 @@ context của phiên này.
      `kind: verification` kiểm nó (luật `spine/task-missing-verification`,
      đã có sẵn — không viết luật mới).
 
-4. **Gán `model` ngay lúc chẻ.** Field `Task.model`, một trong ba tier có
-   sẵn trong `config.yaml` (`main`/`verifier`/`scribe`):
+4. **Gán `model` cho MỌI task, ngay lúc chẻ.** Field `Task.model`, một trong
+   ba tier có sẵn trong `config.yaml` (`main`/`verifier`/`scribe`):
    - `main` — việc thật sự khó/mơ hồ, cần phán đoán nhiều.
    - `scribe` — việc cơ học, đơn giản, ít quyết định.
    - `verifier` — khoảng giữa hai loại trên.
 
    Đây là quyết định của agent NGAY LÚC THIẾT KẾ — lúc này agent hiểu độ khó
    từng phần rõ hơn bất kỳ heuristic nào suy sau (vd suy từ `module.nature`).
-   Không suy tự động. Không gán thì brief của task đó sẽ không gợi ý model
-   nào — không đoán bừa còn hơn đoán sai.
+   Không suy tự động.
+
+   **Đừng gán `main` cho cả loạt.** Một plan đã chẻ đúng thì phần lớn task là
+   việc cơ học có ranh giới rõ — đó là `scribe`/`verifier`. Gán `main` hết
+   nghĩa là hoặc chưa chẻ đủ, hoặc chưa thật sự cân độ khó. `ganas validate`
+   báo `spine/task-missing-model` cho task nào bỏ trống, và brief của task đó
+   sẽ mở đầu bằng cảnh báo "chưa ai quyết ai làm".
 
 5. **Chạy `ganas validate`.** Validator hiện có (liên kết goal/design/sprint,
    `task-missing-verification`, `estimated_context: large`...) đã đủ để bắt

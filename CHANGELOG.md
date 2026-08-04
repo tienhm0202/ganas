@@ -4,6 +4,38 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## Chưa phát hành
+
+- **Tier model ra thành chỉ dẫn giao việc, không còn là dòng gợi ý** — brief
+  có mục **Giao việc** riêng. Trước đây `task.model` chỉ in một dòng "Gợi ý
+  giao việc: model X" lẫn trong danh sách skill, và hệ quả quan sát được là
+  task nào cũng chạy thẳng ở phiên chính bằng model mạnh nhất, kể cả việc cơ
+  học. Giờ với `harness: claude-code`, brief nói rõ: phiên chính điều phối,
+  phần sửa code giao cho sub-agent với alias model của tier (`scribe` →
+  `haiku`, `verifier` → `sonnet`, `main` → `opus` — suy bằng
+  `agentModelAlias()` từ `config.models`), prompt sub-agent mở đầu bằng
+  `ganas brief <id>` để nó tự lấy brief thay vì bị chép tay lại.
+- **Giao song song, suy từ sơ đồ khối** — `parallelCandidates()`
+  (`src/graph/select.ts`) liệt kê task giao song song được với task hiện tại:
+  không chặn nhau theo cả hai chiều VÀ vùng code rời nhau (glob của các khối
+  không lồng nhau). Brief in kèm model từng cái để mở nhiều sub-agent cùng
+  lúc. Luật cố ý sai theo hướng "không song song": task chưa khai `touches`
+  bị loại, glob lồng nhau (`src/a/**` vs `src/a/deep/**`) coi như chồng —
+  hai agent sửa cùng file thì cái sau đè cái trước và không ai thấy.
+- **`config.harness` mới** (`claude-code` | `cursor` | `zed` | `windsurf` |
+  `other`, mặc định `claude-code`) — vì tier chỉ là dữ liệu, còn cách biến nó
+  thành hành động thì tuỳ harness: chỉ Claude Code mới tạo được sub-agent và
+  chỉ định model cho nó; Cursor/Zed/Windsurf nối qua MCP nên brief chỉ khuyến
+  nghị đổi model trong picker và **tự khai là không cưỡng chế được** thay vì
+  dạy một thao tác không tồn tại. `install-target.mjs` ghi field này khi cài
+  đúng một harness (sửa theo dòng, giữ nguyên comment); cài nhiều cờ cùng lúc
+  thì nhắc khai tay chứ không đoán.
+- **Luật `spine/task-missing-model`** (cảnh báo) — task chưa `done` mà không
+  gán `model` thì `ganas validate` nhắc, và brief mở mục Giao việc bằng "⚠
+  chưa ai quyết ai làm". Skill `plan-to-tasks` và `scope` cập nhật theo: gán
+  tier cho MỌI task lúc chẻ, và đừng gán `main` cho cả loạt — plan chẻ đúng
+  thì phần lớn task là việc cơ học.
+
 ## v0.1.2 — 2026-08-04
 
 - **Cài không qua Claude Code plugin system** — `scripts/install-target.mjs`

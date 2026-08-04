@@ -33,6 +33,17 @@ enforcement_rules: {}
   # exit_contract: enforce
   # task_link: enforce
 
+# Harness giao việc: claude-code | cursor | zed | windsurf | other
+# Quyết định brief hướng dẫn giao task kiểu nào: claude-code thì tạo sub-agent
+# với model của tier; các harness còn lại chỉ nối qua MCP nên brief chỉ khuyến
+# nghị đổi model trong picker. Repo mở bằng nhiều editor thì khai cái bạn thật
+# sự giao việc từ đó.
+harness: claude-code
+
+# Model thật cho từng tier. Task khai \`model: <tier>\` lúc chẻ, brief tra ở đây.
+#   main     — việc khó/mơ hồ, cần phán đoán
+#   verifier — khoảng giữa
+#   scribe   — việc cơ học, ít quyết định (tier thấp để đỡ nghĩ quá tay)
 models:
   main: claude-opus-5
   verifier: claude-sonnet-5

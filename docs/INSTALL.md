@@ -264,6 +264,18 @@ chỉ in hướng dẫn — Windsurf không có config MCP theo project, chỉ c
 An toàn chạy lại nhiều lần: không nhân đôi hook, không đụng key khác đã có
 sẵn trong file, skill luôn ghi lại đúng bản mới nhất.
 
+### `harness` trong `.ganas/config.yaml`
+
+Cài đúng **một** cờ thì script ghi luôn `harness:` vào `.ganas/config.yaml`
+(sửa theo dòng, giữ nguyên comment của file). Field này quyết định brief
+hướng dẫn giao task kiểu nào: `claude-code` thì bảo tạo sub-agent với model
+của tier; các harness khác chỉ nối qua MCP nên brief chỉ khuyến nghị đổi
+model trong picker và tự khai là không cưỡng chế được.
+
+Cài nhiều cờ cùng lúc thì script **không đoán** — nó in ra danh sách để bạn
+tự khai một giá trị, vì `harness` chỉ trả lời được một câu: bạn giao việc từ
+đâu. Chưa chạy `ganas init` thì cũng chỉ nhắc, không tạo config thay bạn.
+
 ### Cưỡng chế đủ như Claude Code plugin
 
 `--claude-code` viết đúng 6 hook thật (không phải bản rút gọn) nên

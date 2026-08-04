@@ -2,9 +2,16 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { FactFreshness } from "../graph/freshness.js";
-import { openBlockers } from "../graph/select.js";
+import { openBlockers, parallelCandidates } from "../graph/select.js";
 import type { Graph, Sourced } from "../graph/types.js";
-import { type Claim, enforcementFor, formatAnchor, type Task } from "../model/index.js";
+import {
+  agentModelAlias,
+  canDispatchSubagent,
+  type Claim,
+  enforcementFor,
+  formatAnchor,
+  type Task,
+} from "../model/index.js";
 
 export interface BriefInput {
   graph: Graph;
@@ -59,6 +66,98 @@ export function relevantLegacyClaims(graph: Graph, task: Task): Claim[] {
 
 function bullet(lines: string[]): string {
   return lines.map((l) => `- ${l}`).join("\n");
+}
+
+/**
+ * Mục "Giao việc": biến `task.model` (một tier) thành hành động cụ thể của
+ * harness đang dùng (`config.harness`).
+ *
+ * Tách hẳn khỏi mục kỹ năng vì đây không phải gợi ý mềm nữa: phiên chính đọc
+ * brief là phiên ĐIỀU PHỐI. Trước đây brief chỉ in một dòng "Gợi ý giao việc:
+ * model X" lẫn trong danh sách skill — và hệ quả quan sát được là task nào
+ * cũng chạy thẳng ở phiên chính bằng model mạnh nhất, kể cả việc cơ học.
+ */
+function dispatchSection(graph: Graph, t: Task): string {
+  const H = `## Giao việc`;
+
+  if (!t.model) {
+    return (
+      `${H} — ⚠ chưa ai quyết ai làm\n\n` +
+      `Task này chưa gán \`model\`. Nghĩa là lúc chẻ task không ai quyết nó khó tới đâu, ` +
+      `nên mặc định phiên chính ôm hết bằng model mạnh nhất — kể cả việc cơ học.\n\n` +
+      `Sửa file task trong \`.ganas/tasks/\`, thêm một dòng:\n\n` +
+      `\`\`\`yaml\nmodel: main   # main = khó/mơ hồ · verifier = khoảng giữa · scribe = cơ học\n\`\`\`\n\n` +
+      `Rồi \`ganas validate\` (luật \`spine/task-missing-model\`). ` +
+      `Không đoán hộ ở đây: heuristic suy tier không đáng tin bằng người vừa chẻ task.`
+    );
+  }
+
+  const modelId = graph.config.models[t.model];
+
+  if (!canDispatchSubagent(graph.config.harness)) {
+    return (
+      `${H}\n\n` +
+      `Tier \`${t.model}\` → model \`${modelId}\`.\n\n` +
+      `Harness khai trong \`config.yaml\` là \`${graph.config.harness}\`: ganas nối vào đó qua MCP, ` +
+      `mà MCP không tạo được agent con và không đổi được model của phiên. ` +
+      `Đổi model sang \`${modelId}\` trong picker trước khi làm, hoặc mở một phiên riêng bằng model đó.\n\n` +
+      `> **Đây là khuyến nghị, không phải hàng rào** — ganas không kiểm được bạn có đổi hay không. ` +
+      `Đừng ghi vào \`.ganas/\` rằng task đã chạy đúng tier.`
+    );
+  }
+
+  const alias = agentModelAlias(modelId);
+  const modelArg = alias ? `\`model: "${alias}"\`` : `model \`${modelId}\``;
+
+  return (
+    `${H} — task này KHÔNG chạy thẳng ở phiên chính\n\n` +
+    `Tier \`${t.model}\` → model \`${modelId}\` (${modelArg}).\n\n` +
+    `Phiên chính là người ĐIỀU PHỐI: chọn task, đọc brief, giao việc, chấm gate, commit. ` +
+    `Phần sửa code của task này chạy trong sub-agent riêng:\n\n` +
+    bullet([
+      `Tạo sub-agent với ${modelArg}.`,
+      `Prompt mở đầu bằng \`ganas brief ${t.id}\` — để sub-agent tự lấy đúng brief này, ` +
+        `đừng chép tay lại (chép tay là chỗ brief bị bóp méo).`,
+      `Sub-agent xong thì phiên chính chạy \`ganas gate\` để chấm. ` +
+        `Chấm bằng lệnh, không bằng lời tổng kết của sub-agent.`,
+    ]) +
+    `\n\nHai lý do, không phải một: context phiên chính không bị chi tiết thực thi nuốt mất, ` +
+    `và tier thấp không nghĩ quá tay cho việc cơ học.\n\n` +
+    parallelBlock(graph, t) +
+    `> Nếu BẠN ĐANG LÀ sub-agent nhận chính task này: làm luôn, đừng giao tiếp nữa.`
+  );
+}
+
+/**
+ * Danh sách task giao song song được — chỉ dựng cho harness tạo được sub-agent.
+ *
+ * Điều kiện an toàn do `parallelCandidates()` quyết (vùng code rời nhau, không
+ * chặn nhau). Ở đây chỉ trình bày, KHÔNG nới thêm: một task không nằm trong
+ * danh sách này thì không được giao kèm, kể cả khi trông có vẻ độc lập.
+ */
+function parallelBlock(graph: Graph, t: Task): string {
+  const others = parallelCandidates(graph, t);
+  if (others.length === 0) return "";
+
+  const items = others.map((o) => {
+    const task = o.value;
+    const tier = task.model ? `tier \`${task.model}\`` : `⚠ chưa gán model`;
+    const alias = task.model ? agentModelAlias(graph.config.models[task.model]) : undefined;
+    return (
+      `\`${task.id}\` — ${task.title}\n  ${tier}${alias ? ` → \`model: "${alias}"\`` : ""} · ` +
+      `khối ${task.touches.map((m) => `\`${m}\``).join(", ")}`
+    );
+  });
+
+  return (
+    `**Giao được song song ngay bây giờ** — các task dưới đây không chặn nhau và ` +
+    `KHÔNG đụng cùng vùng code với task này. Mở mỗi cái một sub-agent riêng, cùng lúc, ` +
+    `mỗi sub-agent tự chạy \`ganas brief <id>\` trước khi sửa gì:\n\n` +
+    bullet(items) +
+    `\n\nChấm từng cái bằng \`ganas gate <id>\` sau khi sub-agent tương ứng xong. ` +
+    `**Chỉ những task có tên ở đây** — task khác chạm cùng vùng code, giao song song thì ` +
+    `sửa đổi của agent này bị agent kia đè mà không ai thấy.\n\n`
+  );
 }
 
 /**
@@ -345,7 +444,7 @@ export function renderBrief(input: BriefInput): string {
     );
   }
 
-  /* --- Kỹ năng + model gợi ý -------------------------------------------- */
+  /* --- Kỹ năng ---------------------------------------------------------- */
 
   const skillSet = new Set(t.skills);
   for (const moduleId of t.touches) {
@@ -354,14 +453,15 @@ export function renderBrief(input: BriefInput): string {
     for (const s of mod.skills) skillSet.add(s);
   }
 
-  if (skillSet.size > 0 || t.model) {
-    const modelLine = t.model
-      ? `Gợi ý giao việc: model \`${graph.config.models[t.model]}\` (${t.model})`
-      : "";
-    const skillList = skillSet.size > 0 ? bullet([...skillSet].map((s) => `\`/${s}\``)) : "";
-    const body = [modelLine, skillList].filter((s) => s.length > 0).join("\n\n");
-    parts.push(`## Kỹ năng cần dùng cho task này\n\n${body}`);
+  if (skillSet.size > 0) {
+    parts.push(
+      `## Kỹ năng cần dùng cho task này\n\n${bullet([...skillSet].map((s) => `\`/${s}\``))}`,
+    );
   }
+
+  /* --- Giao việc -------------------------------------------------------- */
+
+  parts.push(dispatchSection(graph, t));
 
   /* --- Điều kiện hoàn thành -------------------------------------------- */
 

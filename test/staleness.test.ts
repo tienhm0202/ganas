@@ -8,7 +8,7 @@ import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
 import type { Freshness } from "../src/model/index.js";
 import { factTarget, moduleTargets, runTarget } from "../src/verify/run.js";
-import { check, cleanup, goal, makeProject } from "./helpers.js";
+import { check, cleanup, design, goal, makeProject, moduleYaml, scope, task } from "./helpers.js";
 
 const RUN = (root: string) => ({ root, by: "test" });
 
@@ -438,87 +438,248 @@ test("brief không có mục 'Khối chạm tới' khi task không touches gì",
   }
 });
 
-/* --- Task.model → brief gợi ý model (N10) ---------------------------------- */
+/* --- Task.model → mục "Giao việc" của brief (N10, sửa ở N36) ---------------
+ *
+ * N10 chỉ in một dòng "Gợi ý giao việc: model X" lẫn trong danh sách skill.
+ * Hệ quả quan sát được: task nào cũng chạy thẳng ở phiên chính bằng model
+ * mạnh nhất. Từ N36, tier phải ra thành CHỈ DẪN GIAO VIỆC, và chỉ dẫn đó
+ * khác nhau theo `config.harness` — vì chỉ Claude Code mới tạo được sub-agent
+ * và chỉ định model cho nó. */
 
-test("brief gợi ý model đã resolve khi task.model được gán", async () => {
-  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
-  try {
-    const graph = await loadGraph(root);
-    const freshness = await computeFreshness(graph);
-    const { renderBrief } = await import("../src/render/brief.js");
-    const { zTask } = await import("../src/model/index.js");
-    const task = {
+/** Dựng task trong bộ nhớ (không qua file) để hỏi thẳng brief. */
+async function briefFor(root: string, extra: Record<string, unknown>): Promise<string> {
+  const graph = await loadGraph(root);
+  const freshness = await computeFreshness(graph);
+  const { renderBrief } = await import("../src/render/brief.js");
+  const { zTask } = await import("../src/model/index.js");
+  return renderBrief({
+    graph,
+    task: {
       value: zTask.parse({
         id: "T-001",
         title: "t",
         serves: ["G-001"],
         implements: "D-001",
         scope: "P-thu",
-        model: "verifier",
         exit_contract: [{ kind: "command", run: "true" }],
+        ...extra,
       }),
       file: ".ganas/tasks/T-001.yaml",
-    };
-    const brief = renderBrief({ graph, task, freshness });
-    assert.match(brief, /## Kỹ năng cần dùng cho task này/);
-    assert.match(brief, /Gợi ý giao việc: model `claude-sonnet-5` \(verifier\)/);
+    },
+    freshness,
+  });
+}
+
+/** Dự án với `harness` khai sẵn trong config. */
+async function projectWithHarness(harness: string): Promise<string> {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  await writeFile(
+    join(root, ".ganas", "config.yaml"),
+    `version: 1\nproject: "test"\nenforcement: enforce\nharness: ${harness}\n`,
+    "utf8",
+  );
+  return root;
+}
+
+test("⭐ harness claude-code: brief bảo giao sub-agent, kèm alias model của tier", async () => {
+  const root = await projectWithHarness("claude-code");
+  try {
+    const brief = await briefFor(root, { model: "verifier" });
+    assert.match(brief, /## Giao việc/);
+    assert.match(brief, /claude-sonnet-5/, "phải in model thật của tier");
+    assert.match(brief, /model: "sonnet"/, "phải in alias Agent tool nhận được");
+    assert.match(brief, /sub-agent/i, "phải nói rõ là giao đi, không tự làm");
+    assert.match(brief, /ganas brief T-001/, "sub-agent phải tự lấy brief, không chép tay");
   } finally {
     await cleanup(root);
   }
 });
 
-test("brief không nhắc gì tới model khi task.model không được gán", async () => {
-  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+test("⭐ harness cursor: brief KHÔNG bịa ra sub-agent, và nói thẳng là không cưỡng chế được", async () => {
+  const root = await projectWithHarness("cursor");
   try {
-    const graph = await loadGraph(root);
-    const freshness = await computeFreshness(graph);
-    const { renderBrief } = await import("../src/render/brief.js");
-    const { zTask } = await import("../src/model/index.js");
-    const task = {
-      value: zTask.parse({
-        id: "T-001",
-        title: "t",
-        serves: ["G-001"],
-        implements: "D-001",
-        scope: "P-thu",
-        exit_contract: [{ kind: "command", run: "true" }],
-      }),
-      file: ".ganas/tasks/T-001.yaml",
-    };
-    const brief = renderBrief({ graph, task, freshness });
-    assert.doesNotMatch(brief, /Gợi ý giao việc/);
-    assert.doesNotMatch(brief, /Kỹ năng cần dùng cho task này/);
+    const brief = await briefFor(root, { model: "scribe" });
+    assert.match(brief, /## Giao việc/);
+    assert.match(brief, /claude-haiku-4-5/, "vẫn phải in model của tier");
+    assert.match(brief, /khuyến nghị, không phải hàng rào/, "phải tự khai giới hạn");
+    assert.doesNotMatch(
+      brief,
+      /Tạo sub-agent/,
+      "MCP không tạo được agent con — dạy thao tác không tồn tại là dạy sai",
+    );
   } finally {
     await cleanup(root);
   }
 });
 
-test("brief vẫn liệt kê skills khi chỉ task.skills được gán, không có model", async () => {
+test("⭐ task thiếu model: brief mở đầu mục giao việc bằng cảnh báo, không im lặng bỏ qua", async () => {
   const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
   try {
-    const graph = await loadGraph(root);
-    const freshness = await computeFreshness(graph);
-    const { renderBrief } = await import("../src/render/brief.js");
-    const { zTask } = await import("../src/model/index.js");
-    const task = {
-      value: zTask.parse({
-        id: "T-001",
-        title: "t",
-        serves: ["G-001"],
-        implements: "D-001",
-        scope: "P-thu",
-        skills: ["gate"],
-        exit_contract: [{ kind: "command", run: "true" }],
-      }),
-      file: ".ganas/tasks/T-001.yaml",
-    };
-    const brief = renderBrief({ graph, task, freshness });
+    const brief = await briefFor(root, {});
+    assert.match(brief, /## Giao việc — ⚠ chưa ai quyết ai làm/);
+    assert.match(brief, /model: main/, "phải chỉ đúng dòng cần thêm");
+    assert.match(brief, /spine\/task-missing-model/, "phải dẫn tới luật kiểm được");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("brief vẫn liệt kê skills, tách khỏi mục giao việc", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    const brief = await briefFor(root, { skills: ["gate"], model: "scribe" });
     assert.match(brief, /## Kỹ năng cần dùng cho task này/);
     assert.match(brief, /`\/gate`/);
-    assert.doesNotMatch(brief, /Gợi ý giao việc/);
+    assert.doesNotMatch(
+      brief.slice(brief.indexOf("## Kỹ năng cần dùng cho task này"), brief.indexOf("## Giao việc")),
+      /claude-haiku/,
+      "model không còn nấp trong mục kỹ năng nữa",
+    );
   } finally {
     await cleanup(root);
   }
+});
+
+test("task chưa gán model bị validate cảnh báo, và task done thì không", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/tasks/T-001.yaml": task("T-001"),
+  });
+  assert.ok(codes.includes("spine/task-missing-model"), "task todo thiếu model phải bị nhắc");
+
+  const withModel = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "model: scribe\n" }),
+  });
+  assert.ok(!withModel.codes.includes("spine/task-missing-model"));
+});
+
+/* --- Giao song song: chỉ khi vùng code rời nhau ---------------------------- *
+ *
+ * Song song hoá là thứ dễ bán mà đắt khi sai: hai sub-agent sửa cùng file cùng
+ * lúc thì cái sau đè cái trước và KHÔNG ai thấy. Vì vậy luật ở đây phải sai
+ * theo hướng "không song song" chứ không bao giờ theo hướng ngược lại. */
+
+/** Khối với glob tuỳ ý. */
+function mod(id: string, paths: string): string {
+  return `id: ${id}
+title: "Khối ${id}"
+nature: code
+paths: ${paths}
+status: implemented
+verify:
+  - id: V-${id}
+    kind: probe
+    run: "true"
+`;
+}
+
+/** Task chạm đúng một khối, có sẵn tiêu chí kiểm cho khối đó. */
+function taskTouching(id: string, moduleId: string, extra = ""): string {
+  return `id: ${id}
+title: "Task ${id}"
+serves:
+  - G-001
+implements: D-001
+scope: P-thu
+status: todo
+touches:
+  - ${moduleId}
+exit_contract:
+  - kind: verification
+    target: ${moduleId}/V-${moduleId}
+${extra}`;
+}
+
+async function parallelBriefOf(files: Record<string, string>): Promise<string> {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope({ modules: ["M-a", "M-b", "M-deep"] }),
+    ...files,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const { renderBrief } = await import("../src/render/brief.js");
+    return renderBrief({ graph, task: graph.tasks.get("T-001")!, freshness });
+  } finally {
+    await cleanup(root);
+  }
+}
+
+test("⭐ task vùng code rời nhau → brief bảo giao song song, kèm model từng cái", async () => {
+  const brief = await parallelBriefOf({
+    ".ganas/modules/M-a.yaml": mod("M-a", '["src/a/**"]'),
+    ".ganas/modules/M-b.yaml": mod("M-b", '["src/b/**"]'),
+    ".ganas/tasks/T-001.yaml": taskTouching("T-001", "M-a", "model: main\n"),
+    ".ganas/tasks/T-002.yaml": taskTouching("T-002", "M-b", "model: scribe\n"),
+  });
+  assert.match(brief, /Giao được song song ngay bây giờ/);
+  assert.match(brief, /`T-002`/);
+  assert.match(brief, /model: "haiku"/, "mỗi task song song phải kèm model của tier nó");
+  assert.match(brief, /ganas gate <id>/, "phải nói cách chấm từng cái");
+});
+
+test("⭐ glob lồng nhau (src/a/** vs src/a/deep/**) KHÔNG được coi là song song được", async () => {
+  const brief = await parallelBriefOf({
+    ".ganas/modules/M-a.yaml": mod("M-a", '["src/a/**"]'),
+    ".ganas/modules/M-deep.yaml": mod("M-deep", '["src/a/deep/**"]'),
+    ".ganas/tasks/T-001.yaml": taskTouching("T-001", "M-a", "model: main\n"),
+    ".ganas/tasks/T-002.yaml": taskTouching("T-002", "M-deep", "model: scribe\n"),
+  });
+  assert.doesNotMatch(
+    brief,
+    /Giao được song song/,
+    "vùng code lồng nhau: hai agent sẽ sửa cùng file mà không ai thấy",
+  );
+});
+
+test("task chặn nhau, hoặc chưa khai touches, không vào danh sách song song", async () => {
+  const blocked = await parallelBriefOf({
+    ".ganas/modules/M-a.yaml": mod("M-a", '["src/a/**"]'),
+    ".ganas/modules/M-b.yaml": mod("M-b", '["src/b/**"]'),
+    ".ganas/tasks/T-001.yaml": taskTouching("T-001", "M-a", "model: main\n"),
+    ".ganas/tasks/T-002.yaml": taskTouching(
+      "T-002",
+      "M-b",
+      "model: scribe\nblocked_by:\n  - T-001\n",
+    ),
+  });
+  assert.doesNotMatch(
+    blocked,
+    /Giao được song song/,
+    "task chờ chính task này thì chờ, không song song",
+  );
+
+  const unknownArea = await parallelBriefOf({
+    ".ganas/modules/M-a.yaml": mod("M-a", '["src/a/**"]'),
+    ".ganas/modules/M-b.yaml": mod("M-b", '["src/b/**"]'),
+    ".ganas/tasks/T-001.yaml": taskTouching("T-001", "M-a", "model: main\n"),
+    ".ganas/tasks/T-002.yaml": `id: T-002
+title: "Không khai chạm khối nào"
+serves:
+  - G-001
+implements: D-001
+scope: P-thu
+status: todo
+model: scribe
+exit_contract:
+  - kind: command
+    run: "true"
+`,
+  });
+  assert.doesNotMatch(
+    unknownArea,
+    /Giao được song song/,
+    "không biết task kia đụng đâu thì không kết luận là an toàn",
+  );
 });
 
 /* --- Module.skills gộp vào brief qua touches (N11) -------------------------- */

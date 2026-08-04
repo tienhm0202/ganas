@@ -168,6 +168,43 @@ không có "tương đối với đâu" để tính.
 `);
 }
 
+/* --- Harness khai trong .ganas/config.yaml --- */
+
+/**
+ * Ghi `harness:` vào config của project đang dùng ganas.
+ *
+ * Sửa THEO DÒNG chứ không parse rồi ghi lại YAML: config.yaml do `ganas init`
+ * sinh ra đầy comment giải thích, mà mọi thư viện YAML ghi lại đều làm rụng
+ * hoặc xô lệch chúng. Ở đây chỉ cần đụng đúng một dòng.
+ */
+function setHarness(name) {
+  const path = join(PROJECT_ROOT, ".ganas", "config.yaml");
+  if (!existsSync(path)) {
+    return `chưa có .ganas/config.yaml (chạy \`ganas init\` trước) — nhớ khai \`harness: ${name}\``;
+  }
+
+  const original = readFileSync(path, "utf8");
+  const line = `harness: ${name}`;
+  const existing = /^harness:[^\n]*$/m;
+
+  if (existing.test(original)) {
+    const current = existing.exec(original)[0];
+    if (current.trim() === line) return `harness đã là \`${name}\`, không sửa gì`;
+    writeFileSync(path, original.replace(existing, line), "utf8");
+    return `harness: \`${current.trim().slice("harness:".length).trim()}\` → \`${name}\` trong .ganas/config.yaml`;
+  }
+
+  // Chưa khai (config sinh bởi ganas cũ): chèn ngay sau `project:`. Không cố
+  // đặt đúng vị trí template mới dùng — thứ tự key trong YAML không đổi ý
+  // nghĩa, còn dò vị trí trong file người dùng đã sửa thì dễ chèn nhầm chỗ.
+  const project = /^project:[^\n]*$/m;
+  const patched = project.test(original)
+    ? original.replace(project, (m) => `${m}\n\n${line}`)
+    : `${line}\n${original}`;
+  writeFileSync(path, patched, "utf8");
+  return `thêm \`${line}\` vào .ganas/config.yaml`;
+}
+
 /* --- CLI --- */
 
 const flags = new Set(process.argv.slice(2));
@@ -204,6 +241,26 @@ if (flags.has("--cursor")) done.push(installCursor());
 if (flags.has("--windsurf")) {
   printWindsurfInstructions();
   done.push("Windsurf: in hướng dẫn ở trên (không ghi file)");
+}
+
+// `harness` là MỘT giá trị: nó trả lời "brief hướng dẫn giao task kiểu nào".
+// Cài nhiều harness cùng lúc thì không có câu trả lời đúng để đoán — hỏi
+// người, đừng chọn bừa rồi làm brief dạy sai cách giao việc.
+const HARNESS_OF = {
+  "--claude-code": "claude-code",
+  "--zed": "zed",
+  "--cursor": "cursor",
+  "--windsurf": "windsurf",
+};
+const targets = [...flags].filter((f) => f in HARNESS_OF);
+if (targets.length === 1) {
+  done.push(setHarness(HARNESS_OF[targets[0]]));
+} else {
+  done.push(
+    `cài ${targets.length} harness cùng lúc — tự khai một dòng \`harness:\` trong ` +
+      `.ganas/config.yaml (${targets.map((f) => HARNESS_OF[f]).join(" | ")}): ` +
+      `đó là harness mà brief sẽ dạy cách giao task.`,
+  );
 }
 
 for (const line of done) console.log(`✓ ${line}`);

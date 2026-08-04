@@ -52,7 +52,10 @@ Lệnh tự tạo một khối nếu chưa khối nào trùng vùng code. Khối
 khi đó bắt buộc phải có eval: probe kiểm được cấu trúc, không kiểm được hành vi
 của LLM.
 
-Xong thì `ganas validate`, rồi tạo task khai `scope: <id vừa tạo>`.
+Xong thì `ganas validate`, rồi tạo task khai `scope: <id vừa tạo>` — và khai
+luôn `model: main|verifier|scribe` cho task đó. Tier là thứ quyết định task sẽ
+được giao cho sub-agent nào; bỏ trống thì mặc định phiên chính ôm hết bằng
+model mạnh nhất, kể cả việc cơ học (`spine/task-missing-model`).
 
 ## Khi fact/claim/task báo lỗi thiếu `scope`
 

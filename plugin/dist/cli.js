@@ -427,6 +427,36 @@ function rankedCandidates(graph, opts = {}) {
 function selectNextTask(graph, opts = {}) {
   return rankedCandidates(graph, opts)[0] ?? null;
 }
+function staticPrefix(glob) {
+  const cut = glob.search(/[*?[{]/);
+  const head = cut === -1 ? glob : glob.slice(0, cut);
+  const slash = head.lastIndexOf("/");
+  return slash === -1 ? "" : head.slice(0, slash + 1);
+}
+function pathsOverlap(a, b) {
+  for (const x of a.map(staticPrefix)) {
+    for (const y of b.map(staticPrefix)) {
+      if (x.startsWith(y) || y.startsWith(x)) return true;
+    }
+  }
+  return false;
+}
+function taskPaths(graph, task) {
+  return task.touches.flatMap((id) => graph.modules.get(id)?.value.paths ?? []);
+}
+function parallelCandidates(graph, task) {
+  const mine = new Set(task.touches);
+  const minePaths = taskPaths(graph, task);
+  if (task.touches.length === 0) return [];
+  return candidates(graph).filter((c) => {
+    const t = c.task.value;
+    if (t.id === task.id || c.blockers.length > 0) return false;
+    if (t.blocked_by.includes(task.id) || task.blocked_by.includes(t.id)) return false;
+    if (t.touches.length === 0) return false;
+    if (t.touches.some((m) => mine.has(m))) return false;
+    return !pathsOverlap(taskPaths(graph, t), minePaths);
+  }).map((c) => c.task).sort((a, b) => a.value.id.localeCompare(b.value.id));
+}
 function blockedTasks(graph) {
   return candidates(graph).filter((c) => c.blockers.length > 0).sort((a, b) => a.task.value.id.localeCompare(b.task.value.id));
 }
@@ -4694,10 +4724,16 @@ var init_anchor = __esm({
 });
 
 // src/model/config.ts
+function canDispatchSubagent(harness) {
+  return harness === "claude-code";
+}
+function agentModelAlias(modelId) {
+  return /(opus|sonnet|haiku|fable)/i.exec(modelId)?.[1]?.toLowerCase();
+}
 function enforcementFor(config, rule) {
   return config.enforcement_rules[rule] ?? config.enforcement;
 }
-var ENFORCEMENT, ENFORCEMENT_RULES, MODEL_TIER, LATEST_SCHEMA_VERSION, zConfig;
+var ENFORCEMENT, ENFORCEMENT_RULES, MODEL_TIER, HARNESS, LATEST_SCHEMA_VERSION, zConfig;
 var init_config = __esm({
   "src/model/config.ts"() {
     "use strict";
@@ -4715,10 +4751,17 @@ var init_config = __esm({
       "task_link"
     ];
     MODEL_TIER = ["main", "verifier", "scribe"];
+    HARNESS = ["claude-code", "cursor", "zed", "windsurf", "other"];
     LATEST_SCHEMA_VERSION = 1;
     zConfig = external_exports.object({
       version: external_exports.literal(LATEST_SCHEMA_VERSION).default(LATEST_SCHEMA_VERSION).describe("phi\xEAn b\u1EA3n schema .ganas/"),
       project: zNonEmpty,
+      /**
+       * Harness giao việc. Mặc định `claude-code`: đó là harness ganas cưỡng chế
+       * được đầy đủ (hook + skill), và là mặc định của `ganas init`. Dự án cũ
+       * không khai field này vẫn chạy như trước.
+       */
+      harness: external_exports.enum(HARNESS).default("claude-code"),
       /** Mức mặc định cho mọi luật. */
       enforcement: external_exports.enum(ENFORCEMENT).default("warn"),
       /** Ghi đè theo từng luật. Thiếu key ⇒ dùng `enforcement`. */
@@ -13209,6 +13252,16 @@ function validateGraph(graph) {
         });
       }
     });
+    if (!t.model && t.status !== "done") {
+      diags.push({
+        severity: "warning",
+        code: "spine/task-missing-model",
+        message: `task ${t.id} ch\u01B0a g\xE1n \`model\` \u2014 ch\u01B0a ai quy\u1EBFt tier n\xE0o l\xE0m vi\u1EC7c n\xE0y`,
+        file: task.file,
+        line: at(graph, task, "status"),
+        hint: `Th\xEAm \`model: main|verifier|scribe\` (main = kh\xF3/m\u01A1 h\u1ED3, verifier = kho\u1EA3ng gi\u1EEFa, scribe = c\u01A1 h\u1ECDc). Thi\u1EBFu n\xF3, brief kh\xF4ng giao \u0111\u01B0\u1EE3c task cho sub-agent n\xE0o.`
+      });
+    }
     if (t.estimated_context === "large") {
       diags.push({
         severity: "warning",
@@ -14892,6 +14945,17 @@ enforcement_rules: {}
   # exit_contract: enforce
   # task_link: enforce
 
+# Harness giao vi\u1EC7c: claude-code | cursor | zed | windsurf | other
+# Quy\u1EBFt \u0111\u1ECBnh brief h\u01B0\u1EDBng d\u1EABn giao task ki\u1EC3u n\xE0o: claude-code th\xEC t\u1EA1o sub-agent
+# v\u1EDBi model c\u1EE7a tier; c\xE1c harness c\xF2n l\u1EA1i ch\u1EC9 n\u1ED1i qua MCP n\xEAn brief ch\u1EC9 khuy\u1EBFn
+# ngh\u1ECB \u0111\u1ED5i model trong picker. Repo m\u1EDF b\u1EB1ng nhi\u1EC1u editor th\xEC khai c\xE1i b\u1EA1n th\u1EADt
+# s\u1EF1 giao vi\u1EC7c t\u1EEB \u0111\xF3.
+harness: claude-code
+
+# Model th\u1EADt cho t\u1EEBng tier. Task khai \`model: <tier>\` l\xFAc ch\u1EBB, brief tra \u1EDF \u0111\xE2y.
+#   main     \u2014 vi\u1EC7c kh\xF3/m\u01A1 h\u1ED3, c\u1EA7n ph\xE1n \u0111o\xE1n
+#   verifier \u2014 kho\u1EA3ng gi\u1EEFa
+#   scribe   \u2014 vi\u1EC7c c\u01A1 h\u1ECDc, \xEDt quy\u1EBFt \u0111\u1ECBnh (tier th\u1EA5p \u0111\u1EC3 \u0111\u1EE1 ngh\u0129 qu\xE1 tay)
 models:
   main: claude-opus-5
   verifier: claude-sonnet-5
@@ -15991,6 +16055,67 @@ function relevantLegacyClaims(graph, task) {
 function bullet(lines) {
   return lines.map((l) => `- ${l}`).join("\n");
 }
+function dispatchSection(graph, t) {
+  const H = `## Giao vi\u1EC7c`;
+  if (!t.model) {
+    return `${H} \u2014 \u26A0 ch\u01B0a ai quy\u1EBFt ai l\xE0m
+
+Task n\xE0y ch\u01B0a g\xE1n \`model\`. Ngh\u0129a l\xE0 l\xFAc ch\u1EBB task kh\xF4ng ai quy\u1EBFt n\xF3 kh\xF3 t\u1EDBi \u0111\xE2u, n\xEAn m\u1EB7c \u0111\u1ECBnh phi\xEAn ch\xEDnh \xF4m h\u1EBFt b\u1EB1ng model m\u1EA1nh nh\u1EA5t \u2014 k\u1EC3 c\u1EA3 vi\u1EC7c c\u01A1 h\u1ECDc.
+
+S\u1EEDa file task trong \`.ganas/tasks/\`, th\xEAm m\u1ED9t d\xF2ng:
+
+\`\`\`yaml
+model: main   # main = kh\xF3/m\u01A1 h\u1ED3 \xB7 verifier = kho\u1EA3ng gi\u1EEFa \xB7 scribe = c\u01A1 h\u1ECDc
+\`\`\`
+
+R\u1ED3i \`ganas validate\` (lu\u1EADt \`spine/task-missing-model\`). Kh\xF4ng \u0111o\xE1n h\u1ED9 \u1EDF \u0111\xE2y: heuristic suy tier kh\xF4ng \u0111\xE1ng tin b\u1EB1ng ng\u01B0\u1EDDi v\u1EEBa ch\u1EBB task.`;
+  }
+  const modelId = graph.config.models[t.model];
+  if (!canDispatchSubagent(graph.config.harness)) {
+    return `${H}
+
+Tier \`${t.model}\` \u2192 model \`${modelId}\`.
+
+Harness khai trong \`config.yaml\` l\xE0 \`${graph.config.harness}\`: ganas n\u1ED1i v\xE0o \u0111\xF3 qua MCP, m\xE0 MCP kh\xF4ng t\u1EA1o \u0111\u01B0\u1EE3c agent con v\xE0 kh\xF4ng \u0111\u1ED5i \u0111\u01B0\u1EE3c model c\u1EE7a phi\xEAn. \u0110\u1ED5i model sang \`${modelId}\` trong picker tr\u01B0\u1EDBc khi l\xE0m, ho\u1EB7c m\u1EDF m\u1ED9t phi\xEAn ri\xEAng b\u1EB1ng model \u0111\xF3.
+
+> **\u0110\xE2y l\xE0 khuy\u1EBFn ngh\u1ECB, kh\xF4ng ph\u1EA3i h\xE0ng r\xE0o** \u2014 ganas kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c b\u1EA1n c\xF3 \u0111\u1ED5i hay kh\xF4ng. \u0110\u1EEBng ghi v\xE0o \`.ganas/\` r\u1EB1ng task \u0111\xE3 ch\u1EA1y \u0111\xFAng tier.`;
+  }
+  const alias = agentModelAlias(modelId);
+  const modelArg = alias ? `\`model: "${alias}"\`` : `model \`${modelId}\``;
+  return `${H} \u2014 task n\xE0y KH\xD4NG ch\u1EA1y th\u1EB3ng \u1EDF phi\xEAn ch\xEDnh
+
+Tier \`${t.model}\` \u2192 model \`${modelId}\` (${modelArg}).
+
+Phi\xEAn ch\xEDnh l\xE0 ng\u01B0\u1EDDi \u0110I\u1EC0U PH\u1ED0I: ch\u1ECDn task, \u0111\u1ECDc brief, giao vi\u1EC7c, ch\u1EA5m gate, commit. Ph\u1EA7n s\u1EEDa code c\u1EE7a task n\xE0y ch\u1EA1y trong sub-agent ri\xEAng:
+
+` + bullet([
+    `T\u1EA1o sub-agent v\u1EDBi ${modelArg}.`,
+    `Prompt m\u1EDF \u0111\u1EA7u b\u1EB1ng \`ganas brief ${t.id}\` \u2014 \u0111\u1EC3 sub-agent t\u1EF1 l\u1EA5y \u0111\xFAng brief n\xE0y, \u0111\u1EEBng ch\xE9p tay l\u1EA1i (ch\xE9p tay l\xE0 ch\u1ED7 brief b\u1ECB b\xF3p m\xE9o).`,
+    `Sub-agent xong th\xEC phi\xEAn ch\xEDnh ch\u1EA1y \`ganas gate\` \u0111\u1EC3 ch\u1EA5m. Ch\u1EA5m b\u1EB1ng l\u1EC7nh, kh\xF4ng b\u1EB1ng l\u1EDDi t\u1ED5ng k\u1EBFt c\u1EE7a sub-agent.`
+  ]) + `
+
+Hai l\xFD do, kh\xF4ng ph\u1EA3i m\u1ED9t: context phi\xEAn ch\xEDnh kh\xF4ng b\u1ECB chi ti\u1EBFt th\u1EF1c thi nu\u1ED1t m\u1EA5t, v\xE0 tier th\u1EA5p kh\xF4ng ngh\u0129 qu\xE1 tay cho vi\u1EC7c c\u01A1 h\u1ECDc.
+
+` + parallelBlock(graph, t) + `> N\u1EBFu B\u1EA0N \u0110ANG L\xC0 sub-agent nh\u1EADn ch\xEDnh task n\xE0y: l\xE0m lu\xF4n, \u0111\u1EEBng giao ti\u1EBFp n\u1EEFa.`;
+}
+function parallelBlock(graph, t) {
+  const others = parallelCandidates(graph, t);
+  if (others.length === 0) return "";
+  const items = others.map((o) => {
+    const task = o.value;
+    const tier = task.model ? `tier \`${task.model}\`` : `\u26A0 ch\u01B0a g\xE1n model`;
+    const alias = task.model ? agentModelAlias(graph.config.models[task.model]) : void 0;
+    return `\`${task.id}\` \u2014 ${task.title}
+  ${tier}${alias ? ` \u2192 \`model: "${alias}"\`` : ""} \xB7 kh\u1ED1i ${task.touches.map((m) => `\`${m}\``).join(", ")}`;
+  });
+  return `**Giao \u0111\u01B0\u1EE3c song song ngay b\xE2y gi\u1EDD** \u2014 c\xE1c task d\u01B0\u1EDBi \u0111\xE2y kh\xF4ng ch\u1EB7n nhau v\xE0 KH\xD4NG \u0111\u1EE5ng c\xF9ng v\xF9ng code v\u1EDBi task n\xE0y. M\u1EDF m\u1ED7i c\xE1i m\u1ED9t sub-agent ri\xEAng, c\xF9ng l\xFAc, m\u1ED7i sub-agent t\u1EF1 ch\u1EA1y \`ganas brief <id>\` tr\u01B0\u1EDBc khi s\u1EEDa g\xEC:
+
+` + bullet(items) + `
+
+Ch\u1EA5m t\u1EEBng c\xE1i b\u1EB1ng \`ganas gate <id>\` sau khi sub-agent t\u01B0\u01A1ng \u1EE9ng xong. **Ch\u1EC9 nh\u1EEFng task c\xF3 t\xEAn \u1EDF \u0111\xE2y** \u2014 task kh\xE1c ch\u1EA1m c\xF9ng v\xF9ng code, giao song song th\xEC s\u1EEDa \u0111\u1ED5i c\u1EE7a agent n\xE0y b\u1ECB agent kia \u0111\xE8 m\xE0 kh\xF4ng ai th\u1EA5y.
+
+`;
+}
 function renderBrief(input) {
   const { graph, task: sourced, freshness } = input;
   const t = sourced.value;
@@ -16223,14 +16348,14 @@ Ch\u01B0a ai tr\u1EA3 l\u1EDDi. **\u0110\u1EEBng t\u1EF1 quy\u1EBFt** \u2014 h\u
     if (!mod) continue;
     for (const s of mod.skills) skillSet.add(s);
   }
-  if (skillSet.size > 0 || t.model) {
-    const modelLine = t.model ? `G\u1EE3i \xFD giao vi\u1EC7c: model \`${graph.config.models[t.model]}\` (${t.model})` : "";
-    const skillList = skillSet.size > 0 ? bullet([...skillSet].map((s) => `\`/${s}\``)) : "";
-    const body = [modelLine, skillList].filter((s) => s.length > 0).join("\n\n");
-    parts.push(`## K\u1EF9 n\u0103ng c\u1EA7n d\xF9ng cho task n\xE0y
+  if (skillSet.size > 0) {
+    parts.push(
+      `## K\u1EF9 n\u0103ng c\u1EA7n d\xF9ng cho task n\xE0y
 
-${body}`);
+${bullet([...skillSet].map((s) => `\`/${s}\``))}`
+    );
   }
+  parts.push(dispatchSection(graph, t));
   const auto = [];
   const manual = [];
   for (const c of t.exit_contract) {

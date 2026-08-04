@@ -151,11 +151,27 @@ Các field khác của Task:
   `SKILL.md` nào. Gộp cùng `skills` của mọi Module trong `touches` khi render
   brief (dedupe qua `Set`).
 - **`model`**: một trong `MODEL_TIER` (`main`/`verifier`/`scribe`, xem
-  `src/model/config.ts`) — gợi ý tier model nên dùng khi giao task này cho
-  sub-agent hay phiên mới. **Đây là quyết định của người/agent lúc chẻ task
-  từ plan, KHÔNG suy tự động từ `module.nature`** — comment trong
-  `task.ts` nói rõ heuristic tự suy không đáng tin bằng người hiểu rõ việc.
-  Không gán thì brief không gợi ý gì, không đoán bừa.
+  `src/model/config.ts`) — tier model dùng khi giao task này cho sub-agent
+  hay phiên mới. **Đây là quyết định của người/agent lúc chẻ task từ plan,
+  KHÔNG suy tự động từ `module.nature`** — comment trong `task.ts` nói rõ
+  heuristic tự suy không đáng tin bằng người hiểu rõ việc. Bỏ trống thì
+  validator cảnh báo `spine/task-missing-model` và brief mở mục "Giao việc"
+  bằng "⚠ chưa ai quyết ai làm" — vì mặc định im lặng là phiên chính ôm hết
+  bằng model mạnh nhất, kể cả việc cơ học.
+
+  Tier ra thành hành động ở mục **Giao việc** của brief, và hành động đó phụ
+  thuộc `config.harness` (xem mục dưới): `claude-code` thì brief bảo tạo
+  sub-agent với alias model tương ứng (`agentModelAlias()` suy `sonnet` từ
+  `claude-sonnet-5`) và cho sub-agent tự chạy `ganas brief <id>`; harness
+  khác chỉ nối qua MCP nên brief chỉ khuyến nghị đổi model — và tự khai là
+  **không cưỡng chế được**.
+
+  Cùng mục đó liệt kê task **giao song song được** (`parallelCandidates()`
+  trong `src/graph/select.ts`): không chặn nhau theo cả hai chiều, và vùng
+  code rời nhau — không chung khối, glob của các khối không lồng nhau. Luật cố
+  ý sai theo hướng "không song song" (task chưa khai `touches` bị loại; `src/**`
+  và `src/a/**` coi như chồng): kết luận sai theo hướng ngược lại có nghĩa là
+  hai sub-agent sửa cùng file cùng lúc, cái sau đè cái trước mà không ai thấy.
 - `estimated_context`: `small`/`medium`/`large` — `large` bị validator cảnh
   báo (`spine/task-too-large`): task quá lớn buộc phải compact giữa chừng,
   và đó là lúc tri thức bị mất hoặc bị bóp méo.
@@ -177,6 +193,17 @@ Có thể ghi đè riêng từng luật qua `enforcement_rules` (4 luật khai t
 `config.models` ánh xạ 3 tier (`main`/`verifier`/`scribe`) sang model id thật
 — đây là nơi `Task.model` (tier) được resolve thành model id cụ thể lúc
 render brief.
+
+`config.harness` (`claude-code` | `cursor` | `zed` | `windsurf` | `other`,
+mặc định `claude-code`) khai harness đang giao việc. Nó cần thiết vì tier chỉ
+là dữ liệu, còn biến dữ liệu đó thành hành động thì mỗi harness một kiểu:
+Claude Code tạo được sub-agent và chỉ định model ngay trong tool call
+(`canDispatchSubagent()` trả `true`), còn Cursor/Zed/Windsurf chỉ nối với
+ganas qua MCP — MCP không có khái niệm sinh agent con hay đổi model của
+phiên, nên brief chỉ khuyến nghị và nói thẳng là không kiểm được. Đánh đổi đã
+biết: một repo mở bằng nhiều editor chỉ khai được một giá trị — khai cái bạn
+thật sự giao việc từ đó. `scripts/install-target.mjs` ghi field này khi cài
+đúng một harness; cài nhiều cờ cùng lúc thì nó không đoán, chỉ nhắc khai tay.
 
 ## 4. Phạm vi công việc và sơ đồ khối = bản đồ hệ thống
 

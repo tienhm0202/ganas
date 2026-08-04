@@ -280,6 +280,23 @@ export function validateGraph(graph: Graph): Diagnostic[] {
       }
     });
 
+    // Chẻ task mà không quyết tier là để ngỏ cho phiên chính ôm hết bằng model
+    // mạnh nhất. Cảnh báo chứ không chặn: task cũ (chẻ trước khi có luật này)
+    // vẫn phải chạy được, và người quyết tier là người/agent chẻ task chứ
+    // không phải validator — nó chỉ nhắc rằng chưa ai quyết.
+    if (!t.model && t.status !== "done") {
+      diags.push({
+        severity: "warning",
+        code: "spine/task-missing-model",
+        message: `task ${t.id} chưa gán \`model\` — chưa ai quyết tier nào làm việc này`,
+        file: task.file,
+        line: at(graph, task, "status"),
+        hint:
+          `Thêm \`model: main|verifier|scribe\` (main = khó/mơ hồ, verifier = khoảng giữa, ` +
+          `scribe = cơ học). Thiếu nó, brief không giao được task cho sub-agent nào.`,
+      });
+    }
+
     if (t.estimated_context === "large") {
       diags.push({
         severity: "warning",
