@@ -193,7 +193,8 @@ export async function loadGraph(root: string): Promise<Graph> {
     );
   }
 
-  const ledger = indexByTarget(await readLedger(root));
+  const ledgerRaw = await readLedger(root);
+  const ledger = indexByTarget(ledgerRaw);
 
   const gitignoreFile = join(root, ".gitignore");
   const gitignoreRaw = existsSync(gitignoreFile) ? await readFile(gitignoreFile, "utf8") : null;
@@ -226,6 +227,7 @@ export async function loadGraph(root: string): Promise<Graph> {
     claims: claims.items,
     decisions: decisions.items,
     ledger,
+    ledgerRaw,
     gitignoreRaw,
     sources: new Map([
       ...goals.sources,

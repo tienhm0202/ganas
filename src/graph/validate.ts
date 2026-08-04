@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { ExitCriterion } from "../model/index.js";
 import { evalWeakness, formatAnchor, freshnessOf } from "../model/index.js";
 import { lineOfPath } from "../util/yaml.js";
-import { defHash, entryAt, LEDGER_FILE, ledgerCorruption } from "../verify/ledger.js";
+import { defHash, entryAt, LEDGER_FILE, ledgerCorruption, verifyChain } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
 import { GANAS_DIR, LOCAL_ONLY } from "./paths.js";
 import type { Diagnostic, Graph, Sourced } from "./types.js";
@@ -687,6 +687,23 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         `Dòng hỏng bị bỏ qua khi tính độ tươi, nên fact dựa vào chúng âm thầm quay ` +
         `lại "chưa verify". Xem git history của file này: một dòng rách có thể là ` +
         `lỗi ghi, cũng có thể là dấu vết ai đó sửa lịch sử.`,
+    });
+  }
+
+  const chain = verifyChain(graph.ledgerRaw);
+  if (!chain.ok) {
+    const at = graph.ledgerRaw[chain.brokenAt!];
+    diags.push({
+      severity: "error",
+      code: "knowledge/ledger-chain-broken",
+      message:
+        `${LEDGER_FILE} đứt hash-chain tại dòng thứ ${chain.brokenAt! + 1}` +
+        (at ? ` (target ${at.target}, ghi lúc ${at.at})` : "") +
+        ` — một dòng TRƯỚC đó đã bị sửa, xoá, hoặc đảo thứ tự sau khi ghi.`,
+      file: `${GANAS_DIR}/${LEDGER_FILE}`,
+      hint:
+        `Sổ cái là append-only; hash-chain giữ dấu vết cho MỌI dòng sau một chỗ bị ` +
+        `sửa, không chỉ dòng bị sửa. Xem git history quanh dòng này để biết ai đổi gì.`,
     });
   }
 

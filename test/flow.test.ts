@@ -112,8 +112,12 @@ async function advance(root: string, stage: string): Promise<void> {
   switch (stage) {
     case "fix-graph":
       // Dự án vừa `git init` chưa có `.gitignore`, mà trạng thái riêng của phiên
-      // (`runs/`, `state.json`) không được commit — validate coi đó là lỗi.
-      await writeFile(join(root, ".gitignore"), ".ganas/runs/\n.ganas/state.json\n", "utf8");
+      // (`runs/`, `.locks/`, `state.json`) không được commit — validate coi đó là lỗi.
+      await writeFile(
+        join(root, ".gitignore"),
+        ".ganas/runs/\n.ganas/.locks/\n.ganas/state.json\n",
+        "utf8",
+      );
       return;
 
     case "scope":

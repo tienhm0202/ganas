@@ -1,10 +1,11 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
 import { evaluateGate } from "../gate.js";
+import { claimNextTask, claimTask, releaseClaimsForSession } from "../graph/claim.js";
 import { computeFreshness } from "../graph/freshness.js";
 import { loadGraph } from "../graph/load.js";
 import { CONFIG_FILE, findGanasRoot, GANAS_DIR, ganasPath } from "../graph/paths.js";
-import { selectNextTask } from "../graph/select.js";
+import { type Candidate, rankedCandidates, selectNextTask } from "../graph/select.js";
 import type { Diagnostic } from "../graph/types.js";
 import { validateGraph } from "../graph/validate.js";
 import { generateHandoff } from "../handoff.js";
@@ -45,19 +46,32 @@ export async function sessionStart(input: HookInput): Promise<HookOutput> {
 
   // Phải chọn task mới thì ở lại phạm vi cũ nếu còn việc: brief của phạm vi đó
   // đã nạp rồi, nhảy sang phạm vi khác là dựng lại ngữ cảnh từ đầu.
-  const picked =
-    existing && existing.value.status !== "done"
-      ? { task: existing }
+  let picked: Candidate | null;
+  if (existing && existing.value.status !== "done") {
+    // Giữ lại claim của chính task đang làm — quan trọng khi phiên này mới
+    // tạo (claim cũ, nếu có, do phiên trước để lại) hoặc claim đã hết hạn.
+    if (sessionId)
+      await claimTask(root, existing.value.id, sessionId, graph.config.claim.ttl_minutes);
+    picked = { task: existing, blockers: [] };
+  } else {
+    picked = sessionId
+      ? await claimNextTask(graph, root, sessionId, { preferScope: existing?.value.scope })
       : selectNextTask(graph, { preferScope: existing?.value.scope });
+  }
 
   if (!picked) {
+    const heldByOthers = rankedCandidates(graph).length;
+    const body =
+      heldByOthers > 0
+        ? `Dự án này dùng ganas, nhưng ${heldByOthers} task còn làm được đang bị ` +
+          `phiên khác giữ. Đợi phiên đó giải phóng, hoặc phối hợp trước khi giành lại.`
+        : `Dự án này dùng ganas, nhưng hiện **không có task nào làm được**.\n\n` +
+          `Trước khi sửa code, hãy tạo task trong \`.ganas/tasks/\` (phải khai \`serves\`, ` +
+          `\`implements\`, \`scope\`, \`exit_contract\`) rồi chạy \`ganas validate\`.`;
     return {
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext:
-          `# ganas\n\nDự án này dùng ganas, nhưng hiện **không có task nào làm được**.\n\n` +
-          `Trước khi sửa code, hãy tạo task trong \`.ganas/tasks/\` (phải khai \`serves\`, ` +
-          `\`implements\`, \`scope\`, \`exit_contract\`) rồi chạy \`ganas validate\`.`,
+        additionalContext: `# ganas\n\n${body}`,
       },
     };
   }
@@ -319,6 +333,7 @@ export async function sessionEnd(input: HookInput): Promise<HookOutput> {
   const root = findGanasRoot(input.cwd ?? process.cwd());
   if (!root || !input.session_id) return ALLOW;
   await tryHandoff(root, input);
+  await releaseClaimsForSession(root, input.session_id);
   await releaseSession(root, input.session_id);
   return ALLOW;
 }

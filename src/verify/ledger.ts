@@ -41,6 +41,25 @@ export interface LedgerEntry {
   def: string;
   result: LedgerResult;
   /**
+   * Số thứ tự tăng dần trong chain hash — xem `verifyChain()`.
+   *
+   * Vắng mặt = dòng ghi trước khi có hash-chain (P2). Đoạn đó không được
+   * chain bảo vệ, chỉ được bảo vệ bởi "append-only + commit git" như trước —
+   * xem CONCEPTS.md.
+   */
+  seq?: number;
+  /**
+   * Hash của toàn bộ chain TÍNH TỚI NGAY TRƯỚC dòng này (không tính chính
+   * dòng này) — cùng lược đồ hash-chain mà Secure Scuttlebutt và Certificate
+   * Transparency (RFC 6962) dùng, không phải tự nghĩ ra: mỗi bản ghi giữ dấu
+   * vết của mọi bản ghi trước nó, nên sửa/xoá/đảo một dòng cũ làm lệch hash
+   * của MỌI dòng sau nó — phát hiện được bằng cách đọc lại và tính lại, không
+   * cần gì ngoài chính file này. Xem `verifyChain()`.
+   *
+   * Vắng mặt = dòng ghi trước khi có hash-chain.
+   */
+  prev_hash?: string;
+  /**
    * Mutation test đã chứng minh probe CÓ THỂ fail chưa.
    *
    * Không có trường này thì một dòng `pass` do `--no-mutation` sinh ra không
@@ -165,10 +184,79 @@ export function ledgerPath(root: string): string {
   return ganasPath(root, LEDGER_FILE);
 }
 
+/** Chain chưa từng bắt đầu, hoặc vừa migrate — không có gì trước đó để giữ dấu vết. */
+export const CHAIN_GENESIS = "0".repeat(64);
+
+/** Nội dung một dòng, trừ hai trường chain — đó là thứ được băm, không phải chính chúng. */
+function chainContent(entry: LedgerEntry): Record<string, unknown> {
+  const content: Record<string, unknown> = { ...entry };
+  delete content["seq"];
+  delete content["prev_hash"];
+  return content;
+}
+
+/** Hash chain sau khi cộng thêm một dòng vào hash chain tính tới trước nó. */
+function chainStep(runningHash: string, entry: LedgerEntry): string {
+  return createHash("sha256")
+    .update(runningHash + canonical(chainContent(entry)))
+    .digest("hex");
+}
+
+/**
+ * Hash chain tính TỚI HẾT danh sách entry đã cho — dùng làm `prev_hash` cho
+ * dòng kế tiếp sẽ ghi. Dòng chưa có `prev_hash` (trước khi có hash-chain) bị
+ * bỏ qua, không tính vào chain — chain coi như bắt đầu lại từ dòng có
+ * `prev_hash` đầu tiên.
+ */
+function runningHashOf(entries: readonly LedgerEntry[]): string {
+  let running = CHAIN_GENESIS;
+  for (const e of entries) {
+    if (e.prev_hash === undefined) continue;
+    running = chainStep(running, e);
+  }
+  return running;
+}
+
 export async function appendEntry(root: string, entry: LedgerEntry): Promise<void> {
   const file = ledgerPath(root);
   await mkdir(dirname(file), { recursive: true });
-  await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
+
+  const existing = await readLedger(root);
+  const lastSeq = existing.length > 0 ? (existing[existing.length - 1]!.seq ?? 0) : 0;
+  const chained: LedgerEntry = {
+    ...entry,
+    seq: lastSeq + 1,
+    prev_hash: runningHashOf(existing),
+  };
+
+  await appendFile(file, JSON.stringify(chained) + "\n", "utf8");
+}
+
+export interface ChainVerdict {
+  ok: boolean;
+  /** Chỉ mục (0-based) của entry đầu tiên đứt chain — chỉ có khi `ok: false`. */
+  brokenAt?: number;
+}
+
+/**
+ * Đi lại toàn bộ sổ cái, tính lại hash-chain, đối chiếu với `prev_hash` đã
+ * ghi. Đứt ở đâu là entry đó (hoặc một trong các entry TRƯỚC nó) đã bị sửa,
+ * xoá, hoặc đảo thứ tự sau khi ghi — sổ cái là append-only nên bất kỳ thay
+ * đổi nào sau khi ghi cũng phải để lại dấu vết ở đây.
+ */
+export function verifyChain(entries: readonly LedgerEntry[]): ChainVerdict {
+  let running = CHAIN_GENESIS;
+  let started = false;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]!;
+    if (!started) {
+      if (e.prev_hash === undefined) continue; // vẫn ở đoạn trước khi có hash-chain
+      started = true;
+    }
+    if (e.prev_hash !== running) return { ok: false, brokenAt: i };
+    running = chainStep(running, e);
+  }
+  return { ok: true };
 }
 
 /** Số dòng hỏng của lần `readLedger` gần nhất, theo gốc dự án. */

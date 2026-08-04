@@ -13,6 +13,26 @@ import { matchesAny } from "../util/glob.js";
 import { openProject } from "./_common.js";
 
 /**
+ * Ghi một bản ghi MỚI — `flag: "wx"` từ chối ghi đè nếu file đã tồn tại
+ * (nguyên tử ở tầng filesystem). Bảo vệ trường hợp hai phiên chọn trùng ID
+ * gần như đồng thời: kiểm `graph.scopes.has(id)` ở trên chỉ soi graph đã nạp
+ * lúc lệnh bắt đầu, không thấy được file phiên kia vừa tạo xong.
+ */
+async function writeNewYaml(file: string, content: string, describe: string): Promise<void> {
+  try {
+    await writeFile(file, content, { encoding: "utf8", flag: "wx" });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new GanasError(
+        `${describe} đã tồn tại (${relative(process.cwd(), file)}) — ` +
+          `một phiên khác vừa tạo cùng ID, chọn ID khác.`,
+      );
+    }
+    throw err;
+  }
+}
+
+/**
  * `ganas scope` — phạm vi công việc là đơn vị mà một câu nói của người dùng
  * được dịch sang. Ba lệnh con, ba vai trò khác nhau:
  *
@@ -228,13 +248,21 @@ async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
   if (reused.length === 0) {
     const file = ganasPath(root, DIRS.modules, `${moduleIds[0]!}.yaml`);
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, moduleYaml({ id: moduleIds[0]!, scopeId: id, title, paths }), "utf8");
+    await writeNewYaml(
+      file,
+      moduleYaml({ id: moduleIds[0]!, scopeId: id, title, paths }),
+      `khối ${moduleIds[0]!}`,
+    );
     created.push(relative(root, file));
   }
 
   const scopeFile = ganasPath(root, DIRS.scopes, `${id}.yaml`);
   await mkdir(dirname(scopeFile), { recursive: true });
-  await writeFile(scopeFile, scopeYaml({ id, title, owner, moduleIds, accept }), "utf8");
+  await writeNewYaml(
+    scopeFile,
+    scopeYaml({ id, title, owner, moduleIds, accept }),
+    `phạm vi ${id}`,
+  );
   created.unshift(relative(root, scopeFile));
 
   process.stdout.write(

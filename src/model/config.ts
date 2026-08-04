@@ -81,6 +81,17 @@ export const zConfig = z.object({
       auto_begin: z.boolean().default(false),
     })
     .default({}),
+
+  claim: z
+    .object({
+      /**
+       * Một task bị giữ (claim) quá lâu không còn tin được là phiên đó vẫn
+       * sống — có thể đã crash. Sau ngần này phút, claim cũ bị coi là bỏ
+       * hoang và một phiên khác được phép giành lại. Xem `graph/claim.ts`.
+       */
+      ttl_minutes: z.number().int().positive().default(240),
+    })
+    .default({}),
 });
 
 export type Config = z.infer<typeof zConfig>;

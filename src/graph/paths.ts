@@ -24,6 +24,8 @@ export const DIRS = {
   mapSurveys: join("map", "surveys"),
   proposals: "proposals",
   runs: "runs",
+  /** Lock file giữ task cho một phiên — xem `graph/claim.ts`. */
+  locks: ".locks",
 } as const;
 
 export const CONFIG_FILE = "config.yaml";
@@ -37,7 +39,7 @@ export const STATE_FILE = "state.json";
  * chiếu lại `.gitignore` thật với đúng danh sách này. Trước đây hai chỗ khai
  * độc lập, dễ lệch nhau mà không ai biết.
  */
-export const LOCAL_ONLY: readonly string[] = [`${DIRS.runs}/`, STATE_FILE];
+export const LOCAL_ONLY: readonly string[] = [`${DIRS.runs}/`, `${DIRS.locks}/`, STATE_FILE];
 
 /** Đi ngược lên tìm thư mục chứa .ganas/. Trả về null nếu không có. */
 export function findGanasRoot(from = process.cwd()): string | null {

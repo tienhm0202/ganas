@@ -398,6 +398,27 @@ Mỗi dòng JSON (`LedgerEntry`) gồm: `target` (`F-ACC-001` cho fact, hoặc
 `prompt`, `dataset`, `cost_usd`. Cộng bối cảnh chạy: `by`, `git` (short
 sha), `host`, `output` (hash stdout+stderr để đối chiếu khi nghi ngờ).
 
+### Hash-chain — chống sửa lịch sử (`seq`, `prev_hash`)
+
+"Append-only + hook chặn ghi thẳng + commit git" chặn được việc GHI MỚI sai,
+nhưng không tự phát hiện việc SỬA MỘT DÒNG CŨ bằng công cụ ngoài git (sửa
+file trực tiếp rồi mới commit, hoặc `git filter-branch` viết lại lịch sử).
+Hai trường `seq` (số thứ tự) và `prev_hash` đóng lỗ đó: mỗi dòng giữ hash
+của **toàn bộ chain tính tới ngay trước nó** (`runningHashOf()` trong
+`src/verify/ledger.ts`) — đúng lược đồ hash-chain mà Secure Scuttlebutt dùng
+cho log của mỗi feed, cùng họ với Certificate Transparency (RFC 6962): sửa
+một dòng làm hash của MỌI dòng sau nó lệch theo, đọc lại và tính lại
+(`verifyChain()`) là phát hiện được, không cần gì ngoài chính file này.
+`ganas validate` chạy `verifyChain()` trên toàn bộ sổ cái, báo lỗi
+`knowledge/ledger-chain-broken` kèm vị trí dòng đầu tiên lệch.
+
+Không tự nghĩ ra định dạng riêng — đây là chọn dùng nguyên lược đồ đã có,
+không thêm dependency (chỉ `node:crypto`, đã có sẵn trong Node). Dòng ghi
+trước khi hash-chain tồn tại (P2, trước bản này) không có `seq`/`prev_hash`
+— `verifyChain()` bỏ qua đoạn đó, coi chain bắt đầu lại từ dòng có
+`prev_hash` đầu tiên: lịch sử trước migration chỉ còn được bảo vệ bởi
+append-only + git như cũ, không bị hash-chain bao trùm ngược.
+
 ### `defHash` vs vân tay đối tượng đo — hai câu hỏi khác nhau
 
 Có hai câu hỏi độc lập mà một kết quả cũ phải trả lời được "còn đúng

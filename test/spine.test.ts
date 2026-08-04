@@ -196,13 +196,14 @@ test("có .git nhưng chưa có .gitignore → lỗi liệt kê đủ mục loca
     assert.ok(err, "thiếu .gitignore thì trạng thái riêng của máy có thể bị commit nhầm");
     assert.match(err.message, /\.ganas\/runs\//);
     assert.match(err.message, /\.ganas\/state\.json/);
+    assert.match(err.message, /\.ganas\/\.locks\//);
   } finally {
     await cleanup(root);
   }
 });
 
-test(".gitignore đủ hai dòng local-only → không lỗi", async () => {
-  const root = await projectWithGit(".ganas/runs/\n.ganas/state.json\n");
+test(".gitignore đủ ba dòng local-only → không lỗi", async () => {
+  const root = await projectWithGit(".ganas/runs/\n.ganas/.locks/\n.ganas/state.json\n");
   try {
     const graph = await loadGraph(root);
     const codes = validateGraph(graph).map((d) => d.code);
@@ -212,13 +213,14 @@ test(".gitignore đủ hai dòng local-only → không lỗi", async () => {
   }
 });
 
-test(".gitignore thiếu MỘT trong hai dòng → lỗi chỉ nêu đúng dòng thiếu", async () => {
-  const root = await projectWithGit(".ganas/runs/\n");
+test(".gitignore thiếu MỘT trong ba dòng → lỗi chỉ nêu đúng dòng thiếu", async () => {
+  const root = await projectWithGit(".ganas/runs/\n.ganas/.locks/\n");
   try {
     const graph = await loadGraph(root);
     const err = validateGraph(graph).find((d) => d.code === "spine/gitignore-missing-local");
     assert.ok(err);
     assert.doesNotMatch(err.message, /\.ganas\/runs\//);
+    assert.doesNotMatch(err.message, /\.ganas\/\.locks\//);
     assert.match(err.message, /\.ganas\/state\.json/);
   } finally {
     await cleanup(root);

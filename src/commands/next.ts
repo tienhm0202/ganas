@@ -1,4 +1,5 @@
-import { blockedTasks, selectNextTask } from "../graph/select.js";
+import { claimNextTask } from "../graph/claim.js";
+import { blockedTasks, rankedCandidates } from "../graph/select.js";
 import { renderBrief } from "../render/brief.js";
 import { bindSession, updateState } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
@@ -7,9 +8,9 @@ import { openProject, volatileStatus } from "./_common.js";
 export async function run(argv: Argv): Promise<number> {
   const { root, graph, freshness } = await openProject(argv);
 
-  const picked = selectNextTask(graph);
+  const ranked = rankedCandidates(graph);
 
-  if (!picked) {
+  if (ranked.length === 0) {
     const blocked = blockedTasks(graph);
     if (flag(argv, "json")) {
       process.stdout.write(
@@ -51,8 +52,28 @@ export async function run(argv: Argv): Promise<number> {
     return 0;
   }
 
-  const taskId = picked.task.value.id;
   const sessionId = option(argv, "session");
+  // Không có --session (gọi tay từ CLI) vẫn cần một danh tính để tham gia
+  // đúng giao thức claim — nếu không, nó có thể giành lại task một phiên
+  // Claude Code khác đang thật sự giữ.
+  const picked = await claimNextTask(graph, root, sessionId ?? "cli");
+
+  if (!picked) {
+    if (flag(argv, "json")) {
+      process.stdout.write(
+        JSON.stringify({ task: null, held_by_others: ranked.length }, null, 2) + "\n",
+      );
+      return 0;
+    }
+    process.stdout.write(
+      `${ranked.length} task còn làm được, nhưng tất cả đang bị phiên khác giữ:\n\n` +
+        ranked.map((c) => `  ${c.task.value.id} — ${c.task.value.title}\n`).join("") +
+        `\nThử lại sau, hoặc chờ phiên đang giữ giải phóng.\n`,
+    );
+    return 0;
+  }
+
+  const taskId = picked.task.value.id;
 
   // Ghi lại lựa chọn để `ganas brief`, gate và hook biết phiên này đang làm gì.
   if (sessionId) await bindSession(root, sessionId, taskId);

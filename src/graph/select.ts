@@ -31,15 +31,19 @@ export interface SelectOptions {
 }
 
 /**
- * Chọn task kế tiếp.
+ * Xếp hạng task còn làm được, tốt nhất trước.
  *
  * Thứ tự ưu tiên có chủ đích: task đang dở trước, để một phiên mới nối tiếp
  * việc dở thay vì mở mặt trận mới — đó là nguồn gốc của việc bỏ dở nửa chừng.
  * Kế đó là liên tục phạm vi, vì cùng lý do ở quy mô lớn hơn một task.
+ *
+ * Trả về danh sách xếp hạng (không chỉ 1 kết quả) để chỗ gọi có thể bỏ qua
+ * ứng viên đầu nếu nó đang bị phiên khác giữ (xem `graph/claim.ts`) — hàm này
+ * thuần, không biết gì về claim.
  */
-export function selectNextTask(graph: Graph, opts: SelectOptions = {}): Candidate | null {
+export function rankedCandidates(graph: Graph, opts: SelectOptions = {}): Candidate[] {
   const open = candidates(graph).filter((c) => c.blockers.length === 0);
-  if (open.length === 0) return null;
+  if (open.length === 0) return [];
 
   const rank = (c: Candidate): number => {
     const t = c.task.value;
@@ -53,9 +57,12 @@ export function selectNextTask(graph: Graph, opts: SelectOptions = {}): Candidat
     return score;
   };
 
-  return open.sort(
-    (a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id),
-  )[0]!;
+  return open.sort((a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id));
+}
+
+/** Chọn task kế tiếp — ứng viên đứng đầu `rankedCandidates`. */
+export function selectNextTask(graph: Graph, opts: SelectOptions = {}): Candidate | null {
+  return rankedCandidates(graph, opts)[0] ?? null;
 }
 
 /** Task bị chặn, kèm lý do — hiển thị khi không còn việc nào làm được. */

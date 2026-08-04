@@ -56,6 +56,12 @@ export interface Graph {
    * thể đối chiếu `last_verified_at` mà không cần thành hàm async.
    */
   ledger: Map<string, LedgerEntry[]>;
+  /**
+   * Sổ cái xác minh, ĐÚNG THỨ TỰ đã ghi trong file — `ledger` ở trên đã gom
+   * theo target nên mất thứ tự xen kẽ giữa các target, mà hash-chain
+   * (`verifyChain()`) cần đúng thứ tự thật để tính lại.
+   */
+  ledgerRaw: readonly LedgerEntry[];
   /** Lỗi phát sinh ngay lúc nạp (YAML hỏng, sai schema, ID trùng). */
   loadDiagnostics: Diagnostic[];
   /** Nội dung `.gitignore` ở gốc dự án, nếu có — dùng để đối chiếu `LOCAL_ONLY`. */
