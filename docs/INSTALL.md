@@ -3,18 +3,19 @@
 Mọi lệnh dưới đây **đã chạy thật** khi viết tài liệu này, và output là output
 thật nhận được.
 
-ganas chạy được ở hai lớp, tuỳ editor:
+ganas cài được 3 cách, tuỳ bạn muốn code nằm ở đâu:
 
-|            | Claude Code | Zed / Cursor / Windsurf / … |
-|------------|-------------|------------------------------|
-| Cơ chế     | plugin (hook + skill) | MCP server (`stdio`) |
-| Cưỡng chế  | có — `PreToolUse`/`Stop` chặn thật | không — chỉ gọi tool theo yêu cầu |
-| Cài        | `claude plugin install` | tự tay trỏ config MCP vào `ganas-mcp.mjs` |
+|              | 1. Claude Code plugin | 2. Editor khác qua MCP | 3. bun/npm add, không qua plugin system |
+|--------------|------------------------|--------------------------|-------------------------------------------|
+| Cơ chế       | plugin (hook + skill) | MCP server (`stdio`) | hook + skill tự khai thẳng trong `.claude/` của project |
+| Cưỡng chế    | có — `PreToolUse`/`Stop` chặn thật | không — chỉ gọi tool theo yêu cầu | có — cùng 6 hook thật như cột 1 |
+| Code nằm ở đâu | `~/.claude/plugins/cache/…` (dùng chung mọi project trên máy) | tuỳ editor | `node_modules/ganas/` — 100% trong project |
+| Cài          | `claude plugin install` | tự tay trỏ config MCP vào `ganas-mcp.mjs` | `bun add` + script cài kèm theo |
 
-Cả hai đường đều dùng chung một bundle build từ cùng mã nguồn — không có bản
-"rút gọn" riêng cho MCP.
+Cả 3 đường dùng chung một bundle build từ cùng mã nguồn — không có bản "rút
+gọn" riêng cho đường nào.
 
-## 0. Cài từ mã nguồn (bắt buộc, dùng chung cho mọi editor)
+## 0. Cài từ mã nguồn (cho mục 1 và 2 — mục 3 tự lo, xem bên dưới)
 
 ```
 git clone <repo> ganas && cd ganas
@@ -24,12 +25,14 @@ npm run build                          # BẮT BUỘC — xem "Vì sao phải bu
 
 `npm run build` sinh `plugin/dist/cli.js` (CLI + hook) và `plugin/dist/mcp.js`
 (MCP server) — cả hai bundle tự chứa, không phụ thuộc `node_modules/` bên
-ngoài. Nhớ đường dẫn `$PWD` sau bước này — mọi editor bên dưới đều trỏ vào
-cùng thư mục `plugin/` vừa build.
+ngoài. Nhớ đường dẫn `$PWD` sau bước này — mục 1 và mục 2 bên dưới đều trỏ
+vào cùng thư mục `plugin/` vừa build.
 
-Muốn gõ `ganas` trần ở mọi nơi thì thêm `npm link` (hoặc `npm install -g .`)
-— `bin` trỏ vào chính bundle mà plugin dùng, nên hai đường không bao giờ lệch
-phiên bản.
+Không có bước "gõ `ganas` trần ở mọi nơi" ở đây — `npm link`/`npm install -g`
+là cài NPM package global, đi ngược scope bạn chọn cho plugin Claude Code
+(mục 1). Muốn gõ tay không qua Claude Code thì gọi thẳng bundle:
+`node plugin/dist/cli.js <lệnh>`, hoặc dùng mục 3 (bun/npm add) — khi đó
+`node_modules/.bin/ganas` đã là bản project-local, không cần global gì cả.
 
 ## 1. Claude Code — plugin (khuyến nghị: có đủ hook + skill + MCP)
 
@@ -100,12 +103,16 @@ echo '{"session_id":"t","cwd":"/tmp","source":"startup"}' \
 
 ### Dùng thử ngay
 
-Vào một dự án bất kỳ:
+Vào một dự án đã bật plugin ganas (mục 1):
 
 ```
 cd /duong/dan/du-an
-ganas          # hoặc: node ~/.claude/plugins/cache/ganas/ganas/*/bin/ganas.mjs
+node ~/.claude/plugins/cache/ganas/ganas/*/bin/ganas.mjs
 ```
+
+(đường dẫn cache này cố định — Claude Code luôn copy code plugin vào đó, bất
+kể chọn scope nào lúc cài. Không có bước "gõ `ganas` trần" ở đây — xem ghi
+chú ở mục 0 vì sao.)
 
 ```
 Bước kế tiếp (1/12 · init)
@@ -211,6 +218,68 @@ printf '%s\n' \
 Thấy `"result":{"tools":[...]}` với 7 tool là đúng. Không thấy gì / lỗi
 `Cannot find module` → chưa `npm run build`, hoặc đường dẫn sai.
 
+## 3. Không qua plugin system — bun/npm add, mọi thứ nằm trong project
+
+Cả mục 1 và 2 đều copy code ganas vào một chỗ NGOÀI project (`claude plugin
+install` luôn copy vào `~/.claude/plugins/cache/…`, cố định — không đổi
+được dù chọn scope nào). Nếu muốn ganas nằm 100% trong chính project (một
+`bun install`/`npm install` ở máy khác là có y hệt, không cần biết gì tới
+Claude Code plugin system), dùng cách này.
+
+```
+cd /duong/dan/du-an-cua-ban
+bun add github:tienhm0202/ganas
+```
+
+`package.json` của ganas khai `"bin": {"ganas": "./plugin/dist/cli.js"}` và
+`plugin/dist/` đã build sẵn, commit trong git — cài xong có ngay
+`node_modules/.bin/ganas` chạy được, không phải `npm run build` lại.
+
+Cài xong CHƯA có hook/skill/MCP nào hoạt động — bun/npm chỉ tải code, không
+biết gì về Claude Code. Chạy script cài kèm theo repo, đúng cờ cho từng
+editor (kết hợp được nhiều cờ):
+
+```
+node node_modules/ganas/scripts/install-target.mjs --claude-code
+node node_modules/ganas/scripts/install-target.mjs --zed
+node node_modules/ganas/scripts/install-target.mjs --cursor
+node node_modules/ganas/scripts/install-target.mjs --windsurf
+```
+
+Output thật (`--claude-code`):
+
+```
+✓ Claude Code: 6 hook mới trong .claude/settings.json, 9 skill ghi vào .claude/skills
+```
+
+`--claude-code` ghi hook vào `.claude/settings.json` — đọc thẳng
+`plugin/hooks/hooks.json` làm nguồn (luôn khớp đúng 6 hook thật, không chép
+tay ra một chỗ khác dễ trôi dạt) — và copy 9 skill vào `.claude/skills/`,
+thay `${CLAUDE_PLUGIN_ROOT}` bằng đường dẫn tương đối
+`node_modules/ganas/plugin`. `--zed`/`--cursor` ghi MCP config
+**project-local** (`.zed/settings.json`, `.cursor/mcp.json`). `--windsurf`
+chỉ in hướng dẫn — Windsurf không có config MCP theo project, chỉ có
+`~/.codeium/windsurf/mcp_config.json` (global, ngoài tầm của cách cài này).
+
+An toàn chạy lại nhiều lần: không nhân đôi hook, không đụng key khác đã có
+sẵn trong file, skill luôn ghi lại đúng bản mới nhất.
+
+### Cưỡng chế đủ như Claude Code plugin
+
+`--claude-code` viết đúng 6 hook thật (không phải bản rút gọn) nên
+`PreToolUse`/`Stop` chặn y hệt cài qua mục 1 — chỉ khác chỗ code nằm
+(`node_modules/ganas/` thay vì `~/.claude/plugins/cache/…`).
+
+### Cập nhật
+
+```
+bun update ganas
+node node_modules/ganas/scripts/install-target.mjs --claude-code
+```
+
+Chạy lại script sau mỗi lần update: skill được ghi lại bản mới nhất; hook
+chỉ thêm nếu ganas có hook mới, hook cũ không bị xoá hay nhân đôi.
+
 ## Cập nhật sau khi sửa mã nguồn
 
 ```
@@ -266,5 +335,16 @@ Xoá đúng entry `ganas` khỏi file config MCP đã sửa ở mục 2 (`contex
 với Zed, `mcpServers` với Cursor/Windsurf), rồi khởi động lại server MCP
 trong editor.
 
-`.ganas/` trong dự án **không bị đụng tới** ở cả hai đường — nó là dữ liệu
-của bạn, không phải của plugin hay của MCP server.
+### bun/npm add (mục 3)
+
+```
+bun remove ganas
+```
+
+Xoá tay khối `hooks`/`context_servers.ganas`/`mcpServers.ganas` đã thêm vào
+`.claude/settings.json`/`.zed/settings.json`/`.cursor/mcp.json` — `bun
+remove` chỉ xoá `node_modules/`, không biết gì về các file cấu hình mà
+script cài đã ghi.
+
+`.ganas/` trong dự án **không bị đụng tới** ở mọi đường — nó là dữ liệu của
+bạn, không phải của plugin/MCP server/script cài.

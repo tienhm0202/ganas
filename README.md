@@ -45,9 +45,11 @@ claude plugin marketplace add "$PWD" --scope project
 claude plugin install ganas@ganas --scope project
 ```
 
-Dùng được cả ở Zed/Cursor/Windsurf qua MCP server đi kèm. Chi tiết đầy đủ
-(scope cài, kiểm tra đã cài đúng chưa, cấu hình từng editor) ở
-[docs/INSTALL.md](docs/INSTALL.md).
+Dùng được cả ở Zed/Cursor/Windsurf qua MCP server đi kèm. Muốn mọi thứ nằm
+100% trong project (không đụng `~/.claude/plugins/`) thì `bun add
+github:tienhm0202/ganas` rồi chạy `scripts/install-target.mjs` — xem mục 3.
+Chi tiết đầy đủ (scope cài, kiểm tra đã cài đúng chưa, cấu hình từng editor)
+ở [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Lệnh hay dùng
 
@@ -65,7 +67,7 @@ Tham chiếu đầy đủ ở [docs/COMMANDS.md](docs/COMMANDS.md).
 
 | File | Đọc khi nào |
 |---|---|
-| [docs/INSTALL.md](docs/INSTALL.md) | Cài đặt — Claude Code, Zed, Cursor, Windsurf |
+| [docs/INSTALL.md](docs/INSTALL.md) | Cài đặt — Claude Code, Zed, Cursor, Windsurf, hoặc bun/npm add không qua plugin system |
 | [docs/CONCEPTS.md](docs/CONCEPTS.md) | Mô hình dữ liệu đầy đủ — spine, evidence, freshness |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Tham chiếu CLI đầy đủ, từng cờ và mã thoát |
 | [docs/FLOWS.md](docs/FLOWS.md) | 5 luồng chính, điểm đứt và giới hạn đã biết |
