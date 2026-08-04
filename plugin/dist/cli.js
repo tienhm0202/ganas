@@ -17550,7 +17550,7 @@ async function main() {
   const raw = process.argv.slice(2);
   const argv = parseArgs(raw);
   if (argv.flags["version"] || argv.flags["v"]) {
-    process.stdout.write(`${"0.0.1"}
+    process.stdout.write(`${"0.1.0"}
 `);
     return 0;
   }
