@@ -4,6 +4,19 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## v0.1.1 — 2026-08-04
+
+- **README.md ở gốc repo** — trước bản này chỉ có `docs/` và `llms.txt`,
+  không có gì tóm tắt "ganas là gì" ngay khi mở repo trên GitHub.
+- **`.claude/rules/ganas-git.md`** — `ganas init` giờ sinh thêm rule này cho
+  mọi dự án dùng ganas: tag = semver trần (`vX.Y.Z`), không ghép tên công cụ
+  kiểu `<tên>--vX.Y.Z` (đó là quy ước riêng của `claude plugin tag`, chỉ
+  đúng khi CHÍNH dự án là Claude Code plugin); ký commit cấu hình theo TỪNG
+  repo (không `--global`); không `Co-Authored-By`. Bịt đúng nhầm lẫn vừa gặp
+  khi tag chính repo ganas.
+- Tag của chính repo ganas cũng đổi theo luật trên: `v0.1.0` (semver trần),
+  thay cho `ganas--v0.1.0` đã tag/push nhầm trước đó.
+
 ## v0.1.0 — 2026-08-04
 
 Bản phát hành đầu tiên. Dưới đây là toàn bộ năng lực đã có tính tới tag này,
