@@ -4,7 +4,7 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
-## Chưa phát hành
+## v0.2.0 — 2026-08-04
 
 - **Tier model ra thành chỉ dẫn giao việc, không còn là dòng gợi ý** — brief
   có mục **Giao việc** riêng. Trước đây `task.model` chỉ in một dòng "Gợi ý
