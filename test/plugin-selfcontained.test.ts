@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -93,6 +93,57 @@ test("⭐ bundle không có shebang lạc ở giữa file", async () => {
 
   assert.equal(shebangs.length, 1, `phải có đúng một shebang, thấy ${shebangs.length}`);
   assert.equal(shebangs[0]![1], 0, "shebang phải ở dòng đầu tiên");
+});
+
+test("⭐ MCP server chạy được khi copy RIÊNG thư mục plugin/, trả lời tools/list", async () => {
+  const dir = await isolatedPlugin();
+  try {
+    const bin = join(dir, "bin", "ganas-mcp.mjs");
+    const requests =
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1" },
+        },
+      }) +
+      "\n" +
+      JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) +
+      "\n";
+
+    // Ghi request ra file thật thay vì nhét literal vào dòng lệnh shell — tránh
+    // hố quote lồng nhau (JSON có dấu " và \n mà `runShell` chạy qua `shell: true`).
+    const requestFile = join(dir, "mcp-requests.jsonl");
+    await writeFile(requestFile, requests, "utf8");
+
+    // stdio MCP server thoát khi stdin đóng — không cần kill tay, `runShell` chỉ
+    // cần đủ timeout để process khởi động và trả lời.
+    const r = await runShell(`cat ${JSON.stringify(requestFile)} | node ${JSON.stringify(bin)}`, {
+      cwd: tmpdir(),
+      timeoutMs: 15_000,
+    });
+
+    assert.equal(
+      r.code,
+      0,
+      `MCP server cô lập không chạy được — bản cài qua marketplace sẽ chết im lặng.\n` +
+        `stdout: ${r.stdout}\nstderr: ${r.stderr}`,
+    );
+
+    const lines = r.stdout.trim().split("\n");
+    const responses = lines.map(
+      (l) => JSON.parse(l) as { id: number; result?: { tools?: unknown[] } },
+    );
+    const toolsList = responses.find((res) => res.id === 2);
+    const tools = toolsList?.result?.tools;
+    assert.ok(tools, `không thấy result.tools trong: ${r.stdout}`);
+    assert.ok(tools.length >= 7, `mong ít nhất 7 tool, thấy ${tools.length}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("manifest plugin và marketplace khớp package.json", async () => {

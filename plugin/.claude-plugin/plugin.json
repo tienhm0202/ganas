@@ -6,5 +6,12 @@
   "description": "Kiểm soát phiên làm việc: phiên mới biết làm task gì, cần thông tin gì, cần kỹ năng gì — và không ghi được tri thức không có bằng chứng",
   "keywords": ["workflow", "knowledge", "spec-driven", "governance"],
   "license": "MIT",
-  "hooks": "./hooks/hooks.json"
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": {
+    "ganas": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/ganas-mcp.mjs"]
+    }
+  }
 }

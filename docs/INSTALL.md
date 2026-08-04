@@ -1,27 +1,74 @@
-# Cài ganas vào Claude Code
+# Cài ganas
 
 Mọi lệnh dưới đây **đã chạy thật** khi viết tài liệu này, và output là output
 thật nhận được.
 
-## Cách nhanh nhất (cài từ mã nguồn)
+ganas chạy được ở hai lớp, tuỳ editor:
+
+|            | Claude Code | Zed / Cursor / Windsurf / … |
+|------------|-------------|------------------------------|
+| Cơ chế     | plugin (hook + skill) | MCP server (`stdio`) |
+| Cưỡng chế  | có — `PreToolUse`/`Stop` chặn thật | không — chỉ gọi tool theo yêu cầu |
+| Cài        | `claude plugin install` | tự tay trỏ config MCP vào `ganas-mcp.mjs` |
+
+Cả hai đường đều dùng chung một bundle build từ cùng mã nguồn — không có bản
+"rút gọn" riêng cho MCP.
+
+## 0. Cài từ mã nguồn (bắt buộc, dùng chung cho mọi editor)
 
 ```
 git clone <repo> ganas && cd ganas
 npm install
 npm run build                          # BẮT BUỘC — xem "Vì sao phải build"
+```
 
-claude plugin marketplace add "$PWD"
-claude plugin install ganas@ganas
+`npm run build` sinh `plugin/dist/cli.js` (CLI + hook) và `plugin/dist/mcp.js`
+(MCP server) — cả hai bundle tự chứa, không phụ thuộc `node_modules/` bên
+ngoài. Nhớ đường dẫn `$PWD` sau bước này — mọi editor bên dưới đều trỏ vào
+cùng thư mục `plugin/` vừa build.
+
+Muốn gõ `ganas` trần ở mọi nơi thì thêm `npm link` (hoặc `npm install -g .`)
+— `bin` trỏ vào chính bundle mà plugin dùng, nên hai đường không bao giờ lệch
+phiên bản.
+
+## 1. Claude Code — plugin (khuyến nghị: có đủ hook + skill + MCP)
+
+```
+claude plugin marketplace add "$PWD" --scope project
+claude plugin install ganas@ganas --scope project
 ```
 
 Output thật:
 
 ```
-✔ Successfully added marketplace: ganas (declared in user settings)
-✔ Successfully installed plugin: ganas@ganas (scope: user)
+✔ Successfully added marketplace: ganas (declared in project settings)
+✔ Successfully installed plugin: ganas@ganas (scope: project)
 ```
 
-## Kiểm tra đã cài đúng chưa
+Claude Code đã có sẵn 9 skill (`commit`, `gate`, `handoff`, `next`,
+`plan-to-tasks`, `prune`, `scope`, `trace`, `verify`) và hook cưỡng chế thật —
+**không cần** cấu hình thêm MCP client trong chính Claude Code, MCP server ở
+mục 2 là cho editor khác.
+
+### Vì sao có `--scope project`
+
+Claude Code hỗ trợ 3 scope cho cả `marketplace add` lẫn `plugin install`:
+
+- **`project`** (mặc định khuyến nghị ở trên) — ghi vào `.claude/settings.json`,
+  commit vào git, mọi người dùng chung repo tự có ganas khi mở project.
+- **`local`** — ghi vào `.claude/settings.local.json` (thường bị gitignore),
+  dùng khi chỉ muốn ganas chạy trên máy/checkout của riêng bạn, không ép người
+  khác trong team cài theo.
+- **`user`** (mặc định của `claude` CLI nếu không truyền `--scope`) — một entry
+  dùng chung cho **mọi** dự án mở trên máy. Nếu bạn dùng ganas ở nhiều dự án
+  khác nhau, tránh scope này: marketplace `ganas` chỉ có một entry trong cấu
+  hình user, lần `marketplace add` sau ở dự án khác sẽ **ghi đè** đường dẫn
+  nguồn của lần trước.
+
+Muốn đổi scope thì thay `--scope project` bằng `--scope local` hoặc
+`--scope user` ở cả hai lệnh trên.
+
+### Kiểm tra đã cài đúng chưa
 
 Đừng tin dòng "Successfully installed" — nó chỉ nói file đã được copy.
 
@@ -51,7 +98,7 @@ echo '{"session_id":"t","cwd":"/tmp","source":"startup"}' \
 - `{"systemMessage":"⚠ ganas KHÔNG chạy …"}` → bản cài **thiếu build**. Quay lại
   `npm run build` rồi `claude plugin marketplace update ganas`.
 
-## Dùng thử ngay
+### Dùng thử ngay
 
 Vào một dự án bất kỳ:
 
@@ -74,19 +121,107 @@ Bước kế tiếp (1/12 · init)
 Từ đó cứ làm theo `ganas` — nó luôn in **đúng một** bước kế tiếp cho tới khi
 task đầu tiên được commit. Xem `docs/FLOWS.md` mục 0 cho toàn cảnh 12 chặng.
 
-Muốn gõ `ganas` trần ở mọi nơi thì thêm `npm link` (hoặc `npm install -g .`)
-trong thư mục nguồn — `bin` trỏ vào chính bundle mà plugin dùng, nên hai đường
-không bao giờ lệch phiên bản.
+## 2. Editor khác qua MCP (Zed, Cursor, Windsurf, …)
+
+Claude Code dùng hook — editor khác không có khái niệm hook tương đương, nên
+ganas lộ cùng chức năng qua một **MCP server** (`plugin/bin/ganas-mcp.mjs`,
+transport `stdio`), khai báo sẵn trong `plugin/.claude-plugin/plugin.json` ở
+khoá `mcpServers` (Claude Code tự đọc khoá này; editor khác thì bạn phải tự
+trỏ vào file `.mjs` này trong config MCP của editor đó).
+
+7 tool lộ ra: `ganas_flow`, `ganas_next`, `ganas_gate`, `ganas_verify`,
+`ganas_trace`, `ganas_scope`, `ganas_commit` — mỗi tool nhận một `args: string[]`
+đúng như gõ sau `ganas <lệnh>` trên dòng lệnh (không gồm tên lệnh), ví dụ
+`ganas_verify` với `args: ["F-ACC-001", "--scope", "P-thanh-toan"]`.
+
+**Giới hạn cần biết**: MCP chỉ cho gọi tool theo yêu cầu. Nó **không có**
+cưỡng chế kiểu `PreToolUse`/`Stop` mà hook Claude Code có — MCP không có khái
+niệm tương đương, nên dùng ganas qua editor khác thì được `next`/`gate`/`verify`/…
+nhưng KHÔNG bị chặn khi ghi tri thức sai hay kết thúc phiên sớm. Toàn bộ lớp
+cưỡng chế thật vẫn chỉ có ở Claude Code.
+
+Đường dẫn tới file server, dùng cho mọi editor bên dưới:
+
+- **Chạy từ mã nguồn** (mục 0 ở trên): `<đường dẫn repo>/plugin/bin/ganas-mcp.mjs`.
+- **Đã cài qua Claude Code** (mục 1): có thể dùng lại đúng file đó thay vì
+  build riêng — `~/.claude/plugins/cache/ganas/ganas/<version>/bin/ganas-mcp.mjs`
+  (thay `<version>` bằng bản đã cài, xem `claude plugin details ganas@ganas`).
+
+### Zed
+
+Mở settings (`cmd+,` trên macOS, hoặc `~/.config/zed/settings.json`), thêm:
+
+```json
+{
+  "context_servers": {
+    "ganas": {
+      "source": "custom",
+      "command": "node",
+      "args": ["<đường dẫn>/plugin/bin/ganas-mcp.mjs"]
+    }
+  }
+}
+```
+
+Lưu file là Zed tự khởi động server — không cần restart Zed. Tool `ganas_*`
+xuất hiện trong Agent Panel.
+
+### Cursor
+
+`.cursor/mcp.json` (theo project) hoặc `~/.cursor/mcp.json` (toàn máy):
+
+```json
+{
+  "mcpServers": {
+    "ganas": {
+      "command": "node",
+      "args": ["<đường dẫn>/plugin/bin/ganas-mcp.mjs"]
+    }
+  }
+}
+```
+
+### Windsurf
+
+`~/.codeium/windsurf/mcp_config.json` (tự tạo nếu chưa có — Windsurf không
+sinh sẵn file này):
+
+```json
+{
+  "mcpServers": {
+    "ganas": {
+      "command": "node",
+      "args": ["<đường dẫn>/plugin/bin/ganas-mcp.mjs"]
+    }
+  }
+}
+```
+
+### Kiểm tra MCP server chạy đúng (dùng chung cho mọi editor ở mục này)
+
+Gọi thẳng, không qua editor — cách này dựng lại đúng điều kiện editor sẽ làm:
+
+```
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+  | node <đường dẫn>/plugin/bin/ganas-mcp.mjs
+```
+
+Thấy `"result":{"tools":[...]}` với 7 tool là đúng. Không thấy gì / lỗi
+`Cannot find module` → chưa `npm run build`, hoặc đường dẫn sai.
 
 ## Cập nhật sau khi sửa mã nguồn
 
 ```
 npm run build
-claude plugin marketplace update ganas
+claude plugin marketplace update ganas   # riêng Claude Code
 ```
 
 Quên `npm run build` thì bản cài vẫn là bản cũ — `marketplace update` chỉ copy
-lại thư mục `plugin/`, nó không biên dịch gì.
+lại thư mục `plugin/`, nó không biên dịch gì. Với Zed/Cursor/Windsurf không có
+lệnh update riêng: build lại rồi khởi động lại server MCP (Zed tự làm khi lưu
+settings; Cursor/Windsurf cần tắt/bật lại server trong UI của editor).
 
 ## Vì sao phải build, và vì sao `plugin/dist/` nằm trong git
 
@@ -94,9 +229,10 @@ Claude Code cài plugin bằng cách **copy đúng thư mục `plugin/`** vào
 `~/.claude/plugins/cache/ganas/ganas/<version>/`. Mọi thứ nằm ngoài đó —
 `dist/` ở gốc repo, `node_modules/` — **không tồn tại** với bản đã cài.
 
-Vì vậy `plugin/dist/cli.js` là một **bundle tự chứa** (esbuild gói cả `yaml` và
-`zod` vào trong), và nó **được commit vào git**. Đó là lựa chọn có ý thức, đổi
-"build artifact trong git" lấy "cài xong là chạy".
+Vì vậy `plugin/dist/cli.js` và `plugin/dist/mcp.js` đều là **bundle tự chứa**
+(esbuild gói cả `yaml`, `zod`, `@modelcontextprotocol/sdk` vào trong), và cả
+hai **được commit vào git**. Đó là lựa chọn có ý thức, đổi "build artifact
+trong git" lấy "cài xong là chạy".
 
 Trước P2 N30 thì không như vậy: `bin/ganas.mjs` nạp `../../dist/cli.js` (ngoài
 plugin) và `dist/` nằm trong `.gitignore`. Cài qua marketplace thì Claude Code
@@ -108,15 +244,27 @@ chế, và nó tệ hơn cả một lệnh không tồn tại: lệnh ma còn b�
 thành công.
 
 `test/plugin-selfcontained.test.ts` giữ nó đóng: copy **riêng** `plugin/` sang
-thư mục tạm rồi chạy như Claude Code chạy, và bắt lỗi nếu hook trả về thông báo
-"đang bỏ qua kiểm soát".
+thư mục tạm rồi chạy như Claude Code chạy (và tương tự cho MCP server: bắt lỗi
+nếu hook trả về thông báo "đang bỏ qua kiểm soát", hoặc nếu `ganas-mcp.mjs` cô
+lập không trả lời được `tools/list`).
 
 ## Gỡ ra
 
+### Claude Code
+
 ```
-claude plugin uninstall ganas@ganas
-claude plugin marketplace remove ganas
+claude plugin uninstall ganas@ganas --scope project
+claude plugin marketplace remove ganas --scope project
 ```
 
-`.ganas/` trong dự án **không bị đụng tới** — nó là dữ liệu của bạn, không phải
-của plugin.
+`--scope` của lệnh gỡ phải khớp `--scope` lúc cài — nếu bạn cài bằng `local`
+hay `user` thì gỡ cũng phải dùng đúng scope đó.
+
+### Zed / Cursor / Windsurf
+
+Xoá đúng entry `ganas` khỏi file config MCP đã sửa ở mục 2 (`context_servers`
+với Zed, `mcpServers` với Cursor/Windsurf), rồi khởi động lại server MCP
+trong editor.
+
+`.ganas/` trong dự án **không bị đụng tới** ở cả hai đường — nó là dữ liệu
+của bạn, không phải của plugin hay của MCP server.

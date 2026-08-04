@@ -13,21 +13,35 @@ import { build } from "esbuild";
 
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-await build({
-  entryPoints: ["src/cli.ts"],
-  outfile: "plugin/dist/cli.js",
+// zod/yaml (và @modelcontextprotocol/sdk) có nhánh CJS bên trong: bundle ESM
+// phải cấp một `require` thật, nếu không sẽ nổ "Dynamic require of 'process'
+// is not supported" lúc chạy.
+const requireShim =
+  "import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);";
+
+const shared = {
   bundle: true,
   platform: "node",
   format: "esm",
   target: "node20",
-  // zod/yaml có nhánh CJS bên trong: bundle ESM phải cấp một `require` thật,
-  // nếu không sẽ nổ "Dynamic require of 'process' is not supported" lúc chạy.
-  banner: {
-    js:
-      "#!/usr/bin/env node\n" +
-      "import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);",
-  },
   // Đọc package.json lúc chạy là không được: cạnh bundle không có file đó.
   define: { __GANAS_VERSION__: JSON.stringify(pkg.version) },
   logLevel: "warning",
+};
+
+await build({
+  ...shared,
+  entryPoints: ["src/cli.ts"],
+  outfile: "plugin/dist/cli.js",
+  banner: { js: `#!/usr/bin/env node\n${requireShim}` },
+});
+
+// Entry point thứ hai — MCP server cho editor khác Claude Code (Cursor,
+// Windsurf, …). Cùng ràng buộc "tự chứa" như bundle CLI: một file, không phụ
+// thuộc gì ngoài `plugin/`.
+await build({
+  ...shared,
+  entryPoints: ["src/mcp/server.ts"],
+  outfile: "plugin/dist/mcp.js",
+  banner: { js: `#!/usr/bin/env node\n${requireShim}` },
 });
