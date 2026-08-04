@@ -4,6 +4,28 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## v0.1.2 — 2026-08-04
+
+- **Cài không qua Claude Code plugin system** — `scripts/install-target.mjs`
+  mới, dùng khi ganas được thêm bằng package manager
+  (`bun add github:tienhm0202/ganas`) và muốn mọi thứ nằm 100% trong
+  `node_modules/` của project, không đụng `~/.claude/plugins/` (cố định,
+  không đổi được dù chọn scope nào lúc cài qua `claude plugin install`).
+  Script đọc thẳng `plugin/hooks/hooks.json` làm nguồn (không lặp tay 6
+  hook), sinh hook thật vào `.claude/settings.json` + skill vào
+  `.claude/skills/`, và MCP config project-local cho Zed/Cursor
+  (`--claude-code`, `--zed`, `--cursor`, `--windsurf`). Cưỡng chế
+  `PreToolUse`/`Stop` hoạt động y hệt cài qua plugin. `docs/INSTALL.md` thêm
+  mục 3 + bảng so sánh 3 cách cài. Bỏ luôn khuyến nghị `npm link` (global,
+  ngược hướng scope project).
+- **Cưỡng chế "không Co-Authored-By" bằng git hook thật** —
+  `.githooks/commit-msg` mới, `ganas init` tự sinh và bật bằng
+  `git config core.hooksPath .githooks` khi dự án dùng git. Rule
+  `.claude/rules/ganas-git.md` chỉ là văn bản (dựa vào agent nhớ đọc đúng
+  lúc — đã chứng minh không đủ tin cậy qua sự cố thật trong quá trình phát
+  triển bản này); hook chạy trên MỌI commit bất kể ai/công cụ nào tạo ra,
+  tự xoá dòng `Co-Authored-By` nhắc Claude/Anthropic thay vì chặn commit.
+
 ## v0.1.1 — 2026-08-04
 
 - **README.md ở gốc repo** — trước bản này chỉ có `docs/` và `llms.txt`,
