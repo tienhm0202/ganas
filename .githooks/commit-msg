@@ -1,0 +1,15 @@
+#!/bin/sh
+# ganas: cưỡng chế quy ước "không Co-Authored-By nhắc AI" bằng máy, không
+# chỉ dựa vào agent nhớ đúng luật mỗi lần commit — xem
+# .claude/rules/ganas-git.md. Tự động bỏ dòng vi phạm rồi cho commit tiếp
+# tục (không chặn), vì mục tiêu là commit sạch, không phải làm khó người
+# đang commit.
+
+MSG_FILE="$1"
+
+if grep -qiE '^Co-Authored-By:.*(claude|anthropic)' "$MSG_FILE" 2>/dev/null; then
+  perl -0pi -e 's/^Co-Authored-By:.*(claude|anthropic).*\n?//gim; s/\n+\z/\n/' "$MSG_FILE"
+  echo "ganas commit-msg hook: đã bỏ dòng Co-Authored-By nhắc AI (xem .claude/rules/ganas-git.md)" >&2
+fi
+
+exit 0

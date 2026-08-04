@@ -52,11 +52,16 @@ ganas đã khởi tạo tại <cwd>
             CLAUDE.md
             AGENTS.md
             .ganas/goals/G-001.yaml
+            .githooks/commit-msg
 
 Tiếp theo:
   1. Sửa .ganas/goals/G-001.yaml — mục tiêu thật và tiêu chí nghiệm thu thật
   2. ganas validate
 ```
+
+`.githooks/commit-msg` chỉ sinh khi dự án đã `git init` trước đó (đúng kịch
+bản của ví dụ này) — `ganas init` cũng tự chạy
+`git config core.hooksPath .githooks` để bật hook, không cần làm tay.
 
 `init` sinh sẵn đúng một goal mẫu (`G-001`, `title: "Đặt tên mục tiêu ở đây"`)
 — đủ để `ganas validate` có gì mà kiểm ngay. Việc của bạn ở bước sau là **sửa**

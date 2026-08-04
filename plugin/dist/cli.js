@@ -15068,9 +15068,35 @@ nh\u01B0ng host v\u1EABn b\xE1o "Unverified".
 ## Kh\xF4ng c\xF3 "Co-Authored-By" / nh\u1EAFc AI trong commit
 
 \`ganas commit\` kh\xF4ng t\u1EF1 th\xEAm d\xF2ng n\xE0y. Khi commit tr\u1EF1c ti\u1EBFp b\u1EB1ng
-\`git commit\` (kh\xF4ng qua \`ganas commit\`), c\u0169ng kh\xF4ng th\xEAm \u2014 set
-\`attribution.commit: ""\` trong \`.claude/settings.json\` c\u1EE7a d\u1EF1 \xE1n \u0111\u1EC3 agent
-kh\xF4ng t\u1EF1 ch\xE8n d\xF2ng \u0111\xF3.
+\`git commit\` (kh\xF4ng qua \`ganas commit\`), c\xF3 hai l\u1EDBp:
+
+- \`attribution.commit: ""\` trong \`.claude/settings.json\` \u2014 ch\u1EB7n Claude Code
+  T\u1EF0 \u0110\u1ED8NG ch\xE8n d\xF2ng n\xE0y.
+- Hook \`.githooks/commit-msg\` (\`ganas init\` t\u1EF1 b\u1EADt b\u1EB1ng
+  \`git config core.hooksPath .githooks\`) \u2014 b\u1EAFt v\xE0 **t\u1EF1 xo\xE1** d\xF2ng
+  \`Co-Authored-By\` nh\u1EAFc Claude/Anthropic kh\u1ECFi M\u1ECCI commit, k\u1EC3 c\u1EA3 khi ai \u0111\xF3
+  (ng\u01B0\u1EDDi ho\u1EB7c agent) g\xF5 tay d\xF2ng \u0111\xF3 v\xE0o message. \u0110\xE2y l\xE0 l\u1EDBp c\u01B0\u1EE1ng ch\u1EBF th\u1EADt:
+  \`attribution.commit\` ch\u1EC9 ch\u1EB7n \u0111\u01B0\u1EE3c \u0111\u01B0\u1EDDng t\u1EF1 \u0111\u1ED9ng, kh\xF4ng ch\u1EB7n \u0111\u01B0\u1EE3c ng\u01B0\u1EDDi
+  t\u1EF1 g\xF5 \u2014 hook ch\u1EB7n \u0111\u01B0\u1EE3c c\u1EA3 hai v\xEC n\xF3 ch\u1EA1y sau c\xF9ng, tr\xEAn ch\xEDnh n\u1ED9i dung
+  message, b\u1EA5t k\u1EC3 ngu\u1ED3n.
+`;
+}
+function commitMsgHook() {
+  return `#!/bin/sh
+# ganas: c\u01B0\u1EE1ng ch\u1EBF quy \u01B0\u1EDBc "kh\xF4ng Co-Authored-By nh\u1EAFc AI" b\u1EB1ng m\xE1y, kh\xF4ng
+# ch\u1EC9 d\u1EF1a v\xE0o agent nh\u1EDB \u0111\xFAng lu\u1EADt m\u1ED7i l\u1EA7n commit \u2014 xem
+# .claude/rules/ganas-git.md. T\u1EF1 \u0111\u1ED9ng b\u1ECF d\xF2ng vi ph\u1EA1m r\u1ED3i cho commit ti\u1EBFp
+# t\u1EE5c (kh\xF4ng ch\u1EB7n), v\xEC m\u1EE5c ti\xEAu l\xE0 commit s\u1EA1ch, kh\xF4ng ph\u1EA3i l\xE0m kh\xF3 ng\u01B0\u1EDDi
+# \u0111ang commit.
+
+MSG_FILE="$1"
+
+if grep -qiE '^Co-Authored-By:.*(claude|anthropic)' "$MSG_FILE" 2>/dev/null; then
+  perl -0pi -e 's/^Co-Authored-By:.*(claude|anthropic).*\\n?//gim; s/\\n+\\z/\\n/' "$MSG_FILE"
+  echo "ganas commit-msg hook: \u0111\xE3 b\u1ECF d\xF2ng Co-Authored-By nh\u1EAFc AI (xem .claude/rules/ganas-git.md)" >&2
+fi
+
+exit 0
 `;
 }
 function agentsMd(v) {
@@ -15156,7 +15182,7 @@ __export(init_exports, {
   run: () => run2
 });
 import { existsSync as existsSync7 } from "node:fs";
-import { appendFile as appendFile2, mkdir as mkdir3, readFile as readFile8, writeFile as writeFile3 } from "node:fs/promises";
+import { appendFile as appendFile2, chmod, mkdir as mkdir3, readFile as readFile8, writeFile as writeFile3 } from "node:fs/promises";
 import { basename, join as join8, resolve as resolve2 } from "node:path";
 async function prompt(question, fallback = "") {
   const { createInterface } = await import("node:readline/promises");
@@ -15232,6 +15258,8 @@ async function run2(argv) {
     await writeNew(ganasPath(cwd, DIRS.goals, `${goalId}.yaml`), sampleGoal(goalId, vars), force)
   );
   await ensureGitignore(cwd);
+  const hook = await ensureCommitMsgHook(cwd, force);
+  if (hook) track(hook.path, hook.result);
   process.stdout.write(`ganas \u0111\xE3 kh\u1EDFi t\u1EA1o t\u1EA1i ${cwd}
 
 `);
@@ -15270,6 +15298,18 @@ async function ensureGitignore(cwd) {
   if (current.includes(".ganas/runs/")) return;
   await appendFile2(file, gitignoreAddition(), "utf8");
 }
+async function ensureCommitMsgHook(cwd, force) {
+  if (!existsSync7(join8(cwd, ".git"))) return void 0;
+  const hookFile = join8(cwd, ".githooks", "commit-msg");
+  const result = await writeNew(hookFile, commitMsgHook(), force);
+  await chmod(hookFile, 493);
+  const current = await runShell("git config --get core.hooksPath", { cwd, timeoutMs: 5e3 });
+  const already = current.code === 0 ? current.stdout.trim() : "";
+  if (already === "" || already === ".githooks") {
+    await runShell("git config core.hooksPath .githooks", { cwd, timeoutMs: 5e3 });
+  }
+  return { path: ".githooks/commit-msg", result };
+}
 var SUBDIRS;
 var init_init = __esm({
   "src/commands/init.ts"() {
@@ -15278,6 +15318,7 @@ var init_init = __esm({
     init_project();
     init_args();
     init_errors();
+    init_exec();
     SUBDIRS = [
       DIRS.goals,
       DIRS.designs,

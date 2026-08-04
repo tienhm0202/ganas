@@ -219,9 +219,42 @@ nhưng host vẫn báo "Unverified".
 ## Không có "Co-Authored-By" / nhắc AI trong commit
 
 \`ganas commit\` không tự thêm dòng này. Khi commit trực tiếp bằng
-\`git commit\` (không qua \`ganas commit\`), cũng không thêm — set
-\`attribution.commit: ""\` trong \`.claude/settings.json\` của dự án để agent
-không tự chèn dòng đó.
+\`git commit\` (không qua \`ganas commit\`), có hai lớp:
+
+- \`attribution.commit: ""\` trong \`.claude/settings.json\` — chặn Claude Code
+  TỰ ĐỘNG chèn dòng này.
+- Hook \`.githooks/commit-msg\` (\`ganas init\` tự bật bằng
+  \`git config core.hooksPath .githooks\`) — bắt và **tự xoá** dòng
+  \`Co-Authored-By\` nhắc Claude/Anthropic khỏi MỌI commit, kể cả khi ai đó
+  (người hoặc agent) gõ tay dòng đó vào message. Đây là lớp cưỡng chế thật:
+  \`attribution.commit\` chỉ chặn được đường tự động, không chặn được người
+  tự gõ — hook chặn được cả hai vì nó chạy sau cùng, trên chính nội dung
+  message, bất kể nguồn.
+`;
+}
+
+/**
+ * Git hook thật (không phải Claude Code hook) — chạy trên MỌI commit của
+ * repo, bất kể ai/công cụ nào tạo ra nó. Tự xoá dòng Co-Authored-By nhắc
+ * Claude/Anthropic thay vì chặn commit: mục tiêu là message sạch, không phải
+ * làm khó người đang commit.
+ */
+export function commitMsgHook(): string {
+  return `#!/bin/sh
+# ganas: cưỡng chế quy ước "không Co-Authored-By nhắc AI" bằng máy, không
+# chỉ dựa vào agent nhớ đúng luật mỗi lần commit — xem
+# .claude/rules/ganas-git.md. Tự động bỏ dòng vi phạm rồi cho commit tiếp
+# tục (không chặn), vì mục tiêu là commit sạch, không phải làm khó người
+# đang commit.
+
+MSG_FILE="$1"
+
+if grep -qiE '^Co-Authored-By:.*(claude|anthropic)' "$MSG_FILE" 2>/dev/null; then
+  perl -0pi -e 's/^Co-Authored-By:.*(claude|anthropic).*\\n?//gim; s/\\n+\\z/\\n/' "$MSG_FILE"
+  echo "ganas commit-msg hook: đã bỏ dòng Co-Authored-By nhắc AI (xem .claude/rules/ganas-git.md)" >&2
+fi
+
+exit 0
 `;
 }
 

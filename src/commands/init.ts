@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import {
@@ -13,6 +13,7 @@ import {
 import * as T from "../templates/project.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
+import { runShell } from "../util/exec.js";
 
 /** Thư mục con tạo sẵn — thư mục rỗng giúp người mới biết chỗ đặt file. */
 const SUBDIRS = [
@@ -140,6 +141,8 @@ export async function run(argv: Argv): Promise<number> {
   );
 
   await ensureGitignore(cwd);
+  const hook = await ensureCommitMsgHook(cwd, force);
+  if (hook) track(hook.path, hook.result);
 
   process.stdout.write(`ganas đã khởi tạo tại ${cwd}\n\n`);
   if (written.length) process.stdout.write(`  tạo mới:  ${written.join("\n            ")}\n`);
@@ -175,4 +178,31 @@ async function ensureGitignore(cwd: string): Promise<void> {
   const current = await readFile(file, "utf8");
   if (current.includes(".ganas/runs/")) return;
   await appendFile(file, T.gitignoreAddition(), "utf8");
+}
+
+/**
+ * Cưỡng chế "không Co-Authored-By" bằng git hook thật, không chỉ bằng rule
+ * agent phải nhớ — xem `T.commitMsgHook()`. Không tạo gì nếu dự án không
+ * dùng git; không đè `core.hooksPath` nếu dự án đã tự đặt khác (tôn trọng
+ * lựa chọn có sẵn, giống `writeNew` với file thường).
+ */
+async function ensureCommitMsgHook(
+  cwd: string,
+  force: boolean,
+): Promise<{ path: string; result: "written" | "kept" } | undefined> {
+  if (!existsSync(join(cwd, ".git"))) return undefined;
+
+  const hookFile = join(cwd, ".githooks", "commit-msg");
+  const result = await writeNew(hookFile, T.commitMsgHook(), force);
+  await chmod(hookFile, 0o755);
+
+  const current = await runShell("git config --get core.hooksPath", { cwd, timeoutMs: 5000 });
+  const already = current.code === 0 ? current.stdout.trim() : "";
+  if (already === "" || already === ".githooks") {
+    await runShell("git config core.hooksPath .githooks", { cwd, timeoutMs: 5000 });
+  }
+  // already trỏ chỗ khác: tôn trọng, không đè — hook đã ghi nhưng chưa bật,
+  // người dùng tự quyết định có muốn gộp vào không.
+
+  return { path: ".githooks/commit-msg", result };
 }
