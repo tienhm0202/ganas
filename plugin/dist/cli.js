@@ -15030,6 +15030,49 @@ hook n\xE0o ch\u1EB7n. \xC1p d\u1EE5ng khi vi\u1EBFt code, v\xE0 khi g\xE1n \`na
 "kh\u1ED1i n\xE0y c\xF3 t\u1EF1 ch\u1EA1m ra ngo\xE0i kh\xF4ng" tr\u01B0\u1EDBc khi ch\u1ECDn \`io\` hay kh\xF4ng.
 `;
 }
+function gitRuleMd() {
+  return `# Lu\u1EADt git: tag, k\xFD commit (ganas)
+
+## Tag: semver tr\u1EA7n, kh\xF4ng gh\xE9p t\xEAn c\xF4ng c\u1EE5
+
+Tag c\u1EE7a D\u1EF0 \xC1N N\xC0Y l\xE0 \`vX.Y.Z\` (semver) \u2014 vd \`v1.2.0\`. KH\xD4NG ph\u1EA3i
+\`<t\xEAn>--vX.Y.Z\`.
+
+\u0110\u1ECBnh d\u1EA1ng \`<t\xEAn>--vX.Y.Z\` l\xE0 quy \u01B0\u1EDBc RI\xCANG c\u1EE7a \`claude plugin tag\` \u2014 ch\u1EC9 \xE1p
+d\u1EE5ng khi CH\xCDNH d\u1EF1 \xE1n n\xE0y l\xE0 m\u1ED9t Claude Code plugin, d\xF9ng \u0111\u1EC3 marketplace ph\xE2n
+gi\u1EA3i version (ganas d\xF9ng \u0111\xFAng c\xE1ch n\xE0y cho ch\xEDnh repo ganas). D\u1EF1 \xE1n d\xF9ng
+ganas kh\xF4ng c\xF3 ngh\u0129a l\xE0 ph\u1EA3i tag theo ki\u1EC3u \u0111\xF3.
+
+\`\`\`
+git tag -a v1.2.0 -m "..."
+git push origin v1.2.0
+\`\`\`
+
+## K\xFD commit: c\u1EA5u h\xECnh theo T\u1EEANG repo, kh\xF4ng \`--global\`
+
+C\xF3 ganas \u21D2 c\u1EA5u h\xECnh k\xFD commit c\u1EE5c b\u1ED9 cho repo n\xE0y. Kh\xF4ng s\u1EEDa \`--global\` \u2014
+m\u1ED7i repo c\xF3 th\u1EC3 c\u1EA7n key/ch\xEDnh s\xE1ch kh\xE1c nhau, s\u1EEDa global l\xE0 \xE9p m\u1ECDi repo kh\xE1c
+tr\xEAn m\xE1y d\xF9ng chung m\u1ED9t quy\u1EBFt \u0111\u1ECBnh kh\xF4ng li\xEAn quan t\u1EDBi ch\xFAng.
+
+\`\`\`
+git config gpg.format ssh
+git config user.signingkey <\u0111\u01B0\u1EDDng d\u1EABn public key SSH \u0111ang d\xF9ng \u0111\u1EC3 push>
+git config commit.gpgsign true
+\`\`\`
+
+Sau \u0111\xF3 \u0111\u0103ng k\xFD \u0110\xDANG public key \u0111\xF3 tr\xEAn git host \u2014 GitHub: Settings \u2192 SSH and
+GPG keys \u2192 New SSH key \u2192 **Key type: Signing Key** (m\u1EE5c ri\xEAng, kh\xE1c
+Authentication Key d\xF9 c\xF9ng m\u1ED9t key). Thi\u1EBFu b\u01B0\u1EDBc n\xE0y th\xEC commit v\u1EABn \u0111\u01B0\u1EE3c k\xFD
+nh\u01B0ng host v\u1EABn b\xE1o "Unverified".
+
+## Kh\xF4ng c\xF3 "Co-Authored-By" / nh\u1EAFc AI trong commit
+
+\`ganas commit\` kh\xF4ng t\u1EF1 th\xEAm d\xF2ng n\xE0y. Khi commit tr\u1EF1c ti\u1EBFp b\u1EB1ng
+\`git commit\` (kh\xF4ng qua \`ganas commit\`), c\u0169ng kh\xF4ng th\xEAm \u2014 set
+\`attribution.commit: ""\` trong \`.claude/settings.json\` c\u1EE7a d\u1EF1 \xE1n \u0111\u1EC3 agent
+kh\xF4ng t\u1EF1 ch\xE8n d\xF2ng \u0111\xF3.
+`;
+}
 function agentsMd(v) {
   return `# ${v.project}
 
@@ -15174,6 +15217,10 @@ async function run2(argv) {
   track(
     ".claude/rules/architecture.md",
     await writeNew(join8(cwd, ".claude", "rules", "architecture.md"), architectureRuleMd(), force)
+  );
+  track(
+    ".claude/rules/ganas-git.md",
+    await writeNew(join8(cwd, ".claude", "rules", "ganas-git.md"), gitRuleMd(), force)
   );
   const claudeMdPath = join8(cwd, "CLAUDE.md");
   const claudeMdResult = await writeNew(claudeMdPath, claudeMd(vars), force);

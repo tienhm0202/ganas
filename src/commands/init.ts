@@ -116,6 +116,13 @@ export async function run(argv: Argv): Promise<number> {
     await writeNew(join(cwd, ".claude", "rules", "architecture.md"), T.architectureRuleMd(), force),
   );
 
+  // Luật git (tag semver, ký commit local, không Co-Authored-By) — cùng lý do
+  // không có `paths:` frontmatter.
+  track(
+    ".claude/rules/ganas-git.md",
+    await writeNew(join(cwd, ".claude", "rules", "ganas-git.md"), T.gitRuleMd(), force),
+  );
+
   // CLAUDE.md và AGENTS.md: không đè nếu dự án đã có — nội dung cũ là của người
   // dùng, trộn vào là mất thứ họ viết mà không hỏi.
   const claudeMdPath = join(cwd, "CLAUDE.md");

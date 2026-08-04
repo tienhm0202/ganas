@@ -100,8 +100,9 @@ Khởi tạo `.ganas/` cho dự án mới (greenfield): tạo cây thư mục co
 `claims/`, `decisions/`, `domains/`, `legacy-imported/`, `map-surveys/`,
 `proposals/`, `runs/`), `config.yaml`, `state.json`, `.ganas/README.md`,
 `.claude/rules/ganas-knowledge.md`, `.claude/rules/architecture.md`,
-`CLAUDE.md`/`AGENTS.md`, một goal mẫu (`G-001`) và một sprint mẫu, rồi thêm
-mục `.ganas/runs/` vào `.gitignore` nếu dự án dùng git.
+`.claude/rules/ganas-git.md` (tag semver, ký commit local, không
+Co-Authored-By), `CLAUDE.md`/`AGENTS.md`, một goal mẫu (`G-001`) và một
+sprint mẫu, rồi thêm mục `.ganas/runs/` vào `.gitignore` nếu dự án dùng git.
 
 Không có đối số định vị.
 

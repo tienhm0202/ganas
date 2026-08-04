@@ -179,6 +179,52 @@ hook nào chặn. Áp dụng khi viết code, và khi gán \`nature\` cho khối
 `;
 }
 
+export function gitRuleMd(): string {
+  // Không có frontmatter `paths:` — cùng lý do với knowledgeRuleMd()/
+  // architectureRuleMd(): quy ước git áp dụng bất kể đang sửa file nào.
+  return `# Luật git: tag, ký commit (ganas)
+
+## Tag: semver trần, không ghép tên công cụ
+
+Tag của DỰ ÁN NÀY là \`vX.Y.Z\` (semver) — vd \`v1.2.0\`. KHÔNG phải
+\`<tên>--vX.Y.Z\`.
+
+Định dạng \`<tên>--vX.Y.Z\` là quy ước RIÊNG của \`claude plugin tag\` — chỉ áp
+dụng khi CHÍNH dự án này là một Claude Code plugin, dùng để marketplace phân
+giải version (ganas dùng đúng cách này cho chính repo ganas). Dự án dùng
+ganas không có nghĩa là phải tag theo kiểu đó.
+
+\`\`\`
+git tag -a v1.2.0 -m "..."
+git push origin v1.2.0
+\`\`\`
+
+## Ký commit: cấu hình theo TỪNG repo, không \`--global\`
+
+Có ganas ⇒ cấu hình ký commit cục bộ cho repo này. Không sửa \`--global\` —
+mỗi repo có thể cần key/chính sách khác nhau, sửa global là ép mọi repo khác
+trên máy dùng chung một quyết định không liên quan tới chúng.
+
+\`\`\`
+git config gpg.format ssh
+git config user.signingkey <đường dẫn public key SSH đang dùng để push>
+git config commit.gpgsign true
+\`\`\`
+
+Sau đó đăng ký ĐÚNG public key đó trên git host — GitHub: Settings → SSH and
+GPG keys → New SSH key → **Key type: Signing Key** (mục riêng, khác
+Authentication Key dù cùng một key). Thiếu bước này thì commit vẫn được ký
+nhưng host vẫn báo "Unverified".
+
+## Không có "Co-Authored-By" / nhắc AI trong commit
+
+\`ganas commit\` không tự thêm dòng này. Khi commit trực tiếp bằng
+\`git commit\` (không qua \`ganas commit\`), cũng không thêm — set
+\`attribution.commit: ""\` trong \`.claude/settings.json\` của dự án để agent
+không tự chèn dòng đó.
+`;
+}
+
 export function agentsMd(v: InitVars): string {
   return `# ${v.project}
 

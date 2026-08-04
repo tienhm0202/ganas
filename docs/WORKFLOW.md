@@ -48,6 +48,7 @@ ganas đã khởi tạo tại <cwd>
             .ganas/state.json
             .claude/rules/ganas-knowledge.md
             .claude/rules/architecture.md
+            .claude/rules/ganas-git.md
             CLAUDE.md
             AGENTS.md
             .ganas/goals/G-001.yaml
