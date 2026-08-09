@@ -33,6 +33,7 @@ const EXPECTED_COMMANDS = [
   "commit",
   "handoff",
   "prune",
+  "ledger",
   "hook",
 ] as const;
 

@@ -1,5 +1,5 @@
-import { evaluateGate, formatGate } from "../gate.js";
-import { taskForSession } from "../state.js";
+import { alreadyGreen, evaluateGate, formatGate } from "../gate.js";
+import { baselineFor, taskForSession } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { openProject } from "./_common.js";
@@ -17,6 +17,7 @@ export async function run(argv: Argv): Promise<number> {
   if (!task) throw new GanasError(`không có task ${taskId}`);
 
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
+  const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
 
   if (flag(argv, "json")) {
     process.stdout.write(
@@ -26,6 +27,7 @@ export async function run(argv: Argv): Promise<number> {
           ok: result.ok,
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
           pending_human: result.pendingHuman.map((p) => p.label),
+          already_green_at_start: green.map((g) => g.label),
         },
         null,
         2,
@@ -35,6 +37,15 @@ export async function run(argv: Argv): Promise<number> {
   }
 
   process.stdout.write(`Điều kiện hoàn thành của ${result.task}:\n${formatGate(result)}\n\n`);
+
+  if (green.length > 0) {
+    process.stdout.write(
+      `⚠ ${green.length} tiêu chí đã XANH SẴN từ trước khi bắt đầu task:\n` +
+        green.map((g) => `    ${g.label}`).join("\n") +
+        `\n  Hoặc task này đã xong từ trước, hoặc tiêu chí đó không gác gì.\n` +
+        `  Một gate tự xanh trước khi sửa là gate không tồn tại.\n\n`,
+    );
+  }
 
   if (result.ok) {
     process.stdout.write(`✓ Mọi tiêu chí chấm tự động đều đạt.\n`);

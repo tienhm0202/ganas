@@ -26,6 +26,55 @@ export interface GateResult {
   pendingHuman: CriterionResult[];
 }
 
+/**
+ * Khoá ổn định của một tiêu chí — dùng làm khoá `baseline` trong state phiên.
+ *
+ * Cố tình KHÔNG dùng chỉ số trong mảng: sửa `exit_contract` giữa chừng (thêm
+ * một tiêu chí, đổi thứ tự) là lệch hết, và baseline lệch còn tệ hơn không có
+ * baseline — nó gán nhãn "đã xanh sẵn" cho tiêu chí khác.
+ */
+export function criterionKey(c: ExitCriterion): string {
+  switch (c.kind) {
+    case "command":
+      return `command:${c.run}`;
+    case "artifact":
+      return `artifact:${c.path}`;
+    case "handoff":
+      return `handoff:${c.required}`;
+    case "manual":
+      return `manual:${c.check}`;
+    case "verification":
+      return `verification:${c.target}`;
+  }
+}
+
+/**
+ * Tiêu chí chấm được NGAY lúc nhận task, không cần đã làm gì.
+ *
+ * `manual` luôn chờ người và `handoff` luôn đỏ khi phiên vừa mở — đo hai thứ đó
+ * lúc bắt đầu không nói lên điều gì, chỉ tốn thời gian.
+ */
+export function isAutoCriterion(c: ExitCriterion): boolean {
+  return c.kind === "command" || c.kind === "artifact" || c.kind === "verification";
+}
+
+/**
+ * Tiêu chí ĐANG đạt mà đã đạt sẵn từ trước khi bắt đầu task.
+ *
+ * Hoặc task đã xong rồi, hoặc tiêu chí đó không gác gì — cả hai đều là thứ
+ * người cần biết. Một gate của task sửa bug mà tự xanh trước khi sửa thì gate
+ * đó không tồn tại.
+ */
+export function alreadyGreen(
+  gate: GateResult,
+  baseline: Record<string, boolean> | undefined,
+): CriterionResult[] {
+  if (!baseline) return [];
+  return gate.results.filter(
+    (r) => r.status === "pass" && baseline[criterionKey(r.criterion)] === true,
+  );
+}
+
 function labelOf(c: ExitCriterion): string {
   switch (c.kind) {
     case "command":

@@ -183,19 +183,19 @@ test("đường dẫn tương đối tới sổ cái cũng bị chặn", async (
   }
 });
 
-test("Bash ghi vòng qua Write cũng bị chặn", async () => {
+test("Bash KHÔNG còn bị chặn theo tên file — lớp đó đã bỏ", async () => {
   const root = await emptyProject();
   try {
+    // Lớp cũ khớp `command.includes("verify-ledger.jsonl")` trên chuỗi lệnh thô.
+    // Nó sai cả hai chiều: chặn nhầm lệnh chỉ đọc có kèm dấu chuyển hướng, mà
+    // không cản được ai chỉ cần không gõ tên file (`git add .ganas`, hoặc nối
+    // chuỗi trong script). Lớp cưỡng chế thật là hash-chain của chính sổ cái.
     const out = await handlers.preToolUse({
       cwd: root,
       tool_name: "Bash",
       tool_input: { command: 'echo "{}" >> .ganas/verify-ledger.jsonl' },
     });
-    assert.equal(
-      (out.hookSpecificOutput as Record<string, string>)["permissionDecision"],
-      "deny",
-      "chặn file_path mà quên Bash thì cửa sau vẫn mở",
-    );
+    assert.equal(out.hookSpecificOutput, undefined, "không còn quyết định deny nào ở nhánh Bash");
   } finally {
     await cleanup(root);
   }

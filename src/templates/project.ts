@@ -269,6 +269,37 @@ exit 0
 `;
 }
 
+/**
+ * Git hook thật, chạy trên MỌI commit của repo — kiểm hash-chain của sổ cái
+ * xác minh.
+ *
+ * Đây là lớp PHÁT HIỆN, không phải lớp cấm. `--no-verify` bỏ qua được, và
+ * repo chưa cài ganas thì hook tự nhường đường (thoát 0) thay vì chặn người
+ * ta commit. Giá trị nằm ở chỗ: sổ cái bị sửa tay thì ĐỨT CHAIN và lộ ra —
+ * bất kể ai sửa, bằng công cụ gì, có gõ tên file hay không. Lớp cũ khớp tên
+ * file trên chuỗi lệnh Bash làm phiền người trung thực mà không cản được
+ * người không trung thực, nên đã bỏ.
+ */
+export function preCommitHook(): string {
+  return `#!/bin/sh
+# ganas: sổ cái .ganas/verify-ledger.jsonl là append-only và có hash-chain.
+# Đứt chain nghĩa là có dòng bị sửa, xoá hoặc đảo thứ tự SAU khi ghi — tức
+# bằng chứng "probe đã thật sự chạy" không còn đáng tin.
+
+if command -v ganas >/dev/null 2>&1; then
+  ganas ledger --check || exit 1
+elif command -v bunx >/dev/null 2>&1 && [ -d node_modules/ganas ]; then
+  bunx ganas ledger --check || exit 1
+elif command -v npx >/dev/null 2>&1 && [ -d node_modules/ganas ]; then
+  npx --no-install ganas ledger --check || exit 1
+fi
+# Không tìm thấy ganas: nhường đường. Hook không phải hàng rào an ninh —
+# \`ganas validate\` và CI mới là chỗ chuyện này được chặn thật.
+
+exit 0
+`;
+}
+
 export function agentsMd(v: InitVars): string {
   return `# ${v.project}
 

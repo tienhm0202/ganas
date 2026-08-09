@@ -30,6 +30,11 @@ const KNOWN_BOOLEAN_FLAGS = new Set([
   "q",
   "strict",
   "force",
+  // Không khai ở đây thì `ganas commit --dry-run T-005` nuốt `T-005` làm GIÁ TRỊ
+  // của `--dry-run`, và lệnh im lặng chạy trên task khác.
+  "dry-run",
+  "all-ganas",
+  "check",
 ]);
 
 export function parseArgs(raw: string[], booleanFlags: Iterable<string> = []): Argv {
@@ -90,6 +95,19 @@ export function flag(argv: Argv, ...names: string[]): boolean {
     if (argv.flags[n] !== undefined) return argv.flags[n];
   }
   return false;
+}
+
+/**
+ * Đọc một cờ MẶC ĐỊNH BẬT — chỉ `--no-<tên>` mới tắt.
+ *
+ * `flag()` không phân biệt được "vắng mặt" với "`--no-x`" (cả hai ra `false`),
+ * nên hành vi mặc-định-bật phải hỏi thẳng `argv.flags`.
+ */
+export function enabled(argv: Argv, ...names: string[]): boolean {
+  for (const n of names) {
+    if (argv.flags[n] !== undefined) return argv.flags[n];
+  }
+  return true;
 }
 
 /** Đọc một option chuỗi, chấp nhận cả dạng tên dài lẫn tên ngắn. */

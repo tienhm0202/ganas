@@ -30,6 +30,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   commit: () => import("./commands/commit.js"),
   handoff: () => import("./commands/handoff.js"),
   prune: () => import("./commands/prune.js"),
+  ledger: () => import("./commands/ledger.js"),
   hook: () => import("./commands/hook.js"),
 };
 
@@ -51,6 +52,7 @@ Lệnh:
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng
   handoff --session id Ghi bản ghi tiếp nối của phiên, dẫn xuất từ transcript
   prune                Dọn ephemeral cũ, archive task done (mặc định dry-run)
+  ledger --check       Kiểm hash-chain của sổ cái xác minh (dùng trong hook pre-commit)
   hook <event>         Điểm vào cho hook Claude Code (đọc JSON ở stdin)
 
 Tuỳ chọn chung:

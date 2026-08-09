@@ -16731,575 +16731,6 @@ var init_zod = __esm({
   }
 });
 
-// src/commit.ts
-var commit_exports = {};
-__export(commit_exports, {
-  buildCommitMessage: () => buildCommitMessage,
-  pathsToStage: () => pathsToStage
-});
-function buildCommitMessage(graph, task, gate) {
-  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
-  for (const r of gate.results) {
-    const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
-    lines.push(`  ${mark} ${r.label}`);
-  }
-  const design = graph.designs.get(task.implements)?.value;
-  const context = [
-    `ph\u1EE5c v\u1EE5 ${task.serves.join(", ")}`,
-    design ? `design ${design.id} \u2014 ${design.title}` : `design ${task.implements}`,
-    `ph\u1EA1m vi ${task.scope}`
-  ].join(" \xB7 ");
-  lines.push("", context);
-  return lines.join("\n") + "\n";
-}
-function pathsToStage(task, graph) {
-  const patterns = /* @__PURE__ */ new Set([".ganas"]);
-  for (const moduleId of task.touches) {
-    const mod = graph.modules.get(moduleId)?.value;
-    for (const p of mod?.paths ?? []) patterns.add(p);
-  }
-  return [...patterns];
-}
-var init_commit = __esm({
-  "src/commit.ts"() {
-    "use strict";
-  }
-});
-
-// src/util/errors.ts
-var GanasError, NotInitializedError;
-var init_errors2 = __esm({
-  "src/util/errors.ts"() {
-    "use strict";
-    GanasError = class extends Error {
-      exitCode;
-      constructor(message, exitCode = 1) {
-        super(message);
-        this.name = "GanasError";
-        this.exitCode = exitCode;
-      }
-    };
-    NotInitializedError = class extends GanasError {
-      constructor(from) {
-        super(
-          `kh\xF4ng t\xECm th\u1EA5y .ganas/ t\u1EEB "${from}" tr\u1EDF l\xEAn.
-  Kh\u1EDFi t\u1EA1o:   ganas init
-  D\u1EF1 \xE1n \u0111\xE3 c\xF3 code: ganas init r\u1ED3i \`ganas scope new\` \u2014 tr\u1ECF paths v\xE0o code
-              hi\u1EC7n c\xF3, ganas s\u1EBD d\u1EF1ng kh\u1ED1i t\u01B0\u01A1ng \u1EE9ng.`,
-          2
-        );
-        this.name = "NotInitializedError";
-      }
-    };
-  }
-});
-
-// src/graph/paths.ts
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-function findGanasRoot(from = process.cwd()) {
-  let dir = resolve(from);
-  for (; ; ) {
-    if (existsSync(join(dir, GANAS_DIR, CONFIG_FILE))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-function requireGanasRoot(from = process.cwd()) {
-  const root = findGanasRoot(from);
-  if (!root) throw new NotInitializedError(resolve(from));
-  return root;
-}
-function ganasPath(root, ...parts) {
-  return join(root, GANAS_DIR, ...parts);
-}
-var GANAS_DIR, DIRS, CONFIG_FILE, STATE_FILE, LOCAL_ONLY;
-var init_paths = __esm({
-  "src/graph/paths.ts"() {
-    "use strict";
-    init_errors2();
-    GANAS_DIR = ".ganas";
-    DIRS = {
-      goals: "goals",
-      designs: "designs",
-      tasks: "tasks",
-      /** Phạm vi công việc — đơn vị bàn giao, cũng là ranh giới của tri thức. */
-      scopes: "scopes",
-      /** Sơ đồ khối — cũng chính là bản đồ hệ thống (thay cho `zones` cũ). */
-      modules: "modules",
-      facts: "facts",
-      claims: "claims",
-      decisions: "decisions",
-      domains: "domains",
-      legacy: "legacy",
-      legacyImported: join("legacy", "imported"),
-      map: "map",
-      mapSurveys: join("map", "surveys"),
-      proposals: "proposals",
-      runs: "runs",
-      /** Lock file giữ task cho một phiên — xem `graph/claim.ts`. */
-      locks: ".locks"
-    };
-    CONFIG_FILE = "config.yaml";
-    STATE_FILE = "state.json";
-    LOCAL_ONLY = [`${DIRS.runs}/`, `${DIRS.locks}/`, STATE_FILE];
-  }
-});
-
-// src/util/exec.ts
-var exec_exports = {};
-__export(exec_exports, {
-  judge: () => judge,
-  runShell: () => runShell
-});
-import { execFile } from "node:child_process";
-function runShell(command, opts = {}) {
-  const started = Date.now();
-  return new Promise((resolve2) => {
-    const child = execFile(
-      command,
-      {
-        shell: true,
-        cwd: opts.cwd ?? process.cwd(),
-        timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        maxBuffer: MAX_BUFFER,
-        env: { ...process.env, ...opts.env, GANAS_PROBE: "1" },
-        // Probe không được hỏi gì — nếu nó chờ input thì phải fail, không treo.
-        windowsHide: true
-      },
-      (error2, stdout, stderr) => {
-        const rawCode = error2 ? error2.code : 0;
-        const timedOut = rawCode === "ETIMEDOUT" || error2?.killed === true;
-        resolve2({
-          code: typeof rawCode === "number" ? rawCode : error2 ? 1 : 0,
-          stdout: String(stdout),
-          stderr: String(stderr),
-          timedOut,
-          durationMs: Date.now() - started
-        });
-      }
-    );
-    child.stdin?.end();
-  });
-}
-function judge(result, expect) {
-  if (result.timedOut) {
-    return { pass: false, reason: `l\u1EC7nh qu\xE1 h\u1EA1n sau ${result.durationMs}ms` };
-  }
-  if (expect === "exit_zero") {
-    if (result.code === 0) return { pass: true };
-    return {
-      pass: false,
-      reason: `tho\xE1t v\u1EDBi m\xE3 ${result.code}${result.stderr.trim() ? ` \u2014 ${firstLines(result.stderr)}` : ""}`
-    };
-  }
-  if (expect.exit_code !== void 0 && result.code !== expect.exit_code) {
-    return { pass: false, reason: `mong \u0111\u1EE3i m\xE3 tho\xE1t ${expect.exit_code}, nh\u1EADn ${result.code}` };
-  }
-  if (expect.stdout_contains !== void 0 && !result.stdout.includes(expect.stdout_contains)) {
-    return { pass: false, reason: `stdout kh\xF4ng ch\u1EE9a "${expect.stdout_contains}"` };
-  }
-  if (expect.stdout_matches !== void 0) {
-    let re;
-    try {
-      re = new RegExp(expect.stdout_matches);
-    } catch {
-      return {
-        pass: false,
-        reason: `stdout_matches kh\xF4ng ph\u1EA3i regex h\u1EE3p l\u1EC7: ${expect.stdout_matches}`
-      };
-    }
-    if (!re.test(result.stdout)) {
-      return { pass: false, reason: `stdout kh\xF4ng kh\u1EDBp /${expect.stdout_matches}/` };
-    }
-  }
-  if (expect.stderr_contains !== void 0 && !result.stderr.includes(expect.stderr_contains)) {
-    return { pass: false, reason: `stderr kh\xF4ng ch\u1EE9a "${expect.stderr_contains}"` };
-  }
-  if (expect.exit_code === void 0 && result.code !== 0) {
-    return { pass: false, reason: `tho\xE1t v\u1EDBi m\xE3 ${result.code}` };
-  }
-  return { pass: true };
-}
-function firstLines(text, n = 3) {
-  return text.trim().split("\n").slice(0, n).join(" / ");
-}
-var DEFAULT_TIMEOUT_MS, MAX_BUFFER;
-var init_exec = __esm({
-  "src/util/exec.ts"() {
-    "use strict";
-    DEFAULT_TIMEOUT_MS = 12e4;
-    MAX_BUFFER = 4 * 1024 * 1024;
-  }
-});
-
-// src/state.ts
-var state_exports = {};
-__export(state_exports, {
-  bindSession: () => bindSession,
-  clearTouched: () => clearTouched,
-  markTouched: () => markTouched,
-  readState: () => readState,
-  releaseSession: () => releaseSession,
-  sessionRecord: () => sessionRecord,
-  taskForSession: () => taskForSession,
-  updateState: () => updateState,
-  writeState: () => writeState
-});
-import { existsSync as existsSync3 } from "node:fs";
-import { mkdir, readFile as readFile2, rename, writeFile } from "node:fs/promises";
-import { dirname as dirname2 } from "node:path";
-async function readState(root) {
-  const file = ganasPath(root, STATE_FILE);
-  if (!existsSync3(file)) return { ...EMPTY };
-  try {
-    const parsed = JSON.parse(await readFile2(file, "utf8"));
-    return {
-      version: 1,
-      current_task: parsed.current_task ?? null,
-      sessions: parsed.sessions ?? {}
-    };
-  } catch {
-    return { ...EMPTY };
-  }
-}
-async function writeState(root, state) {
-  const file = ganasPath(root, STATE_FILE);
-  await mkdir(dirname2(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
-  await rename(tmp, file);
-}
-async function updateState(root, mutate) {
-  const state = await readState(root);
-  mutate(state);
-  await writeState(root, state);
-  return state;
-}
-async function bindSession(root, sessionId, taskId) {
-  await updateState(root, (s) => {
-    s.sessions[sessionId] = { task: taskId, started_at: (/* @__PURE__ */ new Date()).toISOString() };
-    s.current_task = taskId;
-  });
-}
-async function releaseSession(root, sessionId) {
-  await updateState(root, (s) => {
-    delete s.sessions[sessionId];
-  });
-}
-async function taskForSession(root, sessionId) {
-  const state = await readState(root);
-  if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
-  return state.current_task;
-}
-async function sessionRecord(root, sessionId) {
-  const state = await readState(root);
-  return state.sessions[sessionId] ?? null;
-}
-async function markTouched(root, sessionId) {
-  const state = await readState(root);
-  const rec = state.sessions[sessionId];
-  if (!rec || rec.touched_at) return;
-  rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
-  await writeState(root, state);
-}
-async function clearTouched(root, sessionId) {
-  await updateState(root, (s) => {
-    delete s.sessions[sessionId]?.touched_at;
-  });
-}
-var EMPTY;
-var init_state = __esm({
-  "src/state.ts"() {
-    "use strict";
-    init_paths();
-    EMPTY = { version: 1, current_task: null, sessions: {} };
-  }
-});
-
-// src/util/glob.ts
-import { readdir } from "node:fs/promises";
-import { join as join3, relative, sep } from "node:path";
-function expandBraces(pattern) {
-  const open2 = pattern.indexOf("{");
-  if (open2 === -1) return [pattern];
-  let depth = 0;
-  let close = -1;
-  for (let i = open2; i < pattern.length; i++) {
-    if (pattern[i] === "{") depth++;
-    else if (pattern[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        close = i;
-        break;
-      }
-    }
-  }
-  if (close === -1) return [pattern];
-  const prefix = pattern.slice(0, open2);
-  const suffix = pattern.slice(close + 1);
-  const body = pattern.slice(open2 + 1, close);
-  const parts = [];
-  let current = "";
-  let nest = 0;
-  for (const ch of body) {
-    if (ch === "{") nest++;
-    else if (ch === "}") nest--;
-    if (ch === "," && nest === 0) {
-      parts.push(current);
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  parts.push(current);
-  return parts.flatMap((p) => expandBraces(prefix + p + suffix));
-}
-function segmentToRegex(segment) {
-  let out = "";
-  for (let i = 0; i < segment.length; i++) {
-    const ch = segment[i];
-    if (ch === "*") {
-      out += "[^/]*";
-    } else if (ch === "?") {
-      out += "[^/]";
-    } else if (ch === "[") {
-      const close = segment.indexOf("]", i + 1);
-      if (close === -1) {
-        out += "\\[";
-      } else {
-        const body = segment.slice(i + 1, close);
-        out += `[${body.startsWith("!") ? "^" + body.slice(1) : body}]`;
-        i = close;
-      }
-    } else {
-      out += ch.replace(/[.+^${}()|\\]/g, "\\$&");
-    }
-  }
-  return out;
-}
-function patternToRegex(pattern) {
-  const segments = pattern.split("/");
-  const parts = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    if (seg === "**") {
-      parts.push(i === segments.length - 1 ? "(?:.*)?" : "(?:.*/)?");
-      continue;
-    }
-    parts.push(segmentToRegex(seg));
-    if (i < segments.length - 1 && segments[i + 1] !== "**") parts.push("/");
-  }
-  return new RegExp(`^${parts.join("")}$`);
-}
-function matchesAny(path, patterns) {
-  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
-  for (const pattern of patterns) {
-    let regexes = cache.get(pattern);
-    if (!regexes) {
-      regexes = expandBraces(pattern).map(patternToRegex);
-      cache.set(pattern, regexes);
-    }
-    if (regexes.some((re) => re.test(normalized))) return true;
-  }
-  return false;
-}
-async function listProjectFiles(root) {
-  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
-    cwd: root,
-    timeoutMs: 2e4
-  });
-  if (git.code === 0 && git.stdout.length > 0) {
-    return git.stdout.split("\0").filter(Boolean);
-  }
-  return walk(root, root, []);
-}
-async function walk(root, dir, acc) {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return acc;
-  }
-  for (const entry of entries) {
-    const full = join3(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      await walk(root, full, acc);
-    } else if (entry.isFile()) {
-      acc.push(relative(root, full).split(sep).join("/"));
-    }
-  }
-  return acc;
-}
-var cache, SKIP_DIRS;
-var init_glob = __esm({
-  "src/util/glob.ts"() {
-    "use strict";
-    init_exec();
-    cache = /* @__PURE__ */ new Map();
-    SKIP_DIRS = /* @__PURE__ */ new Set([
-      ".git",
-      "node_modules",
-      "dist",
-      "build",
-      "out",
-      "target",
-      "vendor",
-      ".next",
-      ".venv",
-      "__pycache__",
-      ".ganas"
-    ]);
-  }
-});
-
-// src/verify/ledger.ts
-import { createHash } from "node:crypto";
-import { existsSync as existsSync4 } from "node:fs";
-import { appendFile, mkdir as mkdir2, readFile as readFile3 } from "node:fs/promises";
-import { hostname as hostname2 } from "node:os";
-import { dirname as dirname3 } from "node:path";
-function sha256(input) {
-  return createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16);
-}
-function definitionHash(def) {
-  return sha256(canonical(def));
-}
-function defHash(definition, statement) {
-  const base2 = definition === null || typeof definition !== "object" || Array.isArray(definition) ? definition : (() => {
-    const stripped = { ...definition };
-    for (const field of FINGERPRINT_FIELDS) delete stripped[field];
-    return stripped;
-  })();
-  return definitionHash({ def: base2, statement: statement ?? null });
-}
-function canonical(value) {
-  if (value === null || value === void 0) return "null";
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (typeof value === "object") {
-    const entries = Object.entries(value).filter(([, v]) => v !== void 0).sort(([a], [b]) => a.localeCompare(b));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-async function fileHash(path) {
-  try {
-    return sha256(await readFile3(path, "utf8"));
-  } catch {
-    return "";
-  }
-}
-function ledgerPath(root) {
-  return ganasPath(root, LEDGER_FILE);
-}
-function chainContent(entry) {
-  const content = { ...entry };
-  delete content["seq"];
-  delete content["prev_hash"];
-  return content;
-}
-function chainStep(runningHash, entry) {
-  return createHash("sha256").update(runningHash + canonical(chainContent(entry))).digest("hex");
-}
-function runningHashOf(entries) {
-  let running = CHAIN_GENESIS;
-  for (const e of entries) {
-    if (e.prev_hash === void 0) continue;
-    running = chainStep(running, e);
-  }
-  return running;
-}
-async function appendEntry(root, entry) {
-  const file = ledgerPath(root);
-  await mkdir2(dirname3(file), { recursive: true });
-  const existing = await readLedger(root);
-  const lastSeq = existing.length > 0 ? existing[existing.length - 1].seq ?? 0 : 0;
-  const chained = {
-    ...entry,
-    seq: lastSeq + 1,
-    prev_hash: runningHashOf(existing)
-  };
-  await appendFile(file, JSON.stringify(chained) + "\n", "utf8");
-}
-function verifyChain(entries) {
-  let running = CHAIN_GENESIS;
-  let started = false;
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    if (!started) {
-      if (e.prev_hash === void 0) continue;
-      started = true;
-    }
-    if (e.prev_hash !== running) return { ok: false, brokenAt: i };
-    running = chainStep(running, e);
-  }
-  return { ok: true };
-}
-function ledgerCorruption(root) {
-  return corruptLines.get(root) ?? 0;
-}
-async function readLedger(root) {
-  const file = ledgerPath(root);
-  corruptLines.set(root, 0);
-  if (!existsSync4(file)) return [];
-  const raw = await readFile3(file, "utf8");
-  const out = [];
-  let bad = 0;
-  for (const line of raw.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const parsed = JSON.parse(line);
-      if (parsed.target && parsed.at) out.push(parsed);
-      else bad++;
-    } catch {
-      bad++;
-    }
-  }
-  corruptLines.set(root, bad);
-  return out;
-}
-function indexByTarget(entries) {
-  const map = /* @__PURE__ */ new Map();
-  for (const e of entries) {
-    const list = map.get(e.target);
-    if (list) list.push(e);
-    else map.set(e.target, [e]);
-  }
-  return map;
-}
-function lastFor(index, target) {
-  const list = index.get(target);
-  return list?.[list.length - 1];
-}
-function historyFor(index, target, k = 5) {
-  return (index.get(target) ?? []).slice(-k);
-}
-function entryAt(index, target, at2) {
-  return (index.get(target) ?? []).find((e) => e.at === at2);
-}
-async function runContext(root, by) {
-  const git = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5e3 });
-  return {
-    by,
-    ...git.code === 0 ? { git: git.stdout.trim() } : {},
-    host: hostname2()
-  };
-}
-var LEDGER_FILE, FINGERPRINT_FIELDS, CHAIN_GENESIS, corruptLines;
-var init_ledger = __esm({
-  "src/verify/ledger.ts"() {
-    "use strict";
-    init_paths();
-    init_exec();
-    LEDGER_FILE = "verify-ledger.jsonl";
-    FINGERPRINT_FIELDS = ["model", "prompt", "dataset"];
-    CHAIN_GENESIS = "0".repeat(64);
-    corruptLines = /* @__PURE__ */ new Map();
-  }
-});
-
 // node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS({
   "node_modules/yaml/dist/nodes/identity.js"(exports) {
@@ -24508,7 +23939,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument4(source, options = {}) {
+    function parseDocument5(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -24534,7 +23965,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument4(src, options);
+      const doc = parseDocument5(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
@@ -24570,7 +24001,7 @@ var require_public_api = __commonJS({
     }
     exports.parse = parse3;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument4;
+    exports.parseDocument = parseDocument5;
     exports.stringify = stringify;
   }
 });
@@ -24624,6 +24055,667 @@ var require_dist2 = __commonJS({
     exports.stringify = publicApi.stringify;
     exports.visit = visit.visit;
     exports.visitAsync = visit.visitAsync;
+  }
+});
+
+// src/util/errors.ts
+var GanasError, NotInitializedError;
+var init_errors2 = __esm({
+  "src/util/errors.ts"() {
+    "use strict";
+    GanasError = class extends Error {
+      exitCode;
+      constructor(message, exitCode = 1) {
+        super(message);
+        this.name = "GanasError";
+        this.exitCode = exitCode;
+      }
+    };
+    NotInitializedError = class extends GanasError {
+      constructor(from) {
+        super(
+          `kh\xF4ng t\xECm th\u1EA5y .ganas/ t\u1EEB "${from}" tr\u1EDF l\xEAn.
+  Kh\u1EDFi t\u1EA1o:   ganas init
+  D\u1EF1 \xE1n \u0111\xE3 c\xF3 code: ganas init r\u1ED3i \`ganas scope new\` \u2014 tr\u1ECF paths v\xE0o code
+              hi\u1EC7n c\xF3, ganas s\u1EBD d\u1EF1ng kh\u1ED1i t\u01B0\u01A1ng \u1EE9ng.`,
+          2
+        );
+        this.name = "NotInitializedError";
+      }
+    };
+  }
+});
+
+// src/graph/paths.ts
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+function findGanasRoot(from = process.cwd()) {
+  let dir = resolve(from);
+  for (; ; ) {
+    if (existsSync(join(dir, GANAS_DIR, CONFIG_FILE))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+function requireGanasRoot(from = process.cwd()) {
+  const root = findGanasRoot(from);
+  if (!root) throw new NotInitializedError(resolve(from));
+  return root;
+}
+function ganasPath(root, ...parts) {
+  return join(root, GANAS_DIR, ...parts);
+}
+var GANAS_DIR, DIRS, CONFIG_FILE, STATE_FILE, LOCAL_ONLY;
+var init_paths = __esm({
+  "src/graph/paths.ts"() {
+    "use strict";
+    init_errors2();
+    GANAS_DIR = ".ganas";
+    DIRS = {
+      goals: "goals",
+      designs: "designs",
+      tasks: "tasks",
+      /** Phạm vi công việc — đơn vị bàn giao, cũng là ranh giới của tri thức. */
+      scopes: "scopes",
+      /** Sơ đồ khối — cũng chính là bản đồ hệ thống (thay cho `zones` cũ). */
+      modules: "modules",
+      facts: "facts",
+      claims: "claims",
+      decisions: "decisions",
+      domains: "domains",
+      legacy: "legacy",
+      legacyImported: join("legacy", "imported"),
+      map: "map",
+      mapSurveys: join("map", "surveys"),
+      proposals: "proposals",
+      runs: "runs",
+      /** Lock file giữ task cho một phiên — xem `graph/claim.ts`. */
+      locks: ".locks"
+    };
+    CONFIG_FILE = "config.yaml";
+    STATE_FILE = "state.json";
+    LOCAL_ONLY = [`${DIRS.runs}/`, `${DIRS.locks}/`, STATE_FILE];
+  }
+});
+
+// src/util/exec.ts
+var exec_exports = {};
+__export(exec_exports, {
+  judge: () => judge,
+  runShell: () => runShell
+});
+import { execFile } from "node:child_process";
+function runShell(command, opts = {}) {
+  const started = Date.now();
+  return new Promise((resolve2) => {
+    const child = execFile(
+      command,
+      {
+        shell: true,
+        cwd: opts.cwd ?? process.cwd(),
+        timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        maxBuffer: MAX_BUFFER,
+        env: { ...process.env, ...opts.env, GANAS_PROBE: "1" },
+        // Probe không được hỏi gì — nếu nó chờ input thì phải fail, không treo.
+        windowsHide: true
+      },
+      (error2, stdout, stderr) => {
+        const rawCode = error2 ? error2.code : 0;
+        const timedOut = rawCode === "ETIMEDOUT" || error2?.killed === true;
+        resolve2({
+          code: typeof rawCode === "number" ? rawCode : error2 ? 1 : 0,
+          stdout: String(stdout),
+          stderr: String(stderr),
+          timedOut,
+          durationMs: Date.now() - started
+        });
+      }
+    );
+    child.stdin?.end();
+  });
+}
+function judge(result, expect) {
+  if (result.timedOut) {
+    return { pass: false, reason: `l\u1EC7nh qu\xE1 h\u1EA1n sau ${result.durationMs}ms` };
+  }
+  if (expect === "exit_zero") {
+    if (result.code === 0) return { pass: true };
+    return {
+      pass: false,
+      reason: `tho\xE1t v\u1EDBi m\xE3 ${result.code}${result.stderr.trim() ? ` \u2014 ${firstLines(result.stderr)}` : ""}`
+    };
+  }
+  if (expect.exit_code !== void 0 && result.code !== expect.exit_code) {
+    return { pass: false, reason: `mong \u0111\u1EE3i m\xE3 tho\xE1t ${expect.exit_code}, nh\u1EADn ${result.code}` };
+  }
+  if (expect.stdout_contains !== void 0 && !result.stdout.includes(expect.stdout_contains)) {
+    return { pass: false, reason: `stdout kh\xF4ng ch\u1EE9a "${expect.stdout_contains}"` };
+  }
+  if (expect.stdout_matches !== void 0) {
+    let re;
+    try {
+      re = new RegExp(expect.stdout_matches);
+    } catch {
+      return {
+        pass: false,
+        reason: `stdout_matches kh\xF4ng ph\u1EA3i regex h\u1EE3p l\u1EC7: ${expect.stdout_matches}`
+      };
+    }
+    if (!re.test(result.stdout)) {
+      return { pass: false, reason: `stdout kh\xF4ng kh\u1EDBp /${expect.stdout_matches}/` };
+    }
+  }
+  if (expect.stderr_contains !== void 0 && !result.stderr.includes(expect.stderr_contains)) {
+    return { pass: false, reason: `stderr kh\xF4ng ch\u1EE9a "${expect.stderr_contains}"` };
+  }
+  if (expect.exit_code === void 0 && result.code !== 0) {
+    return { pass: false, reason: `tho\xE1t v\u1EDBi m\xE3 ${result.code}` };
+  }
+  return { pass: true };
+}
+function firstLines(text, n = 3) {
+  return text.trim().split("\n").slice(0, n).join(" / ");
+}
+var DEFAULT_TIMEOUT_MS, MAX_BUFFER;
+var init_exec = __esm({
+  "src/util/exec.ts"() {
+    "use strict";
+    DEFAULT_TIMEOUT_MS = 12e4;
+    MAX_BUFFER = 4 * 1024 * 1024;
+  }
+});
+
+// src/verify/ledger.ts
+import { createHash } from "node:crypto";
+import { existsSync as existsSync2 } from "node:fs";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { hostname as hostname2 } from "node:os";
+import { dirname as dirname2 } from "node:path";
+function sha256(input) {
+  return createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16);
+}
+function definitionHash(def) {
+  return sha256(canonical(def));
+}
+function defHash(definition, statement) {
+  const base2 = definition === null || typeof definition !== "object" || Array.isArray(definition) ? definition : (() => {
+    const stripped = { ...definition };
+    for (const field of FINGERPRINT_FIELDS) delete stripped[field];
+    return stripped;
+  })();
+  return definitionHash({ def: base2, statement: statement ?? null });
+}
+function canonical(value) {
+  if (value === null || value === void 0) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (typeof value === "object") {
+    const entries = Object.entries(value).filter(([, v]) => v !== void 0).sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+async function fileHash(path) {
+  try {
+    return sha256(await readFile(path, "utf8"));
+  } catch {
+    return "";
+  }
+}
+function ledgerPath(root) {
+  return ganasPath(root, LEDGER_FILE);
+}
+function chainContent(entry) {
+  const content = { ...entry };
+  delete content["seq"];
+  delete content["prev_hash"];
+  return content;
+}
+function chainStep(runningHash, entry) {
+  return createHash("sha256").update(runningHash + canonical(chainContent(entry))).digest("hex");
+}
+function runningHashOf(entries) {
+  let running = CHAIN_GENESIS;
+  for (const e of entries) {
+    if (e.prev_hash === void 0) continue;
+    running = chainStep(running, e);
+  }
+  return running;
+}
+async function appendEntry(root, entry) {
+  const file = ledgerPath(root);
+  await mkdir(dirname2(file), { recursive: true });
+  const existing = await readLedger(root);
+  const lastSeq = existing.length > 0 ? existing[existing.length - 1].seq ?? 0 : 0;
+  const chained = {
+    ...entry,
+    seq: lastSeq + 1,
+    prev_hash: runningHashOf(existing)
+  };
+  await appendFile(file, JSON.stringify(chained) + "\n", "utf8");
+}
+function verifyChain(entries) {
+  let running = CHAIN_GENESIS;
+  let started = false;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (!started) {
+      if (e.prev_hash === void 0) continue;
+      started = true;
+    }
+    if (e.prev_hash !== running) return { ok: false, brokenAt: i };
+    running = chainStep(running, e);
+  }
+  return { ok: true };
+}
+function ledgerCorruption(root) {
+  return corruptLines.get(root) ?? 0;
+}
+async function readLedger(root) {
+  const file = ledgerPath(root);
+  corruptLines.set(root, 0);
+  if (!existsSync2(file)) return [];
+  const raw = await readFile(file, "utf8");
+  const out = [];
+  let bad = 0;
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.target && parsed.at) out.push(parsed);
+      else bad++;
+    } catch {
+      bad++;
+    }
+  }
+  corruptLines.set(root, bad);
+  return out;
+}
+function indexByTarget(entries) {
+  const map = /* @__PURE__ */ new Map();
+  for (const e of entries) {
+    const list = map.get(e.target);
+    if (list) list.push(e);
+    else map.set(e.target, [e]);
+  }
+  return map;
+}
+function lastFor(index, target) {
+  const list = index.get(target);
+  return list?.[list.length - 1];
+}
+function historyFor(index, target, k = 5) {
+  return (index.get(target) ?? []).slice(-k);
+}
+function entryAt(index, target, at2) {
+  return (index.get(target) ?? []).find((e) => e.at === at2);
+}
+async function runContext(root, by) {
+  const git = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5e3 });
+  return {
+    by,
+    ...git.code === 0 ? { git: git.stdout.trim() } : {},
+    host: hostname2()
+  };
+}
+var LEDGER_FILE, FINGERPRINT_FIELDS, CHAIN_GENESIS, corruptLines;
+var init_ledger = __esm({
+  "src/verify/ledger.ts"() {
+    "use strict";
+    init_paths();
+    init_exec();
+    LEDGER_FILE = "verify-ledger.jsonl";
+    FINGERPRINT_FIELDS = ["model", "prompt", "dataset"];
+    CHAIN_GENESIS = "0".repeat(64);
+    corruptLines = /* @__PURE__ */ new Map();
+  }
+});
+
+// src/commit.ts
+var commit_exports = {};
+__export(commit_exports, {
+  buildCommitMessage: () => buildCommitMessage,
+  contractPathRefs: () => contractPathRefs,
+  contractPaths: () => contractPaths,
+  looksLikePath: () => looksLikePath,
+  ownsGanasFile: () => ownsGanasFile,
+  pathsToStage: () => pathsToStage,
+  tokenizeShell: () => tokenizeShell
+});
+function buildCommitMessage(graph, task, gate) {
+  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
+  for (const r of gate.results) {
+    const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
+    lines.push(`  ${mark} ${r.label}`);
+  }
+  const design = graph.designs.get(task.implements)?.value;
+  const context = [
+    `ph\u1EE5c v\u1EE5 ${task.serves.join(", ")}`,
+    design ? `design ${design.id} \u2014 ${design.title}` : `design ${task.implements}`,
+    `ph\u1EA1m vi ${task.scope}`
+  ].join(" \xB7 ");
+  lines.push("", context);
+  return lines.join("\n") + "\n";
+}
+function tokenizeShell(command) {
+  const tokens = [];
+  let cur = "";
+  let started = false;
+  let quote2 = null;
+  for (const ch of command) {
+    if (quote2) {
+      if (ch === quote2) quote2 = null;
+      else cur += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote2 = ch;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (started) tokens.push(cur);
+      cur = "";
+      started = false;
+      continue;
+    }
+    cur += ch;
+    started = true;
+  }
+  if (started) tokens.push(cur);
+  return tokens;
+}
+function stripOperators(token) {
+  return token.replace(/^[0-9]*[<>|&;()]+/, "").replace(/[;|&)]+$/, "");
+}
+function looksLikePath(token) {
+  if (!token || token.startsWith("-")) return false;
+  return token.includes("/") || /\.[A-Za-z0-9]+$/.test(token);
+}
+function contractPathRefs(task) {
+  const refs = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (raw, from) => {
+    const path = raw.replace(/^\.\//, "");
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    refs.push({ path, from });
+  };
+  for (const c of task.exit_contract) {
+    if (c.kind === "command") {
+      for (const token of tokenizeShell(c.run)) {
+        const cleaned = stripOperators(token);
+        if (looksLikePath(cleaned)) add(cleaned, `l\u1EC7nh \`${c.run}\``);
+      }
+    } else if (c.kind === "artifact") {
+      add(c.path, `file \`${c.path}\``);
+    }
+  }
+  return refs;
+}
+function contractPaths(task) {
+  return contractPathRefs(task).map((r) => r.path);
+}
+function pathsToStage(task, graph) {
+  const patterns = /* @__PURE__ */ new Set();
+  for (const moduleId of task.touches) {
+    const mod = graph.modules.get(moduleId)?.value;
+    for (const p of mod?.paths ?? []) patterns.add(p);
+  }
+  for (const p of contractPaths(task)) patterns.add(p);
+  return [...patterns];
+}
+function ownsGanasFile(task, relPath) {
+  const p = relPath.split("\\").join("/").replace(/^\.\//, "");
+  const prefix = `${GANAS_DIR}/`;
+  if (!p.startsWith(prefix)) return false;
+  const inner = p.slice(prefix.length);
+  if (inner === LEDGER_FILE) return true;
+  const stem = inner.replace(YAML_EXT, "");
+  return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
+}
+var YAML_EXT;
+var init_commit = __esm({
+  "src/commit.ts"() {
+    "use strict";
+    init_paths();
+    init_ledger();
+    YAML_EXT = /\.ya?ml$/;
+  }
+});
+
+// src/state.ts
+var state_exports = {};
+__export(state_exports, {
+  baselineFor: () => baselineFor,
+  bindSession: () => bindSession,
+  clearTouched: () => clearTouched,
+  markTouched: () => markTouched,
+  readState: () => readState,
+  releaseSession: () => releaseSession,
+  sessionRecord: () => sessionRecord,
+  setBaseline: () => setBaseline,
+  taskForSession: () => taskForSession,
+  updateState: () => updateState,
+  writeState: () => writeState
+});
+import { existsSync as existsSync4 } from "node:fs";
+import { mkdir as mkdir2, readFile as readFile3, rename, writeFile } from "node:fs/promises";
+import { dirname as dirname3 } from "node:path";
+async function readState(root) {
+  const file = ganasPath(root, STATE_FILE);
+  if (!existsSync4(file)) return { ...EMPTY };
+  try {
+    const parsed = JSON.parse(await readFile3(file, "utf8"));
+    return {
+      version: 1,
+      current_task: parsed.current_task ?? null,
+      sessions: parsed.sessions ?? {}
+    };
+  } catch {
+    return { ...EMPTY };
+  }
+}
+async function writeState(root, state) {
+  const file = ganasPath(root, STATE_FILE);
+  await mkdir2(dirname3(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  await writeFile(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  await rename(tmp, file);
+}
+async function updateState(root, mutate) {
+  const state = await readState(root);
+  mutate(state);
+  await writeState(root, state);
+  return state;
+}
+async function bindSession(root, sessionId, taskId) {
+  await updateState(root, (s) => {
+    s.sessions[sessionId] = { task: taskId, started_at: (/* @__PURE__ */ new Date()).toISOString() };
+    s.current_task = taskId;
+  });
+}
+async function releaseSession(root, sessionId) {
+  await updateState(root, (s) => {
+    delete s.sessions[sessionId];
+  });
+}
+async function setBaseline(root, sessionId, baseline) {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (rec) rec.baseline = baseline;
+  });
+}
+async function baselineFor(root, sessionId, taskId) {
+  if (!sessionId) return void 0;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return void 0;
+  return rec.baseline;
+}
+async function taskForSession(root, sessionId) {
+  const state = await readState(root);
+  if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
+  return state.current_task;
+}
+async function sessionRecord(root, sessionId) {
+  const state = await readState(root);
+  return state.sessions[sessionId] ?? null;
+}
+async function markTouched(root, sessionId) {
+  const state = await readState(root);
+  const rec = state.sessions[sessionId];
+  if (!rec || rec.touched_at) return;
+  rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+  await writeState(root, state);
+}
+async function clearTouched(root, sessionId) {
+  await updateState(root, (s) => {
+    delete s.sessions[sessionId]?.touched_at;
+  });
+}
+var EMPTY;
+var init_state = __esm({
+  "src/state.ts"() {
+    "use strict";
+    init_paths();
+    EMPTY = { version: 1, current_task: null, sessions: {} };
+  }
+});
+
+// src/util/glob.ts
+import { readdir } from "node:fs/promises";
+import { join as join3, relative, sep } from "node:path";
+function expandBraces(pattern) {
+  const open2 = pattern.indexOf("{");
+  if (open2 === -1) return [pattern];
+  let depth = 0;
+  let close = -1;
+  for (let i = open2; i < pattern.length; i++) {
+    if (pattern[i] === "{") depth++;
+    else if (pattern[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close === -1) return [pattern];
+  const prefix = pattern.slice(0, open2);
+  const suffix = pattern.slice(close + 1);
+  const body = pattern.slice(open2 + 1, close);
+  const parts = [];
+  let current = "";
+  let nest = 0;
+  for (const ch of body) {
+    if (ch === "{") nest++;
+    else if (ch === "}") nest--;
+    if (ch === "," && nest === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.flatMap((p) => expandBraces(prefix + p + suffix));
+}
+function segmentToRegex(segment) {
+  let out = "";
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === "*") {
+      out += "[^/]*";
+    } else if (ch === "?") {
+      out += "[^/]";
+    } else if (ch === "[") {
+      const close = segment.indexOf("]", i + 1);
+      if (close === -1) {
+        out += "\\[";
+      } else {
+        const body = segment.slice(i + 1, close);
+        out += `[${body.startsWith("!") ? "^" + body.slice(1) : body}]`;
+        i = close;
+      }
+    } else {
+      out += ch.replace(/[.+^${}()|\\]/g, "\\$&");
+    }
+  }
+  return out;
+}
+function patternToRegex(pattern) {
+  const segments = pattern.split("/");
+  const parts = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (seg === "**") {
+      parts.push(i === segments.length - 1 ? "(?:.*)?" : "(?:.*/)?");
+      continue;
+    }
+    parts.push(segmentToRegex(seg));
+    if (i < segments.length - 1 && segments[i + 1] !== "**") parts.push("/");
+  }
+  return new RegExp(`^${parts.join("")}$`);
+}
+function matchesAny(path, patterns) {
+  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  for (const pattern of patterns) {
+    let regexes = cache.get(pattern);
+    if (!regexes) {
+      regexes = expandBraces(pattern).map(patternToRegex);
+      cache.set(pattern, regexes);
+    }
+    if (regexes.some((re) => re.test(normalized))) return true;
+  }
+  return false;
+}
+async function listProjectFiles(root) {
+  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
+    cwd: root,
+    timeoutMs: 2e4
+  });
+  if (git.code === 0 && git.stdout.length > 0) {
+    return git.stdout.split("\0").filter(Boolean);
+  }
+  return walk(root, root, []);
+}
+async function walk(root, dir, acc) {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return acc;
+  }
+  for (const entry of entries) {
+    const full = join3(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      await walk(root, full, acc);
+    } else if (entry.isFile()) {
+      acc.push(relative(root, full).split(sep).join("/"));
+    }
+  }
+  return acc;
+}
+var cache, SKIP_DIRS;
+var init_glob = __esm({
+  "src/util/glob.ts"() {
+    "use strict";
+    init_exec();
+    cache = /* @__PURE__ */ new Map();
+    SKIP_DIRS = /* @__PURE__ */ new Set([
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      "out",
+      "target",
+      "vendor",
+      ".next",
+      ".venv",
+      "__pycache__",
+      ".ganas"
+    ]);
   }
 });
 
@@ -36576,17 +36668,42 @@ var StdioServerTransport = class {
 init_zod();
 
 // src/commands/commit.ts
+var import_yaml4 = __toESM(require_dist2(), 1);
 init_commit();
-import { mkdtemp as mkdtemp2, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
+import { existsSync as existsSync6 } from "node:fs";
+import { mkdtemp as mkdtemp2, readFile as readFile8, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
 import { join as join7 } from "node:path";
 
 // src/gate.ts
 init_paths();
 init_exec();
-import { existsSync as existsSync2 } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { existsSync as existsSync3 } from "node:fs";
+import { readFile as readFile2 } from "node:fs/promises";
 import { join as join2 } from "node:path";
+function criterionKey(c) {
+  switch (c.kind) {
+    case "command":
+      return `command:${c.run}`;
+    case "artifact":
+      return `artifact:${c.path}`;
+    case "handoff":
+      return `handoff:${c.required}`;
+    case "manual":
+      return `manual:${c.check}`;
+    case "verification":
+      return `verification:${c.target}`;
+  }
+}
+function isAutoCriterion(c) {
+  return c.kind === "command" || c.kind === "artifact" || c.kind === "verification";
+}
+function alreadyGreen(gate, baseline) {
+  if (!baseline) return [];
+  return gate.results.filter(
+    (r) => r.status === "pass" && baseline[criterionKey(r.criterion)] === true
+  );
+}
 function labelOf(c) {
   switch (c.kind) {
     case "command":
@@ -36611,11 +36728,11 @@ async function checkCriterion(criterion, ctx) {
     }
     case "artifact": {
       const file = join2(ctx.root, criterion.path);
-      if (!existsSync2(file)) {
+      if (!existsSync3(file)) {
         return { criterion, label, status: "fail", reason: `file ch\u01B0a t\u1ED3n t\u1EA1i` };
       }
       if (criterion.must_contain) {
-        const content = await readFile(file, "utf8").catch(() => "");
+        const content = await readFile2(file, "utf8").catch(() => "");
         if (!content.includes(criterion.must_contain)) {
           return {
             criterion,
@@ -36638,7 +36755,7 @@ async function checkCriterion(criterion, ctx) {
         };
       }
       const file = ganasPath(ctx.root, DIRS.runs, `${ctx.sessionId}.md`);
-      return existsSync2(file) ? { criterion, label, status: "pass" } : {
+      return existsSync3(file) ? { criterion, label, status: "pass" } : {
         criterion,
         label,
         status: "fail",
@@ -36680,6 +36797,7 @@ function formatGate(result) {
 }
 
 // src/commands/commit.ts
+init_paths();
 init_state();
 
 // src/util/args.ts
@@ -36694,7 +36812,12 @@ var KNOWN_BOOLEAN_FLAGS = /* @__PURE__ */ new Set([
   "quiet",
   "q",
   "strict",
-  "force"
+  "force",
+  // Không khai ở đây thì `ganas commit --dry-run T-005` nuốt `T-005` làm GIÁ TRỊ
+  // của `--dry-run`, và lệnh im lặng chạy trên task khác.
+  "dry-run",
+  "all-ganas",
+  "check"
 ]);
 function parseArgs(raw, booleanFlags = []) {
   const bools = /* @__PURE__ */ new Set([...KNOWN_BOOLEAN_FLAGS, ...booleanFlags]);
@@ -36747,6 +36870,12 @@ function flag(argv, ...names) {
   }
   return false;
 }
+function enabled(argv, ...names) {
+  for (const n of names) {
+    if (argv.flags[n] !== void 0) return argv.flags[n];
+  }
+  return true;
+}
 function option(argv, ...names) {
   for (const n of names) {
     const v = argv.options[n];
@@ -36758,6 +36887,7 @@ function option(argv, ...names) {
 // src/commands/commit.ts
 init_errors2();
 init_exec();
+init_ledger();
 
 // src/commands/_common.ts
 init_freshness();
@@ -36790,6 +36920,61 @@ async function volatileStatus(root) {
 function quote(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
 }
+function parsePorcelainZ(stdout) {
+  const fields = stdout.split("\0");
+  const entries = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (!field || field.length < 4) continue;
+    const x = field[0];
+    const y = field[1];
+    entries.push({ x, y, path: field.slice(3) });
+    if (x === "R" || x === "C" || y === "R" || y === "C") {
+      const other = fields[++i];
+      if (other) entries.push({ x, y, path: other });
+    }
+  }
+  return entries;
+}
+function notFullyStaged(e) {
+  return e.x === "?" || e.y !== " ";
+}
+function ownedPaths(task, entries) {
+  return [...new Set(entries.filter((e) => ownsGanasFile(task, e.path)).map((e) => e.path))];
+}
+function foreignPaths(task, entries) {
+  return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
+}
+async function changedUnder(root, pathspec) {
+  if (pathspec.length === 0) return [];
+  const spec = pathspec.map(quote).join(" ");
+  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
+    cwd: root,
+    timeoutMs: 15e3
+  });
+  if (res.code !== 0) return [];
+  return parsePorcelainZ(res.stdout);
+}
+async function closeTaskFile(root, sourced) {
+  const file = join7(root, sourced.file);
+  const original = await readFile8(file, "utf8");
+  const doc = (0, import_yaml4.parseDocument)(original);
+  const base2 = sourced.index === void 0 ? [] : [sourced.index];
+  doc.setIn([...base2, "status"], "done");
+  doc.setIn([...base2, "done_at"], (/* @__PURE__ */ new Date()).toISOString());
+  await writeFile3(file, doc.toString(), "utf8");
+  return original;
+}
+function reportBaseline(gate, baseline) {
+  const green = alreadyGreen(gate, baseline);
+  if (green.length === 0) return "";
+  return `
+\u26A0 ${green.length} ti\xEAu ch\xED \u0111\xE3 XANH S\u1EB4N t\u1EEB tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u task:
+` + green.map((r) => `    ${r.label}`).join("\n") + `
+  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC.
+  M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
+`;
+}
 async function run(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
@@ -36798,6 +36983,13 @@ async function run(argv) {
   const sourced = graph.tasks.get(taskId);
   if (!sourced) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   const task = sourced.value;
+  const chain = verifyChain(graph.ledgerRaw);
+  if (!chain.ok) {
+    throw new GanasError(
+      `hash-chain c\u1EE7a s\u1ED5 c\xE1i x\xE1c minh \u0111\u1EE9t \u1EDF d\xF2ng ${(chain.brokenAt ?? 0) + 1} (.ganas/verify-ledger.jsonl).
+S\u1ED5 c\xE1i l\xE0 append-only: \u0111\u1EE9t chain ngh\u0129a l\xE0 c\xF3 d\xF2ng b\u1ECB s\u1EEDa, xo\xE1 ho\u1EB7c \u0111\u1EA3o th\u1EE9 t\u1EF1 sau khi ghi. Xem \`ganas ledger --check\` v\xE0 \`ganas validate\`, ph\u1EE5c h\u1ED3i t\u1EEB git tr\u01B0\u1EDBc khi commit ti\u1EBFp.`
+    );
+  }
   const gateResult = await evaluateGate(graph, task, freshness, sessionId);
   if (!gateResult.ok) {
     process.stdout.write(
@@ -36808,23 +37000,56 @@ ${formatGate(gateResult)}
     );
     return 1;
   }
-  for (const p of pathsToStage(task, graph)) {
+  const baseline = await baselineFor(root, sessionId, taskId);
+  const baselineWarning = reportBaseline(gateResult, baseline);
+  const allGanas = flag(argv, "all-ganas");
+  const codePaths = pathsToStage(task, graph);
+  const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
+  if (flag(argv, "dry-run")) {
+    const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+    const owned2 = ownedPaths(task, ganasChanged2);
+    const foreign2 = foreignPaths(task, ganasChanged2);
+    const message2 = buildCommitMessage(graph, task, gateResult);
+    process.stdout.write(
+      `--- ganas commit ${taskId} (dry-run, KH\xD4NG stage, KH\xD4NG commit) ---
+
+S\u1EBD stage:
+` + [...allGanas ? [GANAS_DIR] : owned2, ...codePaths].map((p) => `  + ${p}`).join("\n") + (foreign2.length > 0 ? `
+
+\u0110\u1EC3 l\u1EA1i (kh\xF4ng thu\u1ED9c ${taskId}):
+` + foreign2.map((p) => `  \xB7 ${p}`).join("\n") : "") + (willClose ? `
+
+S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + `
+
+--- commit message ---
+${message2}`
+    );
+    return 0;
+  }
+  let originalTaskFile = null;
+  if (willClose) originalTaskFile = await closeTaskFile(root, sourced);
+  const ganasChanged = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+  const owned = ownedPaths(task, ganasChanged);
+  const foreign = foreignPaths(task, ganasChanged);
+  for (const p of [...allGanas ? [GANAS_DIR] : owned, ...codePaths]) {
     await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
   }
   const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
   if (staged.code === 0) {
+    if (originalTaskFile !== null) {
+      await writeFile3(join7(root, sourced.file), originalTaskFile, "utf8");
+    }
     process.stdout.write(
-      `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} (.ganas/ + code kh\u1ED1i ch\u1EA1m t\u1EDBi) \u0111ang s\u1EA1ch.
-`
+      `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} \u0111ang s\u1EA1ch.
+` + (foreign.length > 0 ? `
+${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId}:
+` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
+Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBFu mu\u1ED1n g\u1ED9p.
+` : "")
     );
     return 0;
   }
   const message = buildCommitMessage(graph, task, gateResult);
-  if (flag(argv, "dry-run")) {
-    process.stdout.write(`--- commit message (dry-run, ch\u01B0a commit) ---
-${message}`);
-    return 0;
-  }
   const dir = await mkdtemp2(join7(tmpdir2(), "ganas-commit-"));
   try {
     const msgFile = join7(dir, "MSG");
@@ -36834,16 +37059,52 @@ ${message}`);
       timeoutMs: 3e4
     });
     if (result.code !== 0) {
+      if (originalTaskFile !== null) {
+        await writeFile3(join7(root, sourced.file), originalTaskFile, "utf8");
+      }
       throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
 ${result.stderr || result.stdout}`);
     }
-    process.stdout.write(`\u2713 \u0110\xE3 commit cho ${taskId}.
+    process.stdout.write(
+      `\u2713 \u0110\xE3 commit cho ${taskId}.
 
-${message}`);
+${message}` + (willClose ? `
+${taskId} \u0111\xE3 \u0111\xE1nh d\u1EA5u \`status: done\`.
+` : "") + (!willClose && gateResult.pendingHuman.length > 0 ? `
+${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn:
+` + gateResult.pendingHuman.map((p) => `  \u2026 ${p.label}`).join("\n") + `
+` : "") + reportUnstagedContract(task, await unstagedContractPaths(root, task)) + (foreign.length > 0 ? `
+${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
+` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
+Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
+` : "") + baselineWarning
+    );
     return 0;
   } finally {
     await rm2(dir, { recursive: true, force: true });
   }
+}
+async function unstagedContractPaths(root, task) {
+  const existing = contractPathRefs(task).filter((r) => existsSync6(join7(root, r.path)));
+  if (existing.length === 0) return [];
+  const changed = await changedUnder(
+    root,
+    existing.map((r) => r.path)
+  );
+  return [...new Set(changed.filter(notFullyStaged).map((e) => e.path))];
+}
+function reportUnstagedContract(task, left) {
+  if (left.length === 0) return "";
+  const refs = contractPathRefs(task);
+  return `
+\u26A0 ${left.length} file m\xE0 \`exit_contract\` c\u1EE7a ${task.id} ch\u1EA1y v\u1EABn CH\u01AFA v\xE0o git:
+` + left.map((p) => {
+    const from = refs.find((r) => r.path === p)?.from;
+    return `  \xB7 ${p}${from ? `
+      ${from}` : ""}`;
+  }).join("\n") + `
+  Clone v\u1EC1 m\xE1y kh\xE1c, gate c\u1EE7a ${task.id} s\u1EBD \u0111\u1ECF. \`git add\` ch\xFAng r\u1ED3i commit ti\u1EBFp.
+`;
 }
 
 // src/flow.ts
@@ -36918,7 +37179,7 @@ init_yaml();
 init_ledger();
 init_lint();
 init_paths();
-import { existsSync as existsSync6 } from "node:fs";
+import { existsSync as existsSync7 } from "node:fs";
 import { join as join8 } from "node:path";
 function at(graph, sourced, ...path) {
   const loaded = graph.sources.get(sourced.file);
@@ -37487,7 +37748,7 @@ function validateGraph(graph) {
       hint: `S\u1ED5 c\xE1i l\xE0 append-only; hash-chain gi\u1EEF d\u1EA5u v\u1EBFt cho M\u1ECCI d\xF2ng sau m\u1ED9t ch\u1ED7 b\u1ECB s\u1EEDa, kh\xF4ng ch\u1EC9 d\xF2ng b\u1ECB s\u1EEDa. Xem git history quanh d\xF2ng n\xE0y \u0111\u1EC3 bi\u1EBFt ai \u0111\u1ED5i g\xEC.`
     });
   }
-  if (existsSync6(join8(graph.root, ".git"))) {
+  if (existsSync7(join8(graph.root, ".git"))) {
     const lines = new Set((graph.gitignoreRaw ?? "").split("\n").map((l) => l.trim()));
     const missing = LOCAL_ONLY.filter((p) => !lines.has(`.ganas/${p}`));
     if (missing.length > 0) {
@@ -37700,7 +37961,7 @@ async function flowContext(cwd) {
   const task = picked?.task.value ?? null;
   const gate = task ? await evaluateGate(graph, task, freshness) : null;
   const { pathsToStage: pathsToStage2 } = await Promise.resolve().then(() => (init_commit(), commit_exports));
-  const paths = task ? pathsToStage2(task, graph) : [".ganas"];
+  const paths = task ? [...pathsToStage2(task, graph), ".ganas"] : [".ganas"];
   const spec = paths.map((p) => JSON.stringify(p)).join(" ");
   const status = await runShell2(`git status --porcelain -- ${spec}`, {
     cwd: root,
@@ -37791,6 +38052,7 @@ async function run3(argv) {
   const task = graph.tasks.get(taskId);
   if (!task) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
+  const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
   if (flag(argv, "json")) {
     process.stdout.write(
       JSON.stringify(
@@ -37798,7 +38060,8 @@ async function run3(argv) {
           task: result.task,
           ok: result.ok,
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
-          pending_human: result.pendingHuman.map((p) => p.label)
+          pending_human: result.pendingHuman.map((p) => p.label),
+          already_green_at_start: green.map((g) => g.label)
         },
         null,
         2
@@ -37810,6 +38073,16 @@ async function run3(argv) {
 ${formatGate(result)}
 
 `);
+  if (green.length > 0) {
+    process.stdout.write(
+      `\u26A0 ${green.length} ti\xEAu ch\xED \u0111\xE3 XANH S\u1EB4N t\u1EEB tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u task:
+` + green.map((g) => `    ${g.label}`).join("\n") + `
+  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC.
+  M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
+
+`
+    );
+  }
   if (result.ok) {
     process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng \u0111\u1EC1u \u0111\u1EA1t.
 `);
@@ -37829,7 +38102,7 @@ C\xF2n ${result.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\x
 
 // src/graph/claim.ts
 init_paths();
-import { mkdir as mkdir3, open, readdir as readdir3, readFile as readFile8, rm as rm3 } from "node:fs/promises";
+import { mkdir as mkdir3, open, readdir as readdir3, readFile as readFile9, rm as rm3 } from "node:fs/promises";
 import { dirname as dirname4 } from "node:path";
 function claimFile(root, taskId) {
   return ganasPath(root, DIRS.locks, `${taskId}.claim`);
@@ -37841,7 +38114,7 @@ function isStale(claim, ttlMinutes) {
 }
 async function claimOwner(root, taskId) {
   try {
-    const raw = await readFile8(claimFile(root, taskId), "utf8");
+    const raw = await readFile9(claimFile(root, taskId), "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -37882,7 +38155,7 @@ async function claimNextTask(graph, root, sessionId, opts = {}) {
 }
 
 // src/render/brief.ts
-import { existsSync as existsSync7 } from "node:fs";
+import { existsSync as existsSync8 } from "node:fs";
 import { join as join9 } from "node:path";
 init_model();
 var RULE_REMINDER = `## Lu\u1EADt ghi tri th\u1EE9c
@@ -38085,7 +38358,7 @@ Ng\u01B0\u1EDDi \u0111\xE3 quy\u1EBFt. Model kh\xF4ng \u0111\u01B0\u1EE3c t\u1EA
   }
   if (t.context_contract.must_read.length > 0) {
     const items = t.context_contract.must_read.map((m) => {
-      const missing = !existsSync7(join9(graph.root, m.path));
+      const missing = !existsSync8(join9(graph.root, m.path));
       return `\`${m.path}\`${missing ? " \u2014 \u26A0 **KH\xD4NG T\u1ED2N T\u1EA0I**" : ""}
   ${m.why}`;
     });
@@ -38336,6 +38609,7 @@ Th\u1EED l\u1EA1i sau, ho\u1EB7c ch\u1EDD phi\xEAn \u0111ang gi\u1EEF gi\u1EA3i 
   const taskId = picked.task.value.id;
   if (sessionId) await bindSession(root, sessionId, taskId);
   else await updateState(root, (s) => void (s.current_task = taskId));
+  const baselineGreen = sessionId ? await recordBaseline(root, graph, picked.task.value, freshness, argv) : [];
   if (flag(argv, "json")) {
     const brief = renderBrief({ graph, task: picked.task, freshness });
     process.stdout.write(JSON.stringify({ task: taskId, brief }, null, 2) + "\n");
@@ -38343,14 +38617,41 @@ Th\u1EED l\u1EA1i sau, ho\u1EB7c ch\u1EDD phi\xEAn \u0111ang gi\u1EEF gi\u1EA3i 
   }
   const volatile = argv.flags["volatile"] === false ? void 0 : await volatileStatus(root);
   process.stdout.write(renderBrief({ graph, task: picked.task, freshness, volatile }) + "\n");
+  if (baselineGreen.length > 0) {
+    process.stdout.write(
+      `
+\u26A0 ${baselineGreen.length} ti\xEAu ch\xED trong \`exit_contract\` c\u1EE7a ${taskId} \u0110\xC3 \u0110\u1EA0T ngay l\xFAc n\xE0y, tr\u01B0\u1EDBc khi l\xE0m g\xEC:
+` + baselineGreen.map((l) => `    ${l}`).join("\n") + `
+
+  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c nh\u1EEFng ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC \u2014
+  ch\xFAng s\u1EBD v\u1EABn xanh d\xF9 kh\xF4ng vi\u1EBFt d\xF2ng n\xE0o. S\u1EEDa \`exit_contract\` \u0111\u1EC3 n\xF3 \u0111\xF2i
+  \u0111\xFAng th\u1EE9 task n\xE0y ph\u1EA3i t\u1EA1o ra, tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u.
+`
+    );
+  }
   return 0;
+}
+async function recordBaseline(root, graph, task, freshness, argv) {
+  if (!enabled(argv, "baseline")) return [];
+  const sessionId = option(argv, "session");
+  const auto = task.exit_contract.filter(isAutoCriterion);
+  if (auto.length === 0) return [];
+  const gate = await evaluateGate(
+    graph,
+    { ...task, exit_contract: auto },
+    freshness
+  );
+  const baseline = {};
+  for (const r of gate.results) baseline[criterionKey(r.criterion)] = r.status === "pass";
+  await setBaseline(root, sessionId, baseline);
+  return gate.results.filter((r) => r.status === "pass").map((r) => r.label);
 }
 
 // src/commands/scope.ts
-var import_yaml5 = __toESM(require_dist2(), 1);
+var import_yaml6 = __toESM(require_dist2(), 1);
 init_paths();
-import { existsSync as existsSync8 } from "node:fs";
-import { mkdir as mkdir4, readdir as readdir4, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
+import { existsSync as existsSync9 } from "node:fs";
+import { mkdir as mkdir4, readdir as readdir4, readFile as readFile10, writeFile as writeFile4 } from "node:fs/promises";
 import { dirname as dirname5, join as join10, relative as relative3 } from "node:path";
 
 // src/graph/trace.ts
@@ -38739,11 +39040,11 @@ async function scanMissing(root, graph) {
     [DIRS.tasks, "task"]
   ]) {
     const abs = ganasPath(root, dir);
-    if (!existsSync8(abs)) continue;
+    if (!existsSync9(abs)) continue;
     for (const entry of await readdir4(abs, { withFileTypes: true })) {
       if (!entry.isFile() || !/\.ya?ml$/.test(entry.name)) continue;
       const file = join10(abs, entry.name);
-      const doc = (0, import_yaml5.parseDocument)(await readFile9(file, "utf8"));
+      const doc = (0, import_yaml6.parseDocument)(await readFile10(file, "utf8"));
       const value = doc.toJS();
       const items = Array.isArray(value) ? value : [value];
       for (const item of items) {
@@ -38782,7 +39083,7 @@ async function scanMissing(root, graph) {
 }
 async function fillScope(root, m, scopeId) {
   const abs = join10(root, m.file);
-  const doc = (0, import_yaml5.parseDocument)(await readFile9(abs, "utf8"));
+  const doc = (0, import_yaml6.parseDocument)(await readFile10(abs, "utf8"));
   const value = doc.toJS();
   if (Array.isArray(value)) {
     const idx = value.findIndex(
@@ -39200,7 +39501,7 @@ var TOOLS = [
 function createServer() {
   const server = new McpServer({
     name: "ganas",
-    version: true ? "0.2.0" : "0.0.0"
+    version: true ? "0.2.1" : "0.0.0"
   });
   for (const tool of TOOLS) {
     server.registerTool(

@@ -27,6 +27,14 @@ export interface SessionRecord {
    * kể từ lần chấm trước ⇒ không có gì để chấm.
    */
   touched_at?: string;
+  /**
+   * Kết quả chấm `exit_contract` NGAY LÚC nhận task, theo `criterionKey`.
+   *
+   * Tiêu chí đã `true` ở đây mà lúc commit vẫn `true` thì nó không gác gì —
+   * nó xanh từ trước khi có một dòng code nào. Vắng mặt ⇒ chưa đo (phiên khác,
+   * hoặc chạy `ganas next --no-baseline`) ⇒ không kết luận gì.
+   */
+  baseline?: Record<string, boolean>;
 }
 
 export interface State {
@@ -82,6 +90,30 @@ export async function releaseSession(root: string, sessionId: string): Promise<v
   await updateState(root, (s) => {
     delete s.sessions[sessionId];
   });
+}
+
+/** Ghi baseline cho phiên. Phiên chưa bind thì không có gì để gắn vào. */
+export async function setBaseline(
+  root: string,
+  sessionId: string,
+  baseline: Record<string, boolean>,
+): Promise<void> {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (rec) rec.baseline = baseline;
+  });
+}
+
+/** Baseline của ĐÚNG phiên này. Không rơi về phiên khác: baseline của việc khác thì vô nghĩa. */
+export async function baselineFor(
+  root: string,
+  sessionId: string | undefined,
+  taskId: string,
+): Promise<Record<string, boolean> | undefined> {
+  if (!sessionId) return undefined;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return undefined;
+  return rec.baseline;
 }
 
 /** Task của một phiên; rơi về current_task khi không có session id. */

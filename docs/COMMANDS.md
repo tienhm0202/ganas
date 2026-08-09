@@ -365,32 +365,50 @@ ganas trace --json | jq '.debt'
 
 ### `ganas commit [task]`
 
-Commit task đã đạt điều kiện hoàn thành: chấm gate (như `ganas gate`) —
-chưa đạt thì **không tạo commit nào**; `git add` đúng phạm vi task (`.ganas/`
-+ đường dẫn của mọi khối trong `touches`, không `git add -A`); dựng commit
-message từ chính dữ liệu gate đã kiểm chứng (dòng đầu `<task id>: <tiêu
-đề>`, thân liệt kê tiêu chí đã đạt, cuối là goal/design/sprint task phục
-vụ) — không phải văn xuôi tự bịa, và **không bao giờ** thêm dòng kiểu
-"Co-Authored-By" hay nhắc AI/Claude.
+Commit task đã đạt điều kiện hoàn thành: kiểm hash-chain của sổ cái, chấm
+gate (như `ganas gate`) — chưa đạt thì **không tạo commit nào**; `git add`
+đúng phạm vi task (không `git add -A`); dựng commit message từ chính dữ liệu
+gate đã kiểm chứng (dòng đầu `<task id>: <tiêu đề>`, thân liệt kê tiêu chí đã
+đạt, cuối là goal/design/phạm vi task phục vụ) — không phải văn xuôi tự bịa,
+và **không bao giờ** thêm dòng kiểu "Co-Authored-By" hay nhắc AI/Claude.
+
+**Cái gì được stage.** Ba nhóm, không hơn:
+
+1. Đường dẫn của mọi khối trong `touches`.
+2. **Đường dẫn mà chính `exit_contract` chạy** — `bun test tests/e2e/x.ts` thì
+   `tests/e2e/x.ts` vào commit, dù nó nằm ngoài `paths` của mọi khối. Thiếu
+   bước này thì gate xanh ở máy tác giả và đỏ ở mọi máy khác.
+3. File `.ganas/` mà task **sở hữu**: file task đó, các khối trong `touches`,
+   fact trong `context_contract.facts`, và `verify-ledger.jsonl`.
+
+File `.ganas/` đang đổi mà không thuộc nhóm nào thì **để lại và in ra**, không
+nuốt im — nhờ vậy commit mang nhãn `T-005` không chứa graph của `T-007`.
+
+**Đóng task.** Commit thành công thì ghi luôn `status: done` + `done_at` vào
+file task (giữ nguyên comment), và thay đổi đó nằm trong chính commit đó. Còn
+tiêu chí `kind: manual` chưa ai xác nhận thì **không** đóng, chỉ báo.
 
 **Đối số định vị:** `[task]` — cùng quy tắc suy ra như `brief`/`gate`.
 
 | Tuỳ chọn | Ý nghĩa |
 |---|---|
 | `--task <id>` | Chỉ định task tường minh. |
-| `--session <id>` | Tra task đang gắn với phiên, dùng khi chấm gate. |
-| `--dry-run` | In commit message sẽ dùng, **không** `git add`/`git commit` gì cả. |
+| `--session <id>` | Tra task đang gắn với phiên; cũng là nguồn của cảnh báo baseline. |
+| `--dry-run` | In kế hoạch stage, phần bỏ lại và commit message. **Không** `git add`/`git commit` gì cả. |
+| `--no-close` | Không ghi `status: done`/`done_at` — tự quyết bằng tay. |
+| `--all-ganas` | Stage cả `.ganas/` như bản cũ, không lọc theo task. |
 
 Không hỗ trợ `--json`.
 
 **Mã thoát:** `1` nếu gate của task chưa đạt (không có gì được commit); `0`
 nếu commit thành công **hoặc** nếu phạm vi của task đã sạch (không có gì để
-commit — không phải lỗi).
+commit — không phải lỗi). Lỗi (`1`) nếu hash-chain của sổ cái đứt.
 
 **Ví dụ:**
 ```
 ganas commit                          # task đang làm (theo state.json)
-ganas commit T-014 --dry-run          # xem message, chưa commit
+ganas commit T-014 --dry-run          # xem sẽ stage gì, chưa đụng index
+ganas commit T-014 --no-close         # commit nhưng tự đánh dấu done sau
 ```
 
 ### `ganas handoff --session <id>`
@@ -444,6 +462,35 @@ Không có đối số định vị.
 ganas prune                           # chỉ xem trước
 ganas prune --yes                     # dọn thật
 ganas prune --older-than 14 --yes
+```
+
+### `ganas ledger`
+
+Kiểm toàn vẹn sổ cái xác minh `.ganas/verify-ledger.jsonl`: tính lại
+hash-chain và đối chiếu với `prev_hash` đã ghi. Sổ cái là append-only, nên
+bất kỳ dòng nào bị sửa, xoá hoặc đảo thứ tự **sau khi ghi** đều làm đứt chain.
+
+Cố tình không nạp graph — lệnh này chạy trong git hook `pre-commit` (do
+`ganas init` cài), tức trên mọi commit của repo, nên phải nhanh.
+
+Đây là lớp **phát hiện**, không phải lớp cấm: `--no-verify` bỏ qua được git
+hook, và repo chưa cài ganas thì hook tự nhường đường. Giá trị nằm ở chỗ sổ
+cái bị sửa tay thì **lộ ra** — bất kể ai sửa, bằng công cụ gì. Đây là thứ
+thay cho lớp cũ khớp tên file trên chuỗi lệnh Bash, vốn chặn nhầm lệnh chỉ
+đọc mà không cản được người chỉ cần không gõ tên file.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--check` | Kiểm chain (hành vi mặc định — cờ này để đọc lệnh cho rõ nghĩa trong hook). |
+| `--json` | Xuất `{ entries, corrupt_lines, chain_ok, broken_at }`. |
+
+**Mã thoát:** `0` khi chain liền và không có dòng hỏng; `1` khi đứt chain
+hoặc có dòng không đọc được.
+
+**Ví dụ:**
+```
+ganas ledger --check
+ganas ledger --json
 ```
 
 ### `ganas hook <event>`

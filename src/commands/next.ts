@@ -1,8 +1,12 @@
+import { criterionKey, evaluateGate, isAutoCriterion } from "../gate.js";
 import { claimNextTask } from "../graph/claim.js";
+import type { VerificationState } from "../graph/freshness.js";
 import { blockedTasks, rankedCandidates } from "../graph/select.js";
+import type { Graph } from "../graph/types.js";
+import type { Task } from "../model/index.js";
 import { renderBrief } from "../render/brief.js";
-import { bindSession, updateState } from "../state.js";
-import { type Argv, flag, option } from "../util/args.js";
+import { bindSession, setBaseline, updateState } from "../state.js";
+import { type Argv, enabled, flag, option } from "../util/args.js";
 import { openProject, volatileStatus } from "./_common.js";
 
 export async function run(argv: Argv): Promise<number> {
@@ -79,6 +83,10 @@ export async function run(argv: Argv): Promise<number> {
   if (sessionId) await bindSession(root, sessionId, taskId);
   else await updateState(root, (s) => void (s.current_task = taskId));
 
+  const baselineGreen = sessionId
+    ? await recordBaseline(root, graph, picked.task.value, freshness, argv)
+    : [];
+
   if (flag(argv, "json")) {
     const brief = renderBrief({ graph, task: picked.task, freshness });
     process.stdout.write(JSON.stringify({ task: taskId, brief }, null, 2) + "\n");
@@ -87,5 +95,53 @@ export async function run(argv: Argv): Promise<number> {
 
   const volatile = argv.flags["volatile"] === false ? undefined : await volatileStatus(root);
   process.stdout.write(renderBrief({ graph, task: picked.task, freshness, volatile }) + "\n");
+
+  if (baselineGreen.length > 0) {
+    process.stdout.write(
+      `\n⚠ ${baselineGreen.length} tiêu chí trong \`exit_contract\` của ${taskId} ĐÃ ĐẠT ` +
+        `ngay lúc này, trước khi làm gì:\n` +
+        baselineGreen.map((l) => `    ${l}`).join("\n") +
+        `\n\n  Hoặc task này đã xong từ trước, hoặc những tiêu chí đó không gác gì —\n` +
+        `  chúng sẽ vẫn xanh dù không viết dòng nào. Sửa \`exit_contract\` để nó đòi\n` +
+        `  đúng thứ task này phải tạo ra, trước khi bắt đầu.\n`,
+    );
+  }
   return 0;
+}
+
+/**
+ * Chấm `exit_contract` NGAY lúc nhận task và ghi lại làm mốc.
+ *
+ * Tiêu chí đã xanh ở đây mà lúc commit vẫn xanh thì nó không gác gì. Đây là chỗ
+ * đáng biết nhất — lúc VIẾT task, không phải lúc chấm gate: một task sửa bug có
+ * gate xanh 2/2 trước khi sửa nghĩa là gate đó không tồn tại.
+ *
+ * Trả về nhãn của những tiêu chí đã xanh sẵn.
+ */
+async function recordBaseline(
+  root: string,
+  graph: Graph,
+  task: Task,
+  freshness: Map<string, VerificationState>,
+  argv: Argv,
+): Promise<string[]> {
+  if (!enabled(argv, "baseline")) return [];
+
+  const sessionId = option(argv, "session")!;
+  // Chỉ chấm tiêu chí tự động: `manual` luôn chờ người, `handoff` luôn đỏ khi
+  // phiên vừa mở — đo hai thứ đó lúc bắt đầu không nói lên gì, chỉ tốn thời gian.
+  const auto = task.exit_contract.filter(isAutoCriterion);
+  if (auto.length === 0) return [];
+
+  const gate = await evaluateGate(
+    graph,
+    { ...task, exit_contract: auto },
+    freshness,
+  );
+
+  const baseline: Record<string, boolean> = {};
+  for (const r of gate.results) baseline[criterionKey(r.criterion)] = r.status === "pass";
+  await setBaseline(root, sessionId, baseline);
+
+  return gate.results.filter((r) => r.status === "pass").map((r) => r.label);
 }

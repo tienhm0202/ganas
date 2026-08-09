@@ -4,7 +4,64 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
-## Chưa phát hành
+## v0.2.1 — 2026-08-09
+
+Vá bốn lỗi tìm thấy khi dùng thật trên một dự án ngoài, cộng một tính năng mà
+chính những lỗi đó chỉ ra là còn thiếu. Bốn lỗi đầu đều làm hỏng đúng thứ ganas
+sinh ra để bảo vệ.
+
+- **`ganas commit` stage cả file mà `exit_contract` chạy** — trước đây nó chỉ
+  lấy `paths` của các khối trong `touches`, nên một tiêu chí
+  `run: "bun test tests/e2e/domain.test.ts"` với khối khai
+  `paths: ["src/domain/core/**"]` khiến file test KHÔNG vào commit. Gate xanh ở
+  máy tác giả, đỏ ở mọi máy khác — đúng thứ ganas tồn tại để chặn.
+  `contractPathRefs()` (`src/commit.ts`) nhặt đường dẫn từ chuỗi lệnh
+  (tokenizer tôn trọng nháy, nên `-t 'tên test'` không bị nhầm là path) và từ
+  `path` của tiêu chí `kind: artifact`. Kèm lưới an toàn: file trong
+  `exit_contract` mà sau commit vẫn chưa vào git thì cảnh báo, nêu rõ tiêu chí
+  nào đã nhắc tới nó.
+- **`ganas commit` không còn nuốt cả `.ganas/`** — `new Set([".ganas"])` cũ
+  stage nguyên thư mục bất kể task nào, nên commit mang nhãn `T-005` chứa graph
+  của `T-007` và của phiên trước; đọc lại lịch sử sau này không biết thay đổi
+  nào thuộc task nào, mà lịch sử graph chính là thứ ganas dùng để trả lời "vì
+  sao chỗ này thành ra thế". `ownsGanasFile()` xác định quyền sở hữu theo đúng
+  liên kết task tự khai: file task, khối trong `touches`, fact trong
+  `context_contract.facts`, design/goal/phạm vi nó `implements`/`serves`/
+  `scope`, và sổ cái. File `.ganas/` đang đổi mà không thuộc nhóm nào thì để
+  lại và **in ra**, không nuốt im. `--all-ganas` giữ hành vi cũ.
+- **Bỏ lớp chặn sổ cái khớp trên chuỗi lệnh Bash** — nó sai cả hai chiều: chặn
+  nhầm lệnh chỉ ĐỌC có kèm dấu chuyển hướng (`grep … verify-ledger.jsonl >
+  /tmp/x`), mà không cản được ai chỉ cần không gõ tên file (`git add .ganas`,
+  hay `python3 -c "open('.ganas/'+'verify-ledger'+'.jsonl','a')"`). Làm phiền
+  người trung thực và không cản người không trung thực. Nhánh `Write`/`Edit`
+  giữ nguyên — nó khớp trên đường dẫn tuyệt đối đã resolve, nên vốn đã đúng.
+- **Lệnh mới `ganas ledger --check`** thay vào chỗ đó: đọc đúng một file, tính
+  lại hash-chain của sổ cái. `ganas init` cài nó thành git hook `pre-commit`
+  (nhường đường bằng `exit 0` nếu repo chưa có ganas), và `ganas commit` từ
+  chối commit khi chain đứt. Sổ cái sửa bằng cách nào cũng lộ ra — đúng nghĩa
+  tamper-**evident**.
+- **`ganas commit` đóng task** — trước đây nó không đụng tới file task, nên
+  `ganas next` phát lại việc đã xong, nguy hiểm hơn là phát lại **kèm brief
+  cũ** có thể chứa giả định đã bị một decision sau đó bác bỏ. Giờ commit ghi
+  `status: done` + `done_at` bằng `Document` của `yaml` (giữ nguyên comment),
+  ghi TRƯỚC khi stage nên thay đổi nằm trong chính commit đó, và khôi phục nếu
+  `git commit` fail. Còn tiêu chí `kind: manual` chưa ai xác nhận thì không
+  đóng, chỉ báo. `--no-close` để tự quyết.
+- **Baseline gate: cảnh báo tiêu chí xanh SẴN trước khi bắt đầu** — quan sát
+  thật: một task sửa bug được tạo với `exit_contract` chép lại probe của task
+  trước, và gate đạt **2/2 với zero dòng code mới**. Gate của một task sửa bug
+  mà tự xanh trước khi sửa thì gate đó không tồn tại. `ganas next --session`
+  chấm các tiêu chí tự động (`command`, `artifact`, `verification`) ngay lúc
+  nhận task, lưu theo `criterionKey()` vào `state.json`; `ganas gate` và
+  `ganas commit` cảnh báo tiêu chí nào đã xanh từ đầu. Chỉ cảnh báo, không
+  chặn — và không có baseline thì im lặng, không đoán bừa. `--no-baseline` để
+  bỏ qua khi bộ test đắt.
+- **`ganas commit --dry-run` không còn `git add`** — vòng `git add` chạy trước
+  early-return của `--dry-run`, nên chính lệnh dùng để xem thử đã làm bẩn
+  index. Giờ dry-run in kế hoạch stage, phần bỏ lại và commit message mà không
+  đụng gì. Kèm theo: `--dry-run`/`--all-ganas` vào `KNOWN_BOOLEAN_FLAGS`, nếu
+  không `ganas commit --dry-run T-005` nuốt `T-005` làm GIÁ TRỊ của cờ và im
+  lặng chạy trên task khác.
 
 - **Stop hook thôi làm phiền lượt hỏi đáp** — trước đây hook chấm
   `exit_contract` ở cuối **mọi** lượt trả lời, kể cả lượt người dùng chỉ hỏi

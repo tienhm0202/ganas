@@ -162,6 +162,15 @@ const SKILL_WRITE_REASON =
  * Đây không phải luật quy trình nên không theo cờ warn/enforce: sổ cái là gốc
  * tin cậy của cả hệ thống, và không ai có thói quen cũ nào ghi vào file mà ganas
  * vừa tạo ra.
+ *
+ * Chỉ chặn ở nhánh `Write`/`Edit`, nơi có ĐƯỜNG DẪN THẬT đã resolve. Nhánh Bash
+ * từng khớp `command.includes(LEDGER_FILE)` trên chuỗi lệnh thô — đã bỏ, vì lớp
+ * đó sai cả hai chiều: nó chặn nhầm những lệnh chỉ đọc có kèm dấu chuyển hướng
+ * (`grep … verify-ledger.jsonl > /tmp/x`), mà lại không cản được ai chỉ cần
+ * không gõ tên file (`git add .ganas`, hoặc nối chuỗi trong một script). Lớp
+ * cưỡng chế thật với Bash là hash-chain của chính sổ cái: sửa bằng cách nào
+ * cũng đứt chain, và `ganas validate` / `ganas ledger --check` / `ganas commit`
+ * đều thấy. Xem `verifyChain()` trong verify/ledger.ts.
  */
 export async function preToolUse(input: HookInput): Promise<HookOutput> {
   const cwd = input.cwd ?? process.cwd();
@@ -183,14 +192,9 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
     return ALLOW;
   }
 
-  // Bash đi vòng qua được kiểm tra file_path ở trên: `echo … >> verify-ledger.jsonl`.
   if (input.tool_name === "Bash" || input.tool_name === "PowerShell") {
     const command = input.tool_input?.["command"];
     if (typeof command === "string" && SHELL_WRITE_HINTS.some((h) => command.includes(h))) {
-      // Đọc thì cho — chỉ chặn khi có dấu hiệu ghi đè.
-      if (command.includes(LEDGER_FILE)) return denyPreTool(LEDGER_REASON);
-      if (command.includes(`${GANAS_DIR}/${CONFIG_FILE}`)) return denyPreTool(CONFIG_REASON);
-
       // `sed -i`, `>` — sửa file mà không đi qua PostToolUse của Write/Edit. Đánh
       // dấu ở PRE vì với Bash đây là lần duy nhất ganas nhìn thấy nội dung lệnh.
       // Đánh dấu nhầm (lệnh sau đó fail) chỉ tốn thêm một lần chấm gate; bỏ sót

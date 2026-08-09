@@ -80,7 +80,7 @@ flowchart TD
   CTX --> WORK["agent làm việc"]
 
   WORK --> PRE["PreToolUse<br/>handlers.preToolUse"]
-  PRE -->|"ghi verify-ledger.jsonl"| DENY["deny — chỉ ganas verify được ghi"]
+  PRE -->|"Write/Edit vào verify-ledger.jsonl"| DENY["deny — chỉ ganas verify được ghi"]
   PRE -->|khác| WORK
 
   WORK --> POST["PostToolUse<br/>handlers.postToolUse"]
@@ -230,9 +230,11 @@ flowchart TD
   A["agent gọi tool"] --> M{"matcher trong hooks.json"}
   M -->|"Write/Edit/Bash…"| P["preToolUse"]
   P --> L{"đích là verify-ledger.jsonl?"}
-  L -->|"file_path khớp"| D1["deny"]
-  L -->|"lệnh Bash chứa tên file<br/>+ dấu hiệu ghi"| D2["deny"]
-  L -->|khác| OK["cho qua"]
+  L -->|"Write/Edit: file_path khớp"| D1["deny"]
+  L -->|"Bash: KHÔNG chặn nữa"| OK["cho qua"]
+  L -->|khác| OK
+
+  D1 -.-> CH["lớp cưỡng chế thật:<br/>hash-chain sổ cái<br/>ganas ledger --check"]
 
   OK --> W["tool chạy"]
   W --> PT["postToolUse"]
@@ -247,8 +249,15 @@ flowchart TD
 - Hook **fail-open** có chủ đích (`hooks/io.ts`, `plugin/bin/ganas.mjs` im lặng
   thoát 0 khi ganas hỏng). Công cụ hỏng không được biến thành hàng rào nhốt
   người dùng. Đổi lại: ganas hỏng = mất lớp kiểm soát, không ai được báo.
-- Chặn ghi sổ cái khớp theo **chuỗi literal**. `node -e "…'verify-'+'ledger…'"`,
-  biến shell, hay một tool MCP không khớp matcher đều lọt.
+- Chặn ghi sổ cái **chỉ ở nhánh `Write`/`Edit`**, nơi có đường dẫn thật đã
+  resolve. Nhánh Bash trước đây khớp tên file trên chuỗi lệnh thô — đã bỏ, vì
+  lớp đó sai cả hai chiều: chặn nhầm lệnh chỉ đọc có kèm dấu chuyển hướng, mà
+  không cản được ai chỉ cần không gõ tên file (`git add .ganas`, hoặc
+  `node -e "…'verify-'+'ledger…'"`). Bash, và mọi tool MCP không khớp matcher,
+  đều ghi được sổ cái.
+- Thứ thay cho nó là **hash-chain** của chính sổ cái: sửa bằng cách nào cũng
+  đứt chain, và `ganas ledger --check` (git hook `pre-commit`), `ganas validate`
+  cùng `ganas commit` đều thấy. Đúng nghĩa tamper-**evident**.
 - `.ganas/config.yaml` **không được bảo vệ** — ghi `enforcement: warn` vào đó là
   tự tắt cả tầng cưỡng chế.
 

@@ -43,7 +43,7 @@ test("buildCommitMessage: không bao giờ nhắc AI/trợ lý, lấy đúng d�
   }
 });
 
-test("pathsToStage: luôn có .ganas, cộng paths của mọi khối task chạm tới", async () => {
+test("pathsToStage: paths của khối task chạm tới, cộng đường dẫn exit_contract chạy", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/designs/D-001.yaml": design(),
@@ -70,7 +70,7 @@ verify:
       exit_contract: [{ kind: "command", run: "true" }],
     });
     const patterns = pathsToStage(task, graph);
-    assert.deepEqual(patterns, [".ganas", "src/a/**"]);
+    assert.deepEqual(patterns, ["src/a/**"]);
   } finally {
     await cleanup(root);
   }

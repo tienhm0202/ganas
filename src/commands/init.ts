@@ -143,6 +143,8 @@ export async function run(argv: Argv): Promise<number> {
   await ensureGitignore(cwd);
   const hook = await ensureCommitMsgHook(cwd, force);
   if (hook) track(hook.path, hook.result);
+  const preCommit = await ensureGitHook(cwd, "pre-commit", T.preCommitHook(), force);
+  if (preCommit) track(preCommit.path, preCommit.result);
 
   process.stdout.write(`ganas đã khởi tạo tại ${cwd}\n\n`);
   if (written.length) process.stdout.write(`  tạo mới:  ${written.join("\n            ")}\n`);
@@ -181,19 +183,21 @@ async function ensureGitignore(cwd: string): Promise<void> {
 }
 
 /**
- * Cưỡng chế "không Co-Authored-By" bằng git hook thật, không chỉ bằng rule
- * agent phải nhớ — xem `T.commitMsgHook()`. Không tạo gì nếu dự án không
- * dùng git; không đè `core.hooksPath` nếu dự án đã tự đặt khác (tôn trọng
- * lựa chọn có sẵn, giống `writeNew` với file thường).
+ * Cài một git hook thật (không phải Claude Code hook) vào `.githooks/`.
+ *
+ * Không tạo gì nếu dự án không dùng git; không đè `core.hooksPath` nếu dự án đã
+ * tự đặt khác (tôn trọng lựa chọn có sẵn, giống `writeNew` với file thường).
  */
-async function ensureCommitMsgHook(
+async function ensureGitHook(
   cwd: string,
+  name: string,
+  content: string,
   force: boolean,
 ): Promise<{ path: string; result: "written" | "kept" } | undefined> {
   if (!existsSync(join(cwd, ".git"))) return undefined;
 
-  const hookFile = join(cwd, ".githooks", "commit-msg");
-  const result = await writeNew(hookFile, T.commitMsgHook(), force);
+  const hookFile = join(cwd, ".githooks", name);
+  const result = await writeNew(hookFile, content, force);
   await chmod(hookFile, 0o755);
 
   const current = await runShell("git config --get core.hooksPath", { cwd, timeoutMs: 5000 });
@@ -204,5 +208,13 @@ async function ensureCommitMsgHook(
   // already trỏ chỗ khác: tôn trọng, không đè — hook đã ghi nhưng chưa bật,
   // người dùng tự quyết định có muốn gộp vào không.
 
-  return { path: ".githooks/commit-msg", result };
+  return { path: `.githooks/${name}`, result };
+}
+
+/** Cưỡng chế "không Co-Authored-By" bằng git hook thật — xem `T.commitMsgHook()`. */
+async function ensureCommitMsgHook(
+  cwd: string,
+  force: boolean,
+): Promise<{ path: string; result: "written" | "kept" } | undefined> {
+  return ensureGitHook(cwd, "commit-msg", T.commitMsgHook(), force);
 }

@@ -100,6 +100,12 @@ function flag(argv, ...names) {
   }
   return false;
 }
+function enabled(argv, ...names) {
+  for (const n of names) {
+    if (argv.flags[n] !== void 0) return argv.flags[n];
+  }
+  return true;
+}
 function option(argv, ...names) {
   for (const n of names) {
     const v = argv.options[n];
@@ -122,7 +128,12 @@ var init_args = __esm({
       "quiet",
       "q",
       "strict",
-      "force"
+      "force",
+      // Không khai ở đây thì `ganas commit --dry-run T-005` nuốt `T-005` làm GIÁ TRỊ
+      // của `--dry-run`, và lệnh im lặng chạy trên task khác.
+      "dry-run",
+      "all-ganas",
+      "check"
     ]);
   }
 });
@@ -299,6 +310,29 @@ var init_exec = __esm({
 import { existsSync as existsSync2 } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join as join2 } from "node:path";
+function criterionKey(c) {
+  switch (c.kind) {
+    case "command":
+      return `command:${c.run}`;
+    case "artifact":
+      return `artifact:${c.path}`;
+    case "handoff":
+      return `handoff:${c.required}`;
+    case "manual":
+      return `manual:${c.check}`;
+    case "verification":
+      return `verification:${c.target}`;
+  }
+}
+function isAutoCriterion(c) {
+  return c.kind === "command" || c.kind === "artifact" || c.kind === "verification";
+}
+function alreadyGreen(gate, baseline) {
+  if (!baseline) return [];
+  return gate.results.filter(
+    (r) => r.status === "pass" && baseline[criterionKey(r.criterion)] === true
+  );
+}
 function labelOf(c) {
   switch (c.kind) {
     case "command":
@@ -12620,7 +12654,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument4(source, options = {}) {
+    function parseDocument5(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -12646,7 +12680,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument4(src, options);
+      const doc = parseDocument5(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
@@ -12682,7 +12716,7 @@ var require_public_api = __commonJS({
     }
     exports.parse = parse;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument4;
+    exports.parseDocument = parseDocument5;
     exports.stringify = stringify;
   }
 });
@@ -12942,31 +12976,31 @@ function tokensOf(text) {
 }
 function lintProbe(input) {
   const findings = [];
-  const run14 = input.run.trim();
+  const run15 = input.run.trim();
   for (const [pattern, what] of DANGEROUS) {
-    if (pattern.test(run14)) {
+    if (pattern.test(run15)) {
       findings.push({
         code: "dangerous",
         severity: "error",
-        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run14}\``,
+        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run15}\``,
         hint: `ganas s\u1EBD KH\xD4NG ch\u1EA1y l\u1EC7nh n\xE0y. Probe ch\u1EC9 \u0111\u01B0\u1EE3c \u0111\u1ECDc v\xE0 ki\u1EC3m tra, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1ED5i tr\u1EA1ng th\xE1i h\u1EC7 th\u1ED1ng.`
       });
       return findings;
     }
   }
-  const simple = run14.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
+  const simple = run15.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
   if (ALWAYS_TRUE.some((re) => re.test(simple))) {
     findings.push({
       code: "tautological",
       severity: "error",
-      message: `probe \`${run14}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
+      message: `probe \`${run15}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
       hint: `Probe ph\u1EA3i c\xF3 kh\u1EA3 n\u0103ng FAIL khi ph\xE1t bi\u1EC3u sai. Vi\u1EBFt l\u1EC7nh th\u1EADt s\u1EF1 ch\u1EA1m v\xE0o th\u1EE9 \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh (vd \`test -f <\u0111\u01B0\u1EDDng-d\u1EABn>\`, \`grep -q '<chu\u1ED7i>' <file>\`, \`npm test -- <t\xEAn-test>\`).`
     });
     return findings;
   }
   const haystack = [input.statement ?? "", ...input.context ?? []].join(" ");
   if (haystack.trim()) {
-    const probeTokens = [...tokensOf(run14)].filter((t) => !SHELL_NOISE.has(t));
+    const probeTokens = [...tokensOf(run15)].filter((t) => !SHELL_NOISE.has(t));
     const claimTokens = tokensOf(haystack);
     const shared = probeTokens.some(
       (t) => [...claimTokens].some((c) => c === t || c.includes(t) || t.includes(c))
@@ -12975,7 +13009,7 @@ function lintProbe(input) {
       findings.push({
         code: "unrelated",
         severity: "warning",
-        message: `probe \`${run14}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
+        message: `probe \`${run15}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
         hint: `Ki\u1EC3m l\u1EA1i xem probe c\xF3 th\u1EADt s\u1EF1 ki\u1EC3m \u0111\xFAng \u0111i\u1EC1u \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh kh\xF4ng.`
       });
     }
@@ -14058,44 +14092,44 @@ var init_adapters = __esm({
 });
 
 // src/verify/mutate.ts
-function mutateProbe(run14) {
-  const fileTest = FILE_TEST.exec(run14);
+function mutateProbe(run15) {
+  const fileTest = FILE_TEST.exec(run15);
   if (fileTest) {
     const [full, head, flag2, quote3, path] = fileTest;
     const replaced = `${head}${flag2} ${quote3}${path}${MUTANT_SUFFIX}${quote3}`;
     return {
-      run: run14.replace(full, replaced),
+      run: run15.replace(full, replaced),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const grep = GREP.exec(run14);
+  const grep = GREP.exec(run15);
   if (grep) {
     const [full, cmd, flags, quote3, pattern] = grep;
     return {
-      run: run14.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
+      run: run15.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const grepBare = GREP_BARE.exec(run14);
+  const grepBare = GREP_BARE.exec(run15);
   if (grepBare) {
     const [full, cmd, flags, pattern] = grepBare;
     return {
-      run: run14.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
+      run: run15.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const quoted = QUOTED.exec(run14);
+  const quoted = QUOTED.exec(run15);
   if (quoted) {
     const [full, quote3, body] = quoted;
     return {
-      run: run14.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
+      run: run15.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i chu\u1ED7i \`${body}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
   return null;
 }
-async function proveCanFail(run14, expect, opts) {
-  const mutation = mutateProbe(run14);
+async function proveCanFail(run15, expect, opts) {
+  const mutation = mutateProbe(run15);
   if (!mutation) {
     return {
       status: "unproven",
@@ -14112,7 +14146,7 @@ async function proveCanFail(run14, expect, opts) {
       status: "cannot_fail",
       what: mutation.what,
       message: `b\u1EA3n b\xF3p m\xE9o (${mutation.what}) V\u1EAAN PASS \u2014 probe n\xE0y kh\xF4ng ki\u1EC3m th\u1EE9 n\xF3 n\xF3i l\xE0 \u0111ang ki\u1EC3m.
-    b\u1EA3n g\u1ED1c:    ${run14}
+    b\u1EA3n g\u1ED1c:    ${run15}
     b\xF3p m\xE9o:    ${mutation.run}
     C\u1EA3 hai c\xF9ng pass ngh\u0129a l\xE0 k\u1EBFt qu\u1EA3 pass kh\xF4ng mang th\xF4ng tin g\xEC.`
     };
@@ -14204,10 +14238,10 @@ async function runTarget(target, opts) {
     return { target, result: "unprovable", reason: "ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh thu\u1ED9c `ganas trace`" };
   }
   const v = target.verification;
-  const run14 = target.kind === "eval" ? v.run : target.definition.run;
+  const run15 = target.kind === "eval" ? v.run : target.definition.run;
   const skipIf = v?.skip_if ?? target.definition.skip_if;
   if (target.kind === "probe") {
-    const findings = lintProbe({ run: run14, statement: target.statement, context: target.context });
+    const findings = lintProbe({ run: run15, statement: target.statement, context: target.context });
     if (hasBlockingFinding(findings)) {
       const blocking = findings.filter((f) => f.severity === "error");
       return {
@@ -14230,23 +14264,23 @@ async function runTarget(target, opts) {
     outcome2.entry = await record(target, outcome2, opts);
     return outcome2;
   }
-  const outcome = target.kind === "eval" ? await runEval(target, run14, opts) : await runProbe(target, run14, opts);
+  const outcome = target.kind === "eval" ? await runEval(target, run15, opts) : await runProbe(target, run15, opts);
   outcome.entry = await record(target, outcome, opts);
   if (target.fact && (outcome.result === "pass" || outcome.result === "fail")) {
     await writeBackFact(target.fact, outcome, root);
   }
   return outcome;
 }
-async function runProbe(target, run14, opts) {
+async function runProbe(target, run15, opts) {
   const def = target.definition;
   const expect = def.expect ?? "exit_zero";
-  const result = await runShell(run14, { cwd: opts.root, timeoutMs: def.timeout_ms });
+  const result = await runShell(run15, { cwd: opts.root, timeoutMs: def.timeout_ms });
   const verdict = judge(result, expect);
   if (!verdict.pass) {
     return { target, result: "fail", reason: verdict.reason };
   }
   if (opts.skipMutation) return { target, result: "pass" };
-  const proof = await proveCanFail(run14, expect, { cwd: opts.root });
+  const proof = await proveCanFail(run15, expect, { cwd: opts.root });
   if (proof.status === "cannot_fail") {
     return {
       target,
@@ -14262,12 +14296,12 @@ async function runProbe(target, run14, opts) {
     reason: proof.status === "unproven" ? proof.message : void 0
   };
 }
-async function runEval(target, run14, opts) {
+async function runEval(target, run15, opts) {
   const v = target.verification;
   const dir = await mkdtemp(join6(tmpdir(), "ganas-eval-"));
   const outFile = join6(dir, "result.json");
   try {
-    const result = await runShell(run14, {
+    const result = await runShell(run15, {
       cwd: opts.root,
       timeoutMs: v.timeout_ms ?? 6e5,
       env: { GANAS_EVAL_OUT: outFile }
@@ -14532,7 +14566,12 @@ var init_freshness = __esm({
 var commit_exports = {};
 __export(commit_exports, {
   buildCommitMessage: () => buildCommitMessage,
-  pathsToStage: () => pathsToStage
+  contractPathRefs: () => contractPathRefs,
+  contractPaths: () => contractPaths,
+  looksLikePath: () => looksLikePath,
+  ownsGanasFile: () => ownsGanasFile,
+  pathsToStage: () => pathsToStage,
+  tokenizeShell: () => tokenizeShell
 });
 function buildCommitMessage(graph, task, gate) {
   const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
@@ -14549,29 +14588,104 @@ function buildCommitMessage(graph, task, gate) {
   lines.push("", context);
   return lines.join("\n") + "\n";
 }
+function tokenizeShell(command) {
+  const tokens = [];
+  let cur = "";
+  let started = false;
+  let quote3 = null;
+  for (const ch of command) {
+    if (quote3) {
+      if (ch === quote3) quote3 = null;
+      else cur += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote3 = ch;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (started) tokens.push(cur);
+      cur = "";
+      started = false;
+      continue;
+    }
+    cur += ch;
+    started = true;
+  }
+  if (started) tokens.push(cur);
+  return tokens;
+}
+function stripOperators(token) {
+  return token.replace(/^[0-9]*[<>|&;()]+/, "").replace(/[;|&)]+$/, "");
+}
+function looksLikePath(token) {
+  if (!token || token.startsWith("-")) return false;
+  return token.includes("/") || /\.[A-Za-z0-9]+$/.test(token);
+}
+function contractPathRefs(task) {
+  const refs = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (raw, from) => {
+    const path = raw.replace(/^\.\//, "");
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    refs.push({ path, from });
+  };
+  for (const c of task.exit_contract) {
+    if (c.kind === "command") {
+      for (const token of tokenizeShell(c.run)) {
+        const cleaned = stripOperators(token);
+        if (looksLikePath(cleaned)) add(cleaned, `l\u1EC7nh \`${c.run}\``);
+      }
+    } else if (c.kind === "artifact") {
+      add(c.path, `file \`${c.path}\``);
+    }
+  }
+  return refs;
+}
+function contractPaths(task) {
+  return contractPathRefs(task).map((r) => r.path);
+}
 function pathsToStage(task, graph) {
-  const patterns = /* @__PURE__ */ new Set([".ganas"]);
+  const patterns = /* @__PURE__ */ new Set();
   for (const moduleId of task.touches) {
     const mod = graph.modules.get(moduleId)?.value;
     for (const p of mod?.paths ?? []) patterns.add(p);
   }
+  for (const p of contractPaths(task)) patterns.add(p);
   return [...patterns];
 }
+function ownsGanasFile(task, relPath) {
+  const p = relPath.split("\\").join("/").replace(/^\.\//, "");
+  const prefix = `${GANAS_DIR}/`;
+  if (!p.startsWith(prefix)) return false;
+  const inner = p.slice(prefix.length);
+  if (inner === LEDGER_FILE) return true;
+  const stem = inner.replace(YAML_EXT, "");
+  return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
+}
+var YAML_EXT;
 var init_commit = __esm({
   "src/commit.ts"() {
     "use strict";
+    init_paths();
+    init_ledger();
+    YAML_EXT = /\.ya?ml$/;
   }
 });
 
 // src/state.ts
 var state_exports = {};
 __export(state_exports, {
+  baselineFor: () => baselineFor,
   bindSession: () => bindSession,
   clearTouched: () => clearTouched,
   markTouched: () => markTouched,
   readState: () => readState,
   releaseSession: () => releaseSession,
   sessionRecord: () => sessionRecord,
+  setBaseline: () => setBaseline,
   taskForSession: () => taskForSession,
   updateState: () => updateState,
   writeState: () => writeState
@@ -14616,6 +14730,18 @@ async function releaseSession(root, sessionId) {
   await updateState(root, (s) => {
     delete s.sessions[sessionId];
   });
+}
+async function setBaseline(root, sessionId, baseline) {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (rec) rec.baseline = baseline;
+  });
+}
+async function baselineFor(root, sessionId, taskId) {
+  if (!sessionId) return void 0;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return void 0;
+  return rec.baseline;
 }
 async function taskForSession(root, sessionId) {
   const state = await readState(root);
@@ -14698,7 +14824,7 @@ async function flowContext(cwd) {
   const task = picked?.task.value ?? null;
   const gate = task ? await evaluateGate(graph, task, freshness) : null;
   const { pathsToStage: pathsToStage2 } = await Promise.resolve().then(() => (init_commit(), commit_exports));
-  const paths = task ? pathsToStage2(task, graph) : [".ganas"];
+  const paths = task ? [...pathsToStage2(task, graph), ".ganas"] : [".ganas"];
   const spec = paths.map((p) => JSON.stringify(p)).join(" ");
   const status = await runShell2(`git status --porcelain -- ${spec}`, {
     cwd: root,
@@ -15182,6 +15308,25 @@ fi
 exit 0
 `;
 }
+function preCommitHook() {
+  return `#!/bin/sh
+# ganas: s\u1ED5 c\xE1i .ganas/verify-ledger.jsonl l\xE0 append-only v\xE0 c\xF3 hash-chain.
+# \u0110\u1EE9t chain ngh\u0129a l\xE0 c\xF3 d\xF2ng b\u1ECB s\u1EEDa, xo\xE1 ho\u1EB7c \u0111\u1EA3o th\u1EE9 t\u1EF1 SAU khi ghi \u2014 t\u1EE9c
+# b\u1EB1ng ch\u1EE9ng "probe \u0111\xE3 th\u1EADt s\u1EF1 ch\u1EA1y" kh\xF4ng c\xF2n \u0111\xE1ng tin.
+
+if command -v ganas >/dev/null 2>&1; then
+  ganas ledger --check || exit 1
+elif command -v bunx >/dev/null 2>&1 && [ -d node_modules/ganas ]; then
+  bunx ganas ledger --check || exit 1
+elif command -v npx >/dev/null 2>&1 && [ -d node_modules/ganas ]; then
+  npx --no-install ganas ledger --check || exit 1
+fi
+# Kh\xF4ng t\xECm th\u1EA5y ganas: nh\u01B0\u1EDDng \u0111\u01B0\u1EDDng. Hook kh\xF4ng ph\u1EA3i h\xE0ng r\xE0o an ninh \u2014
+# \`ganas validate\` v\xE0 CI m\u1EDBi l\xE0 ch\u1ED7 chuy\u1EC7n n\xE0y \u0111\u01B0\u1EE3c ch\u1EB7n th\u1EADt.
+
+exit 0
+`;
+}
 function agentsMd(v) {
   return `# ${v.project}
 
@@ -15343,6 +15488,8 @@ async function run2(argv) {
   await ensureGitignore(cwd);
   const hook = await ensureCommitMsgHook(cwd, force);
   if (hook) track(hook.path, hook.result);
+  const preCommit = await ensureGitHook(cwd, "pre-commit", preCommitHook(), force);
+  if (preCommit) track(preCommit.path, preCommit.result);
   process.stdout.write(`ganas \u0111\xE3 kh\u1EDFi t\u1EA1o t\u1EA1i ${cwd}
 
 `);
@@ -15381,17 +15528,20 @@ async function ensureGitignore(cwd) {
   if (current.includes(".ganas/runs/")) return;
   await appendFile2(file, gitignoreAddition(), "utf8");
 }
-async function ensureCommitMsgHook(cwd, force) {
+async function ensureGitHook(cwd, name, content, force) {
   if (!existsSync7(join8(cwd, ".git"))) return void 0;
-  const hookFile = join8(cwd, ".githooks", "commit-msg");
-  const result = await writeNew(hookFile, commitMsgHook(), force);
+  const hookFile = join8(cwd, ".githooks", name);
+  const result = await writeNew(hookFile, content, force);
   await chmod(hookFile, 493);
   const current = await runShell("git config --get core.hooksPath", { cwd, timeoutMs: 5e3 });
   const already = current.code === 0 ? current.stdout.trim() : "";
   if (already === "" || already === ".githooks") {
     await runShell("git config core.hooksPath .githooks", { cwd, timeoutMs: 5e3 });
   }
-  return { path: ".githooks/commit-msg", result };
+  return { path: `.githooks/${name}`, result };
+}
+async function ensureCommitMsgHook(cwd, force) {
+  return ensureGitHook(cwd, "commit-msg", commitMsgHook(), force);
 }
 var SUBDIRS;
 var init_init = __esm({
@@ -15560,10 +15710,10 @@ async function checkEdge(graph, edge, root) {
   if (issues.length > 0) {
     return { edge, result: "fail", issues, reason: issues.map((i) => i.reason).join("; ") };
   }
-  const run14 = edge.verification.run;
-  if (!run14) return { edge, result: "pass", issues: [] };
+  const run15 = edge.verification.run;
+  if (!run15) return { edge, result: "pass", issues: [] };
   const findings = lintProbe({
-    run: run14,
+    run: run15,
     statement: `${from.id} \u2192 ${to.id}`,
     context: [
       ...from.contract.outputs.map((p) => p.name),
@@ -15579,7 +15729,7 @@ async function checkEdge(graph, edge, root) {
       reason: blocking.map((f) => f.message).join("; ")
     };
   }
-  const result = await runShell(run14, { cwd: root, timeoutMs: 6e4 });
+  const result = await runShell(run15, { cwd: root, timeoutMs: 6e4 });
   const verdict = judge(result, "exit_zero");
   if (!verdict.pass) {
     return { edge, result: "fail", issues: [], reason: verdict.reason };
@@ -16643,6 +16793,7 @@ Th\u1EED l\u1EA1i sau, ho\u1EB7c ch\u1EDD phi\xEAn \u0111ang gi\u1EEF gi\u1EA3i 
   const taskId = picked.task.value.id;
   if (sessionId) await bindSession(root, sessionId, taskId);
   else await updateState(root, (s) => void (s.current_task = taskId));
+  const baselineGreen = sessionId ? await recordBaseline(root, graph, picked.task.value, freshness, argv) : [];
   if (flag(argv, "json")) {
     const brief = renderBrief({ graph, task: picked.task, freshness });
     process.stdout.write(JSON.stringify({ task: taskId, brief }, null, 2) + "\n");
@@ -16650,11 +16801,39 @@ Th\u1EED l\u1EA1i sau, ho\u1EB7c ch\u1EDD phi\xEAn \u0111ang gi\u1EEF gi\u1EA3i 
   }
   const volatile = argv.flags["volatile"] === false ? void 0 : await volatileStatus(root);
   process.stdout.write(renderBrief({ graph, task: picked.task, freshness, volatile }) + "\n");
+  if (baselineGreen.length > 0) {
+    process.stdout.write(
+      `
+\u26A0 ${baselineGreen.length} ti\xEAu ch\xED trong \`exit_contract\` c\u1EE7a ${taskId} \u0110\xC3 \u0110\u1EA0T ngay l\xFAc n\xE0y, tr\u01B0\u1EDBc khi l\xE0m g\xEC:
+` + baselineGreen.map((l) => `    ${l}`).join("\n") + `
+
+  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c nh\u1EEFng ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC \u2014
+  ch\xFAng s\u1EBD v\u1EABn xanh d\xF9 kh\xF4ng vi\u1EBFt d\xF2ng n\xE0o. S\u1EEDa \`exit_contract\` \u0111\u1EC3 n\xF3 \u0111\xF2i
+  \u0111\xFAng th\u1EE9 task n\xE0y ph\u1EA3i t\u1EA1o ra, tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u.
+`
+    );
+  }
   return 0;
+}
+async function recordBaseline(root, graph, task, freshness, argv) {
+  if (!enabled(argv, "baseline")) return [];
+  const sessionId = option(argv, "session");
+  const auto = task.exit_contract.filter(isAutoCriterion);
+  if (auto.length === 0) return [];
+  const gate = await evaluateGate(
+    graph,
+    { ...task, exit_contract: auto },
+    freshness
+  );
+  const baseline = {};
+  for (const r of gate.results) baseline[criterionKey(r.criterion)] = r.status === "pass";
+  await setBaseline(root, sessionId, baseline);
+  return gate.results.filter((r) => r.status === "pass").map((r) => r.label);
 }
 var init_next = __esm({
   "src/commands/next.ts"() {
     "use strict";
+    init_gate();
     init_claim();
     init_select();
     init_brief();
@@ -16677,6 +16856,7 @@ async function run7(argv) {
   const task = graph.tasks.get(taskId);
   if (!task) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
+  const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
   if (flag(argv, "json")) {
     process.stdout.write(
       JSON.stringify(
@@ -16684,7 +16864,8 @@ async function run7(argv) {
           task: result.task,
           ok: result.ok,
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
-          pending_human: result.pendingHuman.map((p) => p.label)
+          pending_human: result.pendingHuman.map((p) => p.label),
+          already_green_at_start: green.map((g) => g.label)
         },
         null,
         2
@@ -16696,6 +16877,16 @@ async function run7(argv) {
 ${formatGate(result)}
 
 `);
+  if (green.length > 0) {
+    process.stdout.write(
+      `\u26A0 ${green.length} ti\xEAu ch\xED \u0111\xE3 XANH S\u1EB4N t\u1EEB tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u task:
+` + green.map((g) => `    ${g.label}`).join("\n") + `
+  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC.
+  M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
+
+`
+    );
+  }
   if (result.ok) {
     process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng \u0111\u1EC1u \u0111\u1EA1t.
 `);
@@ -17016,13 +17207,70 @@ var init_trace2 = __esm({
 // src/commands/commit.ts
 var commit_exports2 = {};
 __export(commit_exports2, {
+  parsePorcelainZ: () => parsePorcelainZ,
   run: () => run10
 });
-import { mkdtemp as mkdtemp2, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
+import { existsSync as existsSync10 } from "node:fs";
+import { mkdtemp as mkdtemp2, readFile as readFile11, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
 import { join as join11 } from "node:path";
 function quote(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
+}
+function parsePorcelainZ(stdout) {
+  const fields = stdout.split("\0");
+  const entries = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (!field || field.length < 4) continue;
+    const x = field[0];
+    const y = field[1];
+    entries.push({ x, y, path: field.slice(3) });
+    if (x === "R" || x === "C" || y === "R" || y === "C") {
+      const other = fields[++i];
+      if (other) entries.push({ x, y, path: other });
+    }
+  }
+  return entries;
+}
+function notFullyStaged(e) {
+  return e.x === "?" || e.y !== " ";
+}
+function ownedPaths(task, entries) {
+  return [...new Set(entries.filter((e) => ownsGanasFile(task, e.path)).map((e) => e.path))];
+}
+function foreignPaths(task, entries) {
+  return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
+}
+async function changedUnder(root, pathspec) {
+  if (pathspec.length === 0) return [];
+  const spec = pathspec.map(quote).join(" ");
+  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
+    cwd: root,
+    timeoutMs: 15e3
+  });
+  if (res.code !== 0) return [];
+  return parsePorcelainZ(res.stdout);
+}
+async function closeTaskFile(root, sourced) {
+  const file = join11(root, sourced.file);
+  const original = await readFile11(file, "utf8");
+  const doc = (0, import_yaml6.parseDocument)(original);
+  const base2 = sourced.index === void 0 ? [] : [sourced.index];
+  doc.setIn([...base2, "status"], "done");
+  doc.setIn([...base2, "done_at"], (/* @__PURE__ */ new Date()).toISOString());
+  await writeFile5(file, doc.toString(), "utf8");
+  return original;
+}
+function reportBaseline(gate, baseline) {
+  const green = alreadyGreen(gate, baseline);
+  if (green.length === 0) return "";
+  return `
+\u26A0 ${green.length} ti\xEAu ch\xED \u0111\xE3 XANH S\u1EB4N t\u1EEB tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u task:
+` + green.map((r) => `    ${r.label}`).join("\n") + `
+  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC.
+  M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
+`;
 }
 async function run10(argv) {
   const { root, graph, freshness } = await openProject(argv);
@@ -17032,6 +17280,13 @@ async function run10(argv) {
   const sourced = graph.tasks.get(taskId);
   if (!sourced) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   const task = sourced.value;
+  const chain = verifyChain(graph.ledgerRaw);
+  if (!chain.ok) {
+    throw new GanasError(
+      `hash-chain c\u1EE7a s\u1ED5 c\xE1i x\xE1c minh \u0111\u1EE9t \u1EDF d\xF2ng ${(chain.brokenAt ?? 0) + 1} (.ganas/verify-ledger.jsonl).
+S\u1ED5 c\xE1i l\xE0 append-only: \u0111\u1EE9t chain ngh\u0129a l\xE0 c\xF3 d\xF2ng b\u1ECB s\u1EEDa, xo\xE1 ho\u1EB7c \u0111\u1EA3o th\u1EE9 t\u1EF1 sau khi ghi. Xem \`ganas ledger --check\` v\xE0 \`ganas validate\`, ph\u1EE5c h\u1ED3i t\u1EEB git tr\u01B0\u1EDBc khi commit ti\u1EBFp.`
+    );
+  }
   const gateResult = await evaluateGate(graph, task, freshness, sessionId);
   if (!gateResult.ok) {
     process.stdout.write(
@@ -17042,23 +17297,56 @@ ${formatGate(gateResult)}
     );
     return 1;
   }
-  for (const p of pathsToStage(task, graph)) {
+  const baseline = await baselineFor(root, sessionId, taskId);
+  const baselineWarning = reportBaseline(gateResult, baseline);
+  const allGanas = flag(argv, "all-ganas");
+  const codePaths = pathsToStage(task, graph);
+  const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
+  if (flag(argv, "dry-run")) {
+    const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+    const owned2 = ownedPaths(task, ganasChanged2);
+    const foreign2 = foreignPaths(task, ganasChanged2);
+    const message2 = buildCommitMessage(graph, task, gateResult);
+    process.stdout.write(
+      `--- ganas commit ${taskId} (dry-run, KH\xD4NG stage, KH\xD4NG commit) ---
+
+S\u1EBD stage:
+` + [...allGanas ? [GANAS_DIR] : owned2, ...codePaths].map((p) => `  + ${p}`).join("\n") + (foreign2.length > 0 ? `
+
+\u0110\u1EC3 l\u1EA1i (kh\xF4ng thu\u1ED9c ${taskId}):
+` + foreign2.map((p) => `  \xB7 ${p}`).join("\n") : "") + (willClose ? `
+
+S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + `
+
+--- commit message ---
+${message2}`
+    );
+    return 0;
+  }
+  let originalTaskFile = null;
+  if (willClose) originalTaskFile = await closeTaskFile(root, sourced);
+  const ganasChanged = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+  const owned = ownedPaths(task, ganasChanged);
+  const foreign = foreignPaths(task, ganasChanged);
+  for (const p of [...allGanas ? [GANAS_DIR] : owned, ...codePaths]) {
     await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
   }
   const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
   if (staged.code === 0) {
+    if (originalTaskFile !== null) {
+      await writeFile5(join11(root, sourced.file), originalTaskFile, "utf8");
+    }
     process.stdout.write(
-      `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} (.ganas/ + code kh\u1ED1i ch\u1EA1m t\u1EDBi) \u0111ang s\u1EA1ch.
-`
+      `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} \u0111ang s\u1EA1ch.
+` + (foreign.length > 0 ? `
+${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId}:
+` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
+Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBFu mu\u1ED1n g\u1ED9p.
+` : "")
     );
     return 0;
   }
   const message = buildCommitMessage(graph, task, gateResult);
-  if (flag(argv, "dry-run")) {
-    process.stdout.write(`--- commit message (dry-run, ch\u01B0a commit) ---
-${message}`);
-    return 0;
-  }
   const dir = await mkdtemp2(join11(tmpdir2(), "ganas-commit-"));
   try {
     const msgFile = join11(dir, "MSG");
@@ -17068,33 +17356,73 @@ ${message}`);
       timeoutMs: 3e4
     });
     if (result.code !== 0) {
+      if (originalTaskFile !== null) {
+        await writeFile5(join11(root, sourced.file), originalTaskFile, "utf8");
+      }
       throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
 ${result.stderr || result.stdout}`);
     }
-    process.stdout.write(`\u2713 \u0110\xE3 commit cho ${taskId}.
+    process.stdout.write(
+      `\u2713 \u0110\xE3 commit cho ${taskId}.
 
-${message}`);
+${message}` + (willClose ? `
+${taskId} \u0111\xE3 \u0111\xE1nh d\u1EA5u \`status: done\`.
+` : "") + (!willClose && gateResult.pendingHuman.length > 0 ? `
+${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn:
+` + gateResult.pendingHuman.map((p) => `  \u2026 ${p.label}`).join("\n") + `
+` : "") + reportUnstagedContract(task, await unstagedContractPaths(root, task)) + (foreign.length > 0 ? `
+${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
+` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
+Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
+` : "") + baselineWarning
+    );
     return 0;
   } finally {
     await rm3(dir, { recursive: true, force: true });
   }
 }
+async function unstagedContractPaths(root, task) {
+  const existing = contractPathRefs(task).filter((r) => existsSync10(join11(root, r.path)));
+  if (existing.length === 0) return [];
+  const changed = await changedUnder(
+    root,
+    existing.map((r) => r.path)
+  );
+  return [...new Set(changed.filter(notFullyStaged).map((e) => e.path))];
+}
+function reportUnstagedContract(task, left) {
+  if (left.length === 0) return "";
+  const refs = contractPathRefs(task);
+  return `
+\u26A0 ${left.length} file m\xE0 \`exit_contract\` c\u1EE7a ${task.id} ch\u1EA1y v\u1EABn CH\u01AFA v\xE0o git:
+` + left.map((p) => {
+    const from = refs.find((r) => r.path === p)?.from;
+    return `  \xB7 ${p}${from ? `
+      ${from}` : ""}`;
+  }).join("\n") + `
+  Clone v\u1EC1 m\xE1y kh\xE1c, gate c\u1EE7a ${task.id} s\u1EBD \u0111\u1ECF. \`git add\` ch\xFAng r\u1ED3i commit ti\u1EBFp.
+`;
+}
+var import_yaml6;
 var init_commit2 = __esm({
   "src/commands/commit.ts"() {
     "use strict";
+    import_yaml6 = __toESM(require_dist(), 1);
     init_commit();
     init_gate();
+    init_paths();
     init_state();
     init_args();
     init_errors();
     init_exec();
+    init_ledger();
     init_common2();
   }
 });
 
 // src/handoff.ts
-import { existsSync as existsSync10 } from "node:fs";
-import { mkdir as mkdir6, readFile as readFile11, writeFile as writeFile6 } from "node:fs/promises";
+import { existsSync as existsSync11 } from "node:fs";
+import { mkdir as mkdir6, readFile as readFile12, writeFile as writeFile6 } from "node:fs/promises";
 import { dirname as dirname6 } from "node:path";
 function textOf(content) {
   if (typeof content === "string") return content;
@@ -17220,9 +17548,9 @@ function runsPath(root, sessionId) {
 }
 async function generateHandoff(root, graph, task, gate, opts) {
   let transcript = null;
-  if (opts.transcriptPath && existsSync10(opts.transcriptPath)) {
+  if (opts.transcriptPath && existsSync11(opts.transcriptPath)) {
     try {
-      transcript = parseTranscript(await readFile11(opts.transcriptPath, "utf8"));
+      transcript = parseTranscript(await readFile12(opts.transcriptPath, "utf8"));
     } catch {
       transcript = null;
     }
@@ -17288,7 +17616,7 @@ var init_handoff2 = __esm({
 });
 
 // src/prune.ts
-import { existsSync as existsSync11 } from "node:fs";
+import { existsSync as existsSync12 } from "node:fs";
 import { mkdir as mkdir7, readdir as readdir5, rename as rename2, rm as rm4, stat as stat2 } from "node:fs/promises";
 import { basename as basename2, dirname as dirname7, join as join12, relative as relative4 } from "node:path";
 async function planPrune(root, graph, opts) {
@@ -17297,7 +17625,7 @@ async function planPrune(root, graph, opts) {
   const state = await readState(root);
   const staleRuns = [];
   const runsDir = ganasPath(root, DIRS.runs);
-  if (existsSync11(runsDir)) {
+  if (existsSync12(runsDir)) {
     for (const entry of await readdir5(runsDir, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
       const sessionId = entry.name.slice(0, -3);
@@ -17338,7 +17666,7 @@ async function archive(root, relFile, archiveDirName) {
   const dstRel = join12(dirname7(relFile), archiveDirName, basename2(relFile));
   const dst = join12(root, dstRel);
   await mkdir7(dirname7(dst), { recursive: true });
-  if (existsSync11(join12(root, ".git"))) {
+  if (existsSync12(join12(root, ".git"))) {
     const result = await runShell(
       `git mv -- ${quote2(relative4(root, src))} ${quote2(relative4(root, dst))}`,
       { cwd: root, timeoutMs: 15e3 }
@@ -17438,6 +17766,59 @@ var init_prune2 = __esm({
     init_errors();
     init_common2();
     DEFAULT_OLDER_THAN_DAYS = 7;
+  }
+});
+
+// src/commands/ledger.ts
+var ledger_exports = {};
+__export(ledger_exports, {
+  run: () => run13
+});
+async function run13(argv) {
+  const root = requireGanasRoot(process.cwd());
+  const entries = await readLedger(root);
+  const corrupt = ledgerCorruption(root);
+  const chain = verifyChain(entries);
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify(
+        { entries: entries.length, corrupt_lines: corrupt, chain_ok: chain.ok, broken_at: chain.brokenAt ?? null },
+        null,
+        2
+      ) + "\n"
+    );
+    return chain.ok && corrupt === 0 ? 0 : 1;
+  }
+  if (!chain.ok) {
+    process.stderr.write(
+      `\u2717 Hash-chain c\u1EE7a s\u1ED5 c\xE1i x\xE1c minh \u0110\u1EE8T \u1EDF d\xF2ng ${(chain.brokenAt ?? 0) + 1}/${entries.length}.
+  .ganas/verify-ledger.jsonl l\xE0 append-only. \u0110\u1EE9t chain ngh\u0129a l\xE0 c\xF3 d\xF2ng b\u1ECB s\u1EEDa,
+  xo\xE1 ho\u1EB7c \u0111\u1EA3o th\u1EE9 t\u1EF1 SAU khi ghi.
+
+  Ph\u1EE5c h\u1ED3i t\u1EEB git (\`git checkout -- .ganas/verify-ledger.jsonl\`) r\u1ED3i ch\u1EA1y l\u1EA1i
+  \`ganas verify\` cho nh\u1EEFng g\xEC th\u1EADt s\u1EF1 c\u1EA7n ki\u1EC3m.
+`
+    );
+    return 1;
+  }
+  if (corrupt > 0) {
+    process.stderr.write(
+      `\u2717 S\u1ED5 c\xE1i c\xF3 ${corrupt} d\xF2ng kh\xF4ng \u0111\u1ECDc \u0111\u01B0\u1EE3c. Hash-chain c\u1EE7a ph\u1EA7n \u0111\u1ECDc \u0111\u01B0\u1EE3c v\u1EABn li\u1EC1n,
+  nh\u01B0ng d\xF2ng h\u1ECFng l\xE0 ch\u1ED7 b\u1EB1ng ch\u1EE9ng bi\u1EBFn m\u1EA5t m\xE0 kh\xF4ng \u0111\u1EC3 l\u1EA1i d\u1EA5u v\u1EBFt.
+`
+    );
+    return 1;
+  }
+  process.stdout.write(`\u2713 S\u1ED5 c\xE1i li\u1EC1n chain \u2014 ${entries.length} d\xF2ng.
+`);
+  return 0;
+}
+var init_ledger2 = __esm({
+  "src/commands/ledger.ts"() {
+    "use strict";
+    init_paths();
+    init_args();
+    init_ledger();
   }
 });
 
@@ -17558,8 +17939,6 @@ async function preToolUse(input) {
   if (input.tool_name === "Bash" || input.tool_name === "PowerShell") {
     const command = input.tool_input?.["command"];
     if (typeof command === "string" && SHELL_WRITE_HINTS.some((h) => command.includes(h))) {
-      if (command.includes(LEDGER_FILE)) return denyPreTool(LEDGER_REASON);
-      if (command.includes(`${GANAS_DIR}/${CONFIG_FILE}`)) return denyPreTool(CONFIG_REASON);
       if (input.session_id) await markTouched(root, input.session_id);
     }
   }
@@ -17697,9 +18076,9 @@ Nh\u1EDD phi\xEAn ch\xEDnh s\u1EEDa h\u1ED9 n\u1EBFu skill c\u1EA7n c\u1EADp nh\
 // src/commands/hook.ts
 var hook_exports = {};
 __export(hook_exports, {
-  run: () => run13
+  run: () => run14
 });
-async function run13(argv) {
+async function run14(argv) {
   const event = argv.positional[0];
   const handler = event ? HANDLERS[event] : void 0;
   if (!handler) {
@@ -17755,6 +18134,7 @@ var COMMANDS = {
   commit: () => Promise.resolve().then(() => (init_commit2(), commit_exports2)),
   handoff: () => Promise.resolve().then(() => (init_handoff2(), handoff_exports)),
   prune: () => Promise.resolve().then(() => (init_prune2(), prune_exports)),
+  ledger: () => Promise.resolve().then(() => (init_ledger2(), ledger_exports)),
   hook: () => Promise.resolve().then(() => (init_hook(), hook_exports))
 };
 var HELP = `ganas \u2014 control layer cho c\xE1c phi\xEAn Claude Code
@@ -17775,6 +18155,7 @@ L\u1EC7nh:
   commit [task]        Commit task \u0111\xE3 \u0111\u1EA1t gate \u2014 message d\u1EF1ng t\u1EEB d\u1EEF li\u1EC7u \u0111\xE3 ki\u1EC3m ch\u1EE9ng
   handoff --session id Ghi b\u1EA3n ghi ti\u1EBFp n\u1ED1i c\u1EE7a phi\xEAn, d\u1EABn xu\u1EA5t t\u1EEB transcript
   prune                D\u1ECDn ephemeral c\u0169, archive task done (m\u1EB7c \u0111\u1ECBnh dry-run)
+  ledger --check       Ki\u1EC3m hash-chain c\u1EE7a s\u1ED5 c\xE1i x\xE1c minh (d\xF9ng trong hook pre-commit)
   hook <event>         \u0110i\u1EC3m v\xE0o cho hook Claude Code (\u0111\u1ECDc JSON \u1EDF stdin)
 
 Tu\u1EF3 ch\u1ECDn chung:
@@ -17788,7 +18169,7 @@ async function main() {
   const raw = process.argv.slice(2);
   const argv = parseArgs(raw);
   if (argv.flags["version"] || argv.flags["v"]) {
-    process.stdout.write(`${"0.2.0"}
+    process.stdout.write(`${"0.2.1"}
 `);
     return 0;
   }

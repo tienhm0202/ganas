@@ -73,11 +73,16 @@ test("⭐ đi trọn dòng chảy từ repo trống — mọi trạng thái đ�
       const step = nextStep(ctx);
       if (!step) break;
 
-      assert.ok(
-        !seen.includes(step.stage.id),
-        `chặng "${step.stage.id}" lặp lại — làm đúng việc nó bảo mà vẫn không qua được.\n` +
-          `Đã đi: ${seen.join(" → ")}`,
-      );
+      if (seen.includes(step.stage.id)) {
+        // Quay lại một chặng đã đi = vòng ĐÃ KHÉP, sang vòng sau. Chỉ hợp lệ sau
+        // khi đã commit — trước đó thì đúng là quẩn tại chỗ.
+        assert.ok(
+          seen.includes("commit"),
+          `chặng "${step.stage.id}" lặp lại trước khi commit — làm đúng việc nó bảo ` +
+            `mà vẫn không qua được.\nĐã đi: ${seen.join(" → ")}`,
+        );
+        break;
+      }
       seen.push(step.stage.id);
       await advance(root, step.stage.id);
 
@@ -87,8 +92,12 @@ test("⭐ đi trọn dòng chảy từ repo trống — mọi trạng thái đ�
     }
 
     // Không cần đi qua HẾT mọi chặng (một số đã xong sẵn), nhưng phải tới được
-    // chặng cuối — tức là vòng làm việc khép lại được.
-    assert.ok(seen.includes("close"), `không tới được cuối vòng. Đã đi: ${seen.join(" → ")}`);
+    // cuối vòng — tức là vòng làm việc khép lại được. `ganas commit` giờ tự ghi
+    // `status: done`, nên chặng `close` thường đã xong sẵn và vòng khép ở `commit`.
+    assert.ok(
+      seen.includes("commit") || seen.includes("close"),
+      `không tới được cuối vòng. Đã đi: ${seen.join(" → ")}`,
+    );
   } finally {
     await cleanup(root);
   }
