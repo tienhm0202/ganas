@@ -9,6 +9,11 @@ coverage/
 # giá trị là cưỡng chế.
 /dist/
 
+# Cấu hình Claude Code riêng của từng máy: quyền đã cho phép, marketplace trỏ
+# đường dẫn tuyệt đối. `.claude/settings.json` thì CÓ commit — `attribution.commit`
+# và `enabledPlugins` là quyết định của dự án, không phải của một máy.
+.claude/settings.local.json
+
 # Plan/roadmap không thuộc git — chi tiết từng mốc đã nằm trong commit
 # message (xem git log). Không commit lại PLAN.md dù ở gốc repo hay docs/.
 PLAN.md
