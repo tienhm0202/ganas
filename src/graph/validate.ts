@@ -466,27 +466,40 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     }
   }
 
-  // Khối mồ côi: không tới được từ `entry` của phạm vi. Cạnh xuôi = ngược `depends_on`.
+  // Khối mồ côi: không NỐI được vào sơ đồ của phạm vi.
+  //
+  // Kiểm liên thông trên đồ thị VÔ HƯỚNG, không phải "tới được từ `entry`".
+  // Bản cũ duyệt một chiều từ một điểm, nên bất kỳ phạm vi nào có từ hai khối
+  // nguồn trở lên (khối không `depends_on` ai) đều luôn có khối bị báo mồ côi —
+  // đổi `entry` chỉ đổi khối nào bị báo, có khi còn nhiều hơn. Đó là cảnh báo
+  // thường trực không tắt được, mà cảnh báo thường trực là thứ người ta quen
+  // mắt rồi ngừng đọc — cảnh báo thật tiếp theo sẽ bị bỏ qua cùng.
+  //
+  // Câu hỏi thật sự đáng hỏi là "khối này có nối vào sơ đồ của phạm vi không",
+  // và liên thông vô hướng trả lời đúng câu đó.
   for (const scope of graph.scopes.values()) {
     const sc = scope.value;
     const inScope = new Set<string>(sc.modules);
-    const forward = new Map<string, string[]>();
-    for (const id of inScope) forward.set(id, []);
+    const neighbours = new Map<string, string[]>();
+    for (const id of inScope) neighbours.set(id, []);
     for (const id of inScope) {
       const mod = graph.modules.get(id);
       if (!mod) continue;
       for (const dep of mod.value.depends_on) {
-        if (inScope.has(dep)) forward.get(dep)!.push(id);
+        if (!inScope.has(dep)) continue;
+        neighbours.get(id)!.push(dep);
+        neighbours.get(dep)!.push(id);
       }
     }
 
     const seen = new Set<string>();
-    const queue = inScope.has(sc.entry) ? [sc.entry] : [];
+    const root = inScope.has(sc.entry) ? sc.entry : sc.modules[0];
+    const queue = root === undefined ? [] : [root];
     while (queue.length) {
       const cur = queue.shift()!;
       if (seen.has(cur)) continue;
       seen.add(cur);
-      for (const next of forward.get(cur) ?? []) queue.push(next);
+      for (const next of neighbours.get(cur) ?? []) queue.push(next);
     }
 
     for (const id of sc.modules) {
@@ -494,10 +507,10 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         diags.push({
           severity: "warning",
           code: "scope/module-orphaned",
-          message: `khối ${id} không tới được từ ${sc.entry} — nó nằm ngoài luồng của phạm vi ${sc.id}`,
+          message: `khối ${id} không nối vào sơ đồ của phạm vi ${sc.id} — không có \`depends_on\` nào nối nó với các khối còn lại`,
           file: scope.file,
           line: at(graph, scope, "modules"),
-          hint: `Nối nó vào sơ đồ qua \`depends_on\`, hoặc bỏ khỏi \`modules\` của phạm vi.`,
+          hint: `Nối nó vào sơ đồ qua \`depends_on\` (chiều nào cũng được), hoặc bỏ khỏi \`modules\` của phạm vi.`,
         });
       }
     }

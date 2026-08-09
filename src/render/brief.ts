@@ -224,6 +224,9 @@ export function renderBrief(input: BriefInput): string {
         `### ${sc.id} — ${sc.title}\n\n` +
         `phiên bản \`${sc.version}\` · trạng thái \`${sc.status}\`` +
         (sc.owner ? ` · nghiệm thu: ${sc.owner}` : " · ⚠ chưa ai ký nghiệm thu") +
+        // Bối cảnh phạm vi — cái gì trong, cái gì ngoài, đã hỏi ai. Đặt TRƯỚC
+        // ranh giới code: nó là thứ định khung cho mọi thứ đọc sau đó.
+        (sc.notes ? `\n\n${sc.notes.trim()}` : "") +
         `\n\n**Ranh giới code:**\n${bullet(members)}` +
         (acceptance.length
           ? `\n\n**Nghiệm thu luồng ghép:**\n${bullet(acceptance)}`

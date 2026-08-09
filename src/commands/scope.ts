@@ -7,6 +7,7 @@ import { parseDocument } from "yaml";
 import { DIRS, ganasPath } from "../graph/paths.js";
 import { computeDebt } from "../graph/trace.js";
 import type { Graph } from "../graph/types.js";
+import { ID_PATTERNS } from "../model/index.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { matchesAny } from "../util/glob.js";
@@ -147,18 +148,32 @@ async function prompt(question: string, fallback = ""): Promise<string> {
   }
 }
 
-/** Tiếng Việt có dấu → slug ASCII hợp `^[a-z0-9][a-z0-9-]*$`. */
+const SLUG_MAX = 40;
+
+/**
+ * Tiếng Việt có dấu → slug ASCII hợp `^[a-z0-9][a-z0-9-]*$`.
+ *
+ * Cắt ở BIÊN TỪ, không cắt cứng ở ký tự thứ 40. Id xuất hiện trong mọi brief,
+ * mọi commit message, mọi `depends_on` — một id kết thúc bằng `...-va-ch` (cắt
+ * giữa "và chỉ") làm hỏng khả năng đọc của tất cả những chỗ đó. Một từ dài hơn
+ * cả giới hạn thì đành cắt cứng, vì không còn biên nào để cắt.
+ */
 export function slugify(text: string): string {
-  const base = text
+  const full = text
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d")
     .replace(/Đ/g, "D")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
-    .replace(/-+$/, "");
+    .replace(/^-+|-+$/g, "");
+
+  let base = full;
+  if (base.length > SLUG_MAX) {
+    const cut = base.slice(0, SLUG_MAX);
+    const lastBoundary = cut.lastIndexOf("-");
+    base = (lastBoundary > 0 ? cut.slice(0, lastBoundary) : cut).replace(/-+$/, "");
+  }
   return /^[a-z0-9]/.test(base) ? base : `x-${base}`;
 }
 
@@ -196,18 +211,41 @@ acceptance:
 `;
 }
 
-function moduleYaml(a: { id: string; scopeId: string; title: string; paths: string[] }): string {
+function moduleYaml(a: {
+  id: string;
+  scopeId: string;
+  title: string;
+  paths: string[];
+  nature?: string;
+  dependsOn?: string[];
+}): string {
   return `id: ${a.id}
 scope: ${a.scopeId}
 title: ${JSON.stringify(a.title)}
 # code | data | io | llm — khối \`llm\` BẮT BUỘC có eval, probe không kiểm được
-# hành vi của LLM.
-nature: code
+# hành vi của LLM. Khối \`io\` là nơi CHẠM I/O thật; lõi không tự mở file, tự gọi
+# network hay tự query DB — xem .claude/rules/architecture.md.
+nature: ${a.nature ?? "code"}
 paths:
 ${a.paths.map((p) => `  - ${JSON.stringify(p)}`).join("\n")}
-status: surveyed
+${a.dependsOn?.length ? `depends_on:\n${a.dependsOn.map((d) => `  - ${d}`).join("\n")}\n` : ""}status: surveyed
 verify: []
 `;
+}
+
+/**
+ * Glob này trỏ vào vùng CHẠM I/O hay vùng lõi?
+ *
+ * Nhận theo tên đoạn đường dẫn, vì đó là quy ước mà chính
+ * `.claude/rules/architecture.md` phát cho dự án. Đoán sai chỉ tốn một lần sửa
+ * `nature` bằng tay; gộp tất cả vào một khối `code` thì sinh ra một khối vi
+ * phạm luật kiến trúc ngay từ lúc tạo, và không ai được báo.
+ */
+const IO_SEGMENT =
+  /(^|\/)(io|store|stores|adapter|adapters|infra|infrastructure|repo|repository|repositories|gateway|client|clients)(\/|$)/;
+
+export function looksLikeIoGlob(glob: string): boolean {
+  return IO_SEGMENT.test(glob.replace(/\*+/g, ""));
 }
 
 async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
@@ -231,7 +269,14 @@ async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
     throw new GanasError(`owner phải dạng "@ten", nhận được "${owner}"`);
   }
 
-  const id = option(argv, "id") ?? `P-${slugify(title)}`;
+  // Hỏi id là câu thứ 5. Trước đây phỏng vấn chỉ hỏi 4 câu và id luôn suy từ
+  // tiêu đề, nên người dùng TTY không có đường đặt id trừ khi biết cờ `--id` —
+  // mà id là thứ xuất hiện trong mọi brief, mọi commit, mọi `depends_on`.
+  const suggested = `P-${slugify(title)}`;
+  const id = option(argv, "id") ?? (interactive ? await prompt("Id phạm vi?", suggested) : suggested);
+  if (!ID_PATTERNS.scope.test(id)) {
+    throw new GanasError(`id phạm vi phải dạng "P-ten-ngan", nhận được "${id}"`);
+  }
   if (graph.scopes.has(id)) throw new GanasError(`phạm vi ${id} đã tồn tại`);
 
   // Khối đã có mà paths giao với glob vừa khai thì dùng lại — đừng đẻ khối trùng
@@ -244,16 +289,40 @@ async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
   // mà nhận về `M-xu-ly-webhook-thanh-toan` là hai cách đặt tên lệch nhau ngay
   // trong một lệnh. `acceptance.id` cũng suy từ id phạm vi, giữ cho nhất quán.
   const created: string[] = [];
-  const moduleIds = reused.length > 0 ? reused : [`M-${id.replace(/^P-/, "")}`];
+  const stem = id.replace(/^P-/, "");
+
+  // Tách lõi khỏi I/O ngay lúc tạo. Gộp cả hai vào một khối `nature: code` là
+  // sinh ra một khối vi phạm đúng luật kiến trúc mà ganas vừa phát cho dự án
+  // (.claude/rules/architecture.md): khối `code` là LÕI, không tự chạm ra ngoài.
+  const ioPaths = paths.filter(looksLikeIoGlob);
+  const corePaths = paths.filter((p) => !looksLikeIoGlob(p));
+  const split = reused.length === 0 && ioPaths.length > 0 && corePaths.length > 0;
+
+  const moduleIds =
+    reused.length > 0 ? reused : split ? [`M-${stem}`, `M-${stem}-io`] : [`M-${stem}`];
+
   if (reused.length === 0) {
-    const file = ganasPath(root, DIRS.modules, `${moduleIds[0]!}.yaml`);
-    await mkdir(dirname(file), { recursive: true });
-    await writeNewYaml(
-      file,
-      moduleYaml({ id: moduleIds[0]!, scopeId: id, title, paths }),
-      `khối ${moduleIds[0]!}`,
-    );
-    created.push(relative(root, file));
+    const write = async (mod: Parameters<typeof moduleYaml>[0]): Promise<void> => {
+      const file = ganasPath(root, DIRS.modules, `${mod.id}.yaml`);
+      await mkdir(dirname(file), { recursive: true });
+      await writeNewYaml(file, moduleYaml(mod), `khối ${mod.id}`);
+      created.push(relative(root, file));
+    };
+
+    if (split) {
+      await write({ id: `M-${stem}`, scopeId: id, title, paths: corePaths });
+      // Adapter cài đặt port do lõi định nghĩa ⇒ io phụ thuộc lõi, không ngược lại.
+      await write({
+        id: `M-${stem}-io`,
+        scopeId: id,
+        title: `${title} — I/O`,
+        paths: ioPaths,
+        nature: "io",
+        dependsOn: [`M-${stem}`],
+      });
+    } else {
+      await write({ id: moduleIds[0]!, scopeId: id, title, paths });
+    }
   }
 
   const scopeFile = ganasPath(root, DIRS.scopes, `${id}.yaml`);
@@ -271,9 +340,15 @@ async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
       (reused.length > 0
         ? `\nDùng lại khối đã có: ${reused.join(", ")} (paths giao với glob vừa khai).\n` +
           `  ⚠ Khối đó đang khai \`scope\` khác thì phải sửa tay — hai chiều phải khớp.\n`
-        : `\nKhối \`${moduleIds[0]}\` được tạo với \`nature: code\`. Nếu vùng này có GỌI LLM\n` +
-          `thì đổi thành \`nature: llm\` — khi đó bắt buộc phải có eval, vì probe kiểm\n` +
-          `được cấu trúc nhưng không kiểm được hành vi của LLM.\n`) +
+        : split
+          ? `\nTách thành HAI khối theo luật kiến trúc (.claude/rules/architecture.md):\n` +
+            `  \`M-${stem}\`    — lõi (\`nature: code\`), không tự chạm I/O\n` +
+            `  \`M-${stem}-io\` — nơi chạm I/O thật, \`depends_on: [M-${stem}]\`\n` +
+            `Chia sai thì đổi \`paths\`/\`nature\` bằng tay — ganas đoán theo tên thư mục.\n`
+          : `\nKhối \`${moduleIds[0]}\` được tạo với \`nature: code\` (LÕI — không tự mở file,\n` +
+            `tự gọi network hay tự query DB). Vùng chạm I/O phải là khối \`nature: io\`\n` +
+            `riêng; vùng có GỌI LLM thì \`nature: llm\`, và khi đó bắt buộc phải có eval\n` +
+            `vì probe kiểm được cấu trúc nhưng không kiểm được hành vi của LLM.\n`) +
       `\nTiếp theo: \`ganas validate\`, rồi tạo task trong .ganas/tasks/ khai \`scope: ${id}\`.\n`,
   );
   return 0;

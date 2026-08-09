@@ -244,8 +244,13 @@ lớn càng thành máy sinh ảo giác.
 Hai luật chống "phạm vi thùng rác": `scope/without-acceptance` và
 `scope/without-owner` cảnh báo khi phạm vi `active` mà thiếu cách nghiệm thu
 hoặc thiếu người ký. Validator còn phát hiện khối mồ côi (`scope/module-orphaned`):
-BFS xuôi theo `depends_on` từ `entry`, khối nào trong `modules` mà không tới được
-thì cảnh báo.
+kiểm **liên thông trên đồ thị vô hướng** của `depends_on`, khối nào trong
+`modules` mà không nối được với phần còn lại thì cảnh báo. Trước đây luật này
+duyệt một chiều từ `entry`, nên mọi phạm vi có từ **hai khối nguồn** trở lên
+(khối không `depends_on` ai) đều luôn có một khối bị báo mồ côi dù sơ đồ hoàn
+toàn đúng — đổi `entry` chỉ đổi khối nào bị báo, có khi còn nhiều hơn. Cảnh báo
+thường trực là thứ người ta quen mắt rồi ngừng đọc, nên cảnh báo thật tiếp theo
+sẽ bị bỏ qua cùng.
 
 **Phạm vi không bao giờ bị `ganas prune` archive**, kể cả khi đã `delivered` —
 khối vẫn khai `scope:` trỏ vào nó và fact vẫn còn hiệu lực trong nó. Phạm vi là

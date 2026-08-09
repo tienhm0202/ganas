@@ -2,6 +2,7 @@ import type { GateResult } from "./gate.js";
 import { DIRS, GANAS_DIR } from "./graph/paths.js";
 import type { Graph } from "./graph/types.js";
 import type { Task } from "./model/index.js";
+import { looksLikePath, stripOperators, tokenizeShell } from "./util/shell.js";
 import { LEDGER_FILE } from "./verify/ledger.js";
 
 /**
@@ -37,59 +38,6 @@ export function buildCommitMessage(graph: Graph, task: Task, gate: GateResult): 
 /* ------------------------------------------------------------------------- *
  * Đường dẫn nhắc tới trong exit_contract
  * ------------------------------------------------------------------------- */
-
-/**
- * Tách chuỗi lệnh thành token, tôn trọng nháy đơn/kép.
- *
- * Không phải parser shell đầy đủ — chỉ đủ để nhặt ra đường dẫn. Chỗ quan trọng
- * là chuỗi trong nháy phải ra MỘT token: `-t 'tên test'` mà tách theo khoảng
- * trắng thì `test` thành một token và bị nhầm là đường dẫn.
- */
-export function tokenizeShell(command: string): string[] {
-  const tokens: string[] = [];
-  let cur = "";
-  let started = false;
-  let quote: '"' | "'" | null = null;
-
-  for (const ch of command) {
-    if (quote) {
-      if (ch === quote) quote = null;
-      else cur += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      started = true;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (started) tokens.push(cur);
-      cur = "";
-      started = false;
-      continue;
-    }
-    cur += ch;
-    started = true;
-  }
-  if (started) tokens.push(cur);
-  return tokens;
-}
-
-/** Gỡ ký tự nối/chuyển hướng dính vào đầu-cuối token: `2>/dev/null`, `x.ts;`. */
-function stripOperators(token: string): string {
-  return token.replace(/^[0-9]*[<>|&;()]+/, "").replace(/[;|&)]+$/, "");
-}
-
-/**
- * Token này có dáng một đường dẫn không: có `/`, hoặc có đuôi file.
- *
- * Cố tình lỏng — người gọi còn lọc lại bằng "file có thật trên đĩa không", nên
- * đoán thừa (URL, `2>/dev/null`) không gây hại, mà đoán thiếu thì đúng lỗi mục 1.
- */
-export function looksLikePath(token: string): boolean {
-  if (!token || token.startsWith("-")) return false;
-  return token.includes("/") || /\.[A-Za-z0-9]+$/.test(token);
-}
 
 export interface ContractPathRef {
   /** Đường dẫn tương đối repo. */

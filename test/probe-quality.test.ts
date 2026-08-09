@@ -228,3 +228,42 @@ test("probe hợp lệ không sinh cảnh báo chất lượng nào", async () =
     codes.join(", "),
   );
 });
+
+/* --- Bộ chạy test: dạng probe phổ biến nhất của dự án thật ----------------- */
+
+test("⭐ mutateProbe bóp méo được probe dạng `bun test <đường dẫn>`", () => {
+  // Trước đây cả năm dạng dưới đây đều trả null, tức đa số probe của một dự án
+  // thật chỉ "đạt yếu": chạy pass nhưng chưa bao giờ chứng minh được là có thể fail.
+  const cases: Array<[string, string]> = [
+    ["bun test src/console/http", "bun test src/console/http.ganas-mutant"],
+    ["bun test tests/e2e/x.ts", "bun test tests/e2e/x.ts.ganas-mutant"],
+    ["vitest run src/x", "vitest run src/x.ganas-mutant"],
+    ["pytest -v tests/", "pytest -v tests/.ganas-mutant"],
+    ["npx jest -c jest.config.js src/a", "npx jest -c jest.config.js src/a.ganas-mutant"],
+    ["cargo test --lib tests/x.rs", "cargo test --lib tests/x.rs.ganas-mutant"],
+  ];
+  for (const [run, expected] of cases) {
+    assert.equal(mutateProbe(run)?.run, expected, `probe: ${run}`);
+  }
+});
+
+test("cờ ăn giá trị không bị nhầm là đường dẫn, cờ boolean không nuốt đường dẫn", () => {
+  // `-c` ăn giá trị ⇒ bỏ qua jest.config.js; `-v`/`--lib` là boolean ⇒ KHÔNG
+  // được nuốt mất đường dẫn ngay sau nó.
+  assert.match(mutateProbe("npx jest -c jest.config.js src/a")!.run, /src\/a\.ganas-mutant/);
+  assert.match(mutateProbe("pytest -v tests/")!.run, /tests\/\.ganas-mutant/);
+});
+
+test("đường dẫn thắng chuỗi trong nháy — bài kiểm mạnh hơn", () => {
+  // `-t 'tên'` cũng bóp méo được, nhưng đổi ĐƯỜNG DẪN chứng minh probe phụ
+  // thuộc vào chỗ file nằm, chứ không chỉ vào một cái tên.
+  const m = mutateProbe("bun test tests/e2e/x.ts -t 'ca mới'");
+  assert.equal(m?.run, "bun test tests/e2e/x.ts.ganas-mutant -t 'ca mới'");
+});
+
+test("bộ chạy KHÔNG có đối số đường dẫn vẫn nói thẳng là chưa chứng minh được", () => {
+  // Cố tình không thêm mẹo `-t <chuỗi vô lý>`: `go test -run` thoát 0 khi không
+  // khớp test nào, nên mẹo đó sẽ kết luận `cannot_fail` SAI. Nói "chưa chứng
+  // minh được" còn hơn kết luận sai.
+  assert.equal(mutateProbe("bun test"), null);
+});

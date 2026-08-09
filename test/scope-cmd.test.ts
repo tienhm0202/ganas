@@ -396,3 +396,93 @@ test("⭐ dự án 0 task: `next` nói 'chưa có task nào', KHÔNG nói 'khôn
     await cleanup(root);
   }
 });
+
+/* --- id: cắt theo biên từ ---------------------------------------------------- */
+
+test("⭐ slugify cắt ở biên từ, không cắt giữa từ", () => {
+  const title = "Partner đăng nhập được vào console và chỉ thao tác trên tenant của mình";
+  const slug = slugify(title);
+  // Bản cũ cắt cứng ở ký tự 40 và ra `...-console-va-ch` — cụt giữa "và chỉ".
+  assert.ok(!slug.endsWith("-va-ch"), `vẫn cắt giữa từ: ${slug}`);
+  assert.ok(slug.length <= 40, `slug dài quá: ${slug.length}`);
+  assert.ok(!/-$/.test(slug), "không được kết thúc bằng dấu nối");
+  assert.match(`P-${slug}`, /^P-[a-z0-9][a-z0-9-]*$/);
+});
+
+test("một từ dài hơn giới hạn vẫn cắt cứng và vẫn hợp id", () => {
+  const slug = slugify("a".repeat(60));
+  assert.equal(slug.length, 40);
+  assert.match(`P-${slug}`, /^P-[a-z0-9][a-z0-9-]*$/);
+});
+
+test("tiêu đề ngắn không bị đụng tới", () => {
+  assert.equal(slugify("Đặt lịch qua Zalo"), "dat-lich-qua-zalo");
+});
+
+/* --- tách lõi khỏi I/O ------------------------------------------------------- */
+
+test("⭐ scope new tách `core` và `io` thành HAI khối, io phụ thuộc lõi", async () => {
+  const root = await baseProject();
+  try {
+    const { code } = await runCli(root, [
+      "new",
+      "--yes",
+      "--id",
+      "P-auth",
+      "--title",
+      "Partner đăng nhập được vào console",
+      "--paths",
+      "src/auth/core/**,src/auth/io/**",
+      "--accept",
+      "bun test tests/e2e/auth.test.ts",
+      "--owner",
+      "@tienhm",
+    ]);
+    assert.equal(code, 0);
+
+    const core = await readFile(join(root, ".ganas/modules/M-auth.yaml"), "utf8");
+    const io = await readFile(join(root, ".ganas/modules/M-auth-io.yaml"), "utf8");
+
+    assert.match(core, /nature: code/);
+    assert.match(core, /src\/auth\/core/);
+    assert.doesNotMatch(core, /src\/auth\/io/, "vùng chạm I/O không được nằm trong khối lõi");
+
+    assert.match(io, /nature: io/);
+    assert.match(io, /src\/auth\/io/);
+    assert.match(io, /depends_on:\n {2}- M-auth/, "adapter cài đặt port của lõi ⇒ io phụ thuộc lõi");
+
+    // Graph phải hợp lệ ngay, không cần sửa tay.
+    const graph = await loadGraph(root);
+    assert.deepEqual(
+      graph.loadDiagnostics.filter((d) => d.severity === "error"),
+      [],
+    );
+    assert.deepEqual(graph.scopes.get("P-auth")?.value.modules, ["M-auth", "M-auth-io"]);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("chỉ có vùng lõi thì vẫn một khối như cũ", async () => {
+  const root = await baseProject();
+  try {
+    await runCli(root, [
+      "new",
+      "--yes",
+      "--id",
+      "P-don",
+      "--title",
+      "Việc đơn",
+      "--paths",
+      "src/don/**",
+      "--accept",
+      "true",
+      "--owner",
+      "@t",
+    ]);
+    const graph = await loadGraph(root);
+    assert.deepEqual(graph.scopes.get("P-don")?.value.modules, ["M-don"]);
+  } finally {
+    await cleanup(root);
+  }
+});

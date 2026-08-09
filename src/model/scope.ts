@@ -54,6 +54,15 @@ export const zScope = z
 
     /** Nghiệm thu ở mức phạm vi — chạy trên luồng ghép, không phải từng khối. */
     acceptance: z.array(zVerification).default([]),
+    /**
+     * Bối cảnh của phạm vi: cái gì TRONG, cái gì NGOÀI, đã hỏi ai.
+     *
+     * Mọi record khác (module, task, fact, claim, decision, goal, design,
+     * verification) đều nhận `notes`; scope là ngoại lệ duy nhất, nên phần
+     * đáng ghi nhất của một phạm vi phải nhét vào comment YAML — mà comment
+     * thì `ganas brief` không đọc được.
+     */
+    notes: z.string().optional(),
   })
   .strict()
   .superRefine((s, ctx) => {

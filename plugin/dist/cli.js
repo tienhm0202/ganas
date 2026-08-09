@@ -5283,7 +5283,16 @@ var init_scope = __esm({
       /** Khối đầu luồng — dùng để phát hiện khối mồ côi. */
       entry: zModuleId,
       /** Nghiệm thu ở mức phạm vi — chạy trên luồng ghép, không phải từng khối. */
-      acceptance: external_exports.array(zVerification).default([])
+      acceptance: external_exports.array(zVerification).default([]),
+      /**
+       * Bối cảnh của phạm vi: cái gì TRONG, cái gì NGOÀI, đã hỏi ai.
+       *
+       * Mọi record khác (module, task, fact, claim, decision, goal, design,
+       * verification) đều nhận `notes`; scope là ngoại lệ duy nhất, nên phần
+       * đáng ghi nhất của một phạm vi phải nhét vào comment YAML — mà comment
+       * thì `ganas brief` không đọc được.
+       */
+      notes: external_exports.string().optional()
     }).strict().superRefine((s, ctx) => {
       const dup = s.modules.find((m, i) => s.modules.indexOf(m) !== i);
       if (dup) {
@@ -13441,32 +13450,35 @@ function validateGraph(graph) {
   for (const scope of graph.scopes.values()) {
     const sc = scope.value;
     const inScope = new Set(sc.modules);
-    const forward = /* @__PURE__ */ new Map();
-    for (const id of inScope) forward.set(id, []);
+    const neighbours = /* @__PURE__ */ new Map();
+    for (const id of inScope) neighbours.set(id, []);
     for (const id of inScope) {
       const mod = graph.modules.get(id);
       if (!mod) continue;
       for (const dep of mod.value.depends_on) {
-        if (inScope.has(dep)) forward.get(dep).push(id);
+        if (!inScope.has(dep)) continue;
+        neighbours.get(id).push(dep);
+        neighbours.get(dep).push(id);
       }
     }
     const seen = /* @__PURE__ */ new Set();
-    const queue = inScope.has(sc.entry) ? [sc.entry] : [];
+    const root = inScope.has(sc.entry) ? sc.entry : sc.modules[0];
+    const queue = root === void 0 ? [] : [root];
     while (queue.length) {
       const cur = queue.shift();
       if (seen.has(cur)) continue;
       seen.add(cur);
-      for (const next of forward.get(cur) ?? []) queue.push(next);
+      for (const next of neighbours.get(cur) ?? []) queue.push(next);
     }
     for (const id of sc.modules) {
       if (!seen.has(id) && graph.modules.has(id)) {
         diags.push({
           severity: "warning",
           code: "scope/module-orphaned",
-          message: `kh\u1ED1i ${id} kh\xF4ng t\u1EDBi \u0111\u01B0\u1EE3c t\u1EEB ${sc.entry} \u2014 n\xF3 n\u1EB1m ngo\xE0i lu\u1ED3ng c\u1EE7a ph\u1EA1m vi ${sc.id}`,
+          message: `kh\u1ED1i ${id} kh\xF4ng n\u1ED1i v\xE0o s\u01A1 \u0111\u1ED3 c\u1EE7a ph\u1EA1m vi ${sc.id} \u2014 kh\xF4ng c\xF3 \`depends_on\` n\xE0o n\u1ED1i n\xF3 v\u1EDBi c\xE1c kh\u1ED1i c\xF2n l\u1EA1i`,
           file: scope.file,
           line: at(graph, scope, "modules"),
-          hint: `N\u1ED1i n\xF3 v\xE0o s\u01A1 \u0111\u1ED3 qua \`depends_on\`, ho\u1EB7c b\u1ECF kh\u1ECFi \`modules\` c\u1EE7a ph\u1EA1m vi.`
+          hint: `N\u1ED1i n\xF3 v\xE0o s\u01A1 \u0111\u1ED3 qua \`depends_on\` (chi\u1EC1u n\xE0o c\u0169ng \u0111\u01B0\u1EE3c), ho\u1EB7c b\u1ECF kh\u1ECFi \`modules\` c\u1EE7a ph\u1EA1m vi.`
         });
       }
     }
@@ -14091,7 +14103,75 @@ var init_adapters = __esm({
   }
 });
 
+// src/util/shell.ts
+function tokenizeShell(command) {
+  const tokens = [];
+  let cur = "";
+  let started = false;
+  let quote3 = null;
+  for (const ch of command) {
+    if (quote3) {
+      if (ch === quote3) quote3 = null;
+      else cur += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote3 = ch;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (started) tokens.push(cur);
+      cur = "";
+      started = false;
+      continue;
+    }
+    cur += ch;
+    started = true;
+  }
+  if (started) tokens.push(cur);
+  return tokens;
+}
+function stripOperators(token) {
+  return token.replace(/^[0-9]*[<>|&;()]+/, "").replace(/[;|&)]+$/, "");
+}
+function looksLikePath(token) {
+  if (!token || token.startsWith("-")) return false;
+  return token.includes("/") || /\.[A-Za-z0-9]+$/.test(token);
+}
+function tokenSpans(command) {
+  const spans = [];
+  const re = /\S+/g;
+  let m;
+  while ((m = re.exec(command)) !== null) spans.push({ text: m[0], start: m.index });
+  return spans;
+}
+var init_shell = __esm({
+  "src/util/shell.ts"() {
+    "use strict";
+  }
+});
+
 // src/verify/mutate.ts
+function runnerPathSpan(run15) {
+  const m = RUNNER.exec(run15);
+  if (!m) return null;
+  const after = m.index + m[0].length;
+  const spans = tokenSpans(run15.slice(after)).map((s) => ({ ...s, start: s.start + after }));
+  let skipNext = false;
+  for (const span of spans) {
+    if (span.text.startsWith("-")) {
+      skipNext = VALUE_FLAGS.has(span.text);
+      continue;
+    }
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+    if (looksLikePath(stripOperators(span.text))) return span;
+  }
+  return null;
+}
 function mutateProbe(run15) {
   const fileTest = FILE_TEST.exec(run15);
   if (fileTest) {
@@ -14118,6 +14198,15 @@ function mutateProbe(run15) {
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
+  const runnerPath = runnerPathSpan(run15);
+  if (runnerPath) {
+    const path = stripOperators(runnerPath.text);
+    const replaced = runnerPath.text.replace(path, `${path}${MUTANT_SUFFIX}`);
+    return {
+      run: run15.slice(0, runnerPath.start) + replaced + run15.slice(runnerPath.start + runnerPath.text.length),
+      what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
+    };
+  }
   const quoted = QUOTED.exec(run15);
   if (quoted) {
     const [full, quote3, body] = quoted;
@@ -14133,7 +14222,7 @@ async function proveCanFail(run15, expect, opts) {
   if (!mutation) {
     return {
       status: "unproven",
-      message: `kh\xF4ng nh\u1EADn ra d\u1EA1ng probe \u0111\u1EC3 b\xF3p m\xE9o, n\xEAn ch\u01B0a ch\u1EE9ng minh \u0111\u01B0\u1EE3c n\xF3 c\xF3 th\u1EC3 fail. D\u1EA1ng ki\u1EC3m \u0111\u01B0\u1EE3c: \`test -f <path>\`, \`grep -q '<pattern>' <file>\`, ho\u1EB7c l\u1EC7nh c\xF3 chu\u1ED7i trong nh\xE1y.`
+      message: `kh\xF4ng nh\u1EADn ra d\u1EA1ng probe \u0111\u1EC3 b\xF3p m\xE9o, n\xEAn ch\u01B0a ch\u1EE9ng minh \u0111\u01B0\u1EE3c n\xF3 c\xF3 th\u1EC3 fail. D\u1EA1ng ki\u1EC3m \u0111\u01B0\u1EE3c: \`test -f <path>\`, \`grep -q '<pattern>' <file>\`, b\u1ED9 ch\u1EA1y test k\xE8m \u0111\u01B0\u1EDDng d\u1EABn (\`bun test <path>\`, \`vitest\`, \`jest\`, \`pytest\`, \`go test\`, \`cargo test\`), ho\u1EB7c l\u1EC7nh c\xF3 chu\u1ED7i trong nh\xE1y.`
     };
   }
   const result = await runShell(mutation.run, {
@@ -14153,17 +14242,35 @@ async function proveCanFail(run15, expect, opts) {
   }
   return { status: "proven", what: mutation.what };
 }
-var MUTANT_SUFFIX, IMPROBABLE, FILE_TEST, GREP, GREP_BARE, QUOTED;
+var MUTANT_SUFFIX, IMPROBABLE, FILE_TEST, GREP, GREP_BARE, QUOTED, RUNNER, VALUE_FLAGS;
 var init_mutate = __esm({
   "src/verify/mutate.ts"() {
     "use strict";
     init_exec();
+    init_shell();
     MUTANT_SUFFIX = ".ganas-mutant";
     IMPROBABLE = "ganas_mutant_zqx7_khong_ton_tai";
     FILE_TEST = /(\[\s+|\btest\s+)(-[fdesr])\s+("?)([^\s"';|&)]+)\3/;
     GREP = /\b(grep|rg|ag)\b((?:\s+-[A-Za-z-]+)*)\s+(['"])((?:(?!\3).)+)\3/;
     GREP_BARE = /\b(grep|rg|ag)\b((?:\s+-[A-Za-z-]+)*)\s+([^\s'"|;&-][^\s|;&]*)/;
     QUOTED = /(['"])((?:(?!\1).){2,})\1/;
+    RUNNER = /\b(?:bun\s+test|vitest(?:\s+run)?|jest|pytest|go\s+test|cargo\s+test)\b/;
+    VALUE_FLAGS = /* @__PURE__ */ new Set([
+      "-c",
+      "--config",
+      "-p",
+      "--project",
+      "--rootdir",
+      "-k",
+      "-t",
+      "--testNamePattern",
+      "--test-name-pattern",
+      "--testPathPattern",
+      "-n",
+      "--numprocesses",
+      "--reporter",
+      "-o"
+    ]);
   }
 });
 
@@ -14568,10 +14675,8 @@ __export(commit_exports, {
   buildCommitMessage: () => buildCommitMessage,
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
-  looksLikePath: () => looksLikePath,
   ownsGanasFile: () => ownsGanasFile,
-  pathsToStage: () => pathsToStage,
-  tokenizeShell: () => tokenizeShell
+  pathsToStage: () => pathsToStage
 });
 function buildCommitMessage(graph, task, gate) {
   const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
@@ -14587,41 +14692,6 @@ function buildCommitMessage(graph, task, gate) {
   ].join(" \xB7 ");
   lines.push("", context);
   return lines.join("\n") + "\n";
-}
-function tokenizeShell(command) {
-  const tokens = [];
-  let cur = "";
-  let started = false;
-  let quote3 = null;
-  for (const ch of command) {
-    if (quote3) {
-      if (ch === quote3) quote3 = null;
-      else cur += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote3 = ch;
-      started = true;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (started) tokens.push(cur);
-      cur = "";
-      started = false;
-      continue;
-    }
-    cur += ch;
-    started = true;
-  }
-  if (started) tokens.push(cur);
-  return tokens;
-}
-function stripOperators(token) {
-  return token.replace(/^[0-9]*[<>|&;()]+/, "").replace(/[;|&)]+$/, "");
-}
-function looksLikePath(token) {
-  if (!token || token.startsWith("-")) return false;
-  return token.includes("/") || /\.[A-Za-z0-9]+$/.test(token);
 }
 function contractPathRefs(task) {
   const refs = [];
@@ -14670,6 +14740,7 @@ var init_commit = __esm({
   "src/commit.ts"() {
     "use strict";
     init_paths();
+    init_shell();
     init_ledger();
     YAML_EXT = /\.ya?ml$/;
   }
@@ -15209,8 +15280,10 @@ architecture / ports & adapters, \xE1p d\u1EE5ng b\u1EA5t k\u1EC3 ng\xF4n ng\u1E
 - \`io\` \u2014 **n\u01A1i CH\u1EA0M I/O th\u1EADt**. API, h\xE0ng \u0111\u1EE3i, filesystem \u2014 \u0111\xFAng nh\u01B0 docstring
   c\u1EE7a \`MODULE_NATURE\` \u0111\xE3 \u0111\u1ECBnh ngh\u0129a.
 
-Kh\u1ED1i l\xF5i c\u1EA7n th\u1EE9 g\xEC \u1EDF ngo\xE0i th\xEC khai \`depends_on\` m\u1ED9t kh\u1ED1i \`nature: io\`, kh\xF4ng
-nh\xE9t \`fetch\`/\`fs.readFile\`/query th\u1EB3ng v\xE0o code c\u1EE7a kh\u1ED1i l\xF5i.
+L\xF5i **\u0111\u1ECBnh ngh\u0129a port** (interface/Protocol) v\xE0 kh\xF4ng nh\xE9t
+\`fetch\`/\`fs.readFile\`/query th\u1EB3ng v\xE0o code c\u1EE7a m\xECnh. Kh\u1ED1i \`io\` **c\xE0i \u0111\u1EB7t** port \u0111\xF3,
+n\xEAn ch\xEDnh n\xF3 khai \`depends_on: [<kh\u1ED1i l\xF5i>]\` \u2014 adapter ph\u1EE5 thu\u1ED9c l\xF5i, kh\xF4ng ng\u01B0\u1EE3c
+l\u1EA1i. \u0110\xF3 c\u0169ng l\xE0 chi\u1EC1u m\xE0 \`ganas scope new\` sinh ra khi n\xF3 t\u1EF1 t\xE1ch hai kh\u1ED1i.
 
 ## V\xEC sao
 
@@ -15879,6 +15952,7 @@ var init_common2 = __esm({
 // src/commands/scope.ts
 var scope_exports = {};
 __export(scope_exports, {
+  looksLikeIoGlob: () => looksLikeIoGlob,
   run: () => run4,
   slugify: () => slugify
 });
@@ -15969,7 +16043,13 @@ async function prompt2(question, fallback = "") {
   }
 }
 function slugify(text) {
-  const base2 = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  const full = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  let base2 = full;
+  if (base2.length > SLUG_MAX) {
+    const cut = base2.slice(0, SLUG_MAX);
+    const lastBoundary = cut.lastIndexOf("-");
+    base2 = (lastBoundary > 0 ? cut.slice(0, lastBoundary) : cut).replace(/-+$/, "");
+  }
   return /^[a-z0-9]/.test(base2) ? base2 : `x-${base2}`;
 }
 function splitList(raw) {
@@ -16000,13 +16080,19 @@ function moduleYaml(a) {
 scope: ${a.scopeId}
 title: ${JSON.stringify(a.title)}
 # code | data | io | llm \u2014 kh\u1ED1i \`llm\` B\u1EAET BU\u1ED8C c\xF3 eval, probe kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c
-# h\xE0nh vi c\u1EE7a LLM.
-nature: code
+# h\xE0nh vi c\u1EE7a LLM. Kh\u1ED1i \`io\` l\xE0 n\u01A1i CH\u1EA0M I/O th\u1EADt; l\xF5i kh\xF4ng t\u1EF1 m\u1EDF file, t\u1EF1 g\u1ECDi
+# network hay t\u1EF1 query DB \u2014 xem .claude/rules/architecture.md.
+nature: ${a.nature ?? "code"}
 paths:
 ${a.paths.map((p) => `  - ${JSON.stringify(p)}`).join("\n")}
-status: surveyed
+${a.dependsOn?.length ? `depends_on:
+${a.dependsOn.map((d) => `  - ${d}`).join("\n")}
+` : ""}status: surveyed
 verify: []
 `;
+}
+function looksLikeIoGlob(glob) {
+  return IO_SEGMENT.test(glob.replace(/\*+/g, ""));
 }
 async function runNew(argv, root, graph) {
   const interactive = process.stdin.isTTY && !flag(argv, "yes", "y");
@@ -16021,20 +16107,39 @@ async function runNew(argv, root, graph) {
   if (owner && !/^@[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(owner)) {
     throw new GanasError(`owner ph\u1EA3i d\u1EA1ng "@ten", nh\u1EADn \u0111\u01B0\u1EE3c "${owner}"`);
   }
-  const id = option(argv, "id") ?? `P-${slugify(title)}`;
+  const suggested = `P-${slugify(title)}`;
+  const id = option(argv, "id") ?? (interactive ? await prompt2("Id ph\u1EA1m vi?", suggested) : suggested);
+  if (!ID_PATTERNS.scope.test(id)) {
+    throw new GanasError(`id ph\u1EA1m vi ph\u1EA3i d\u1EA1ng "P-ten-ngan", nh\u1EADn \u0111\u01B0\u1EE3c "${id}"`);
+  }
   if (graph.scopes.has(id)) throw new GanasError(`ph\u1EA1m vi ${id} \u0111\xE3 t\u1ED3n t\u1EA1i`);
   const reused = [...graph.modules.values()].filter((m) => m.value.paths.some((p) => paths.some((q) => p === q || matchesAny(p, [q])))).map((m) => m.value.id);
   const created = [];
-  const moduleIds = reused.length > 0 ? reused : [`M-${id.replace(/^P-/, "")}`];
+  const stem = id.replace(/^P-/, "");
+  const ioPaths = paths.filter(looksLikeIoGlob);
+  const corePaths = paths.filter((p) => !looksLikeIoGlob(p));
+  const split = reused.length === 0 && ioPaths.length > 0 && corePaths.length > 0;
+  const moduleIds = reused.length > 0 ? reused : split ? [`M-${stem}`, `M-${stem}-io`] : [`M-${stem}`];
   if (reused.length === 0) {
-    const file = ganasPath(root, DIRS.modules, `${moduleIds[0]}.yaml`);
-    await mkdir4(dirname4(file), { recursive: true });
-    await writeNewYaml(
-      file,
-      moduleYaml({ id: moduleIds[0], scopeId: id, title, paths }),
-      `kh\u1ED1i ${moduleIds[0]}`
-    );
-    created.push(relative3(root, file));
+    const write = async (mod) => {
+      const file = ganasPath(root, DIRS.modules, `${mod.id}.yaml`);
+      await mkdir4(dirname4(file), { recursive: true });
+      await writeNewYaml(file, moduleYaml(mod), `kh\u1ED1i ${mod.id}`);
+      created.push(relative3(root, file));
+    };
+    if (split) {
+      await write({ id: `M-${stem}`, scopeId: id, title, paths: corePaths });
+      await write({
+        id: `M-${stem}-io`,
+        scopeId: id,
+        title: `${title} \u2014 I/O`,
+        paths: ioPaths,
+        nature: "io",
+        dependsOn: [`M-${stem}`]
+      });
+    } else {
+      await write({ id: moduleIds[0], scopeId: id, title, paths });
+    }
   }
   const scopeFile = ganasPath(root, DIRS.scopes, `${id}.yaml`);
   await mkdir4(dirname4(scopeFile), { recursive: true });
@@ -16051,10 +16156,16 @@ async function runNew(argv, root, graph) {
 `).join("") + (reused.length > 0 ? `
 D\xF9ng l\u1EA1i kh\u1ED1i \u0111\xE3 c\xF3: ${reused.join(", ")} (paths giao v\u1EDBi glob v\u1EEBa khai).
   \u26A0 Kh\u1ED1i \u0111\xF3 \u0111ang khai \`scope\` kh\xE1c th\xEC ph\u1EA3i s\u1EEDa tay \u2014 hai chi\u1EC1u ph\u1EA3i kh\u1EDBp.
+` : split ? `
+T\xE1ch th\xE0nh HAI kh\u1ED1i theo lu\u1EADt ki\u1EBFn tr\xFAc (.claude/rules/architecture.md):
+  \`M-${stem}\`    \u2014 l\xF5i (\`nature: code\`), kh\xF4ng t\u1EF1 ch\u1EA1m I/O
+  \`M-${stem}-io\` \u2014 n\u01A1i ch\u1EA1m I/O th\u1EADt, \`depends_on: [M-${stem}]\`
+Chia sai th\xEC \u0111\u1ED5i \`paths\`/\`nature\` b\u1EB1ng tay \u2014 ganas \u0111o\xE1n theo t\xEAn th\u01B0 m\u1EE5c.
 ` : `
-Kh\u1ED1i \`${moduleIds[0]}\` \u0111\u01B0\u1EE3c t\u1EA1o v\u1EDBi \`nature: code\`. N\u1EBFu v\xF9ng n\xE0y c\xF3 G\u1ECCI LLM
-th\xEC \u0111\u1ED5i th\xE0nh \`nature: llm\` \u2014 khi \u0111\xF3 b\u1EAFt bu\u1ED9c ph\u1EA3i c\xF3 eval, v\xEC probe ki\u1EC3m
-\u0111\u01B0\u1EE3c c\u1EA5u tr\xFAc nh\u01B0ng kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c h\xE0nh vi c\u1EE7a LLM.
+Kh\u1ED1i \`${moduleIds[0]}\` \u0111\u01B0\u1EE3c t\u1EA1o v\u1EDBi \`nature: code\` (L\xD5I \u2014 kh\xF4ng t\u1EF1 m\u1EDF file,
+t\u1EF1 g\u1ECDi network hay t\u1EF1 query DB). V\xF9ng ch\u1EA1m I/O ph\u1EA3i l\xE0 kh\u1ED1i \`nature: io\`
+ri\xEAng; v\xF9ng c\xF3 G\u1ECCI LLM th\xEC \`nature: llm\`, v\xE0 khi \u0111\xF3 b\u1EAFt bu\u1ED9c ph\u1EA3i c\xF3 eval
+v\xEC probe ki\u1EC3m \u0111\u01B0\u1EE3c c\u1EA5u tr\xFAc nh\u01B0ng kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c h\xE0nh vi c\u1EE7a LLM.
 `) + `
 Ti\u1EBFp theo: \`ganas validate\`, r\u1ED3i t\u1EA1o task trong .ganas/tasks/ khai \`scope: ${id}\`.
 `
@@ -16192,17 +16303,20 @@ async function run4(argv) {
   process.stdout.write(formatRows(rows));
   return 0;
 }
-var import_yaml5;
+var import_yaml5, SLUG_MAX, IO_SEGMENT;
 var init_scope2 = __esm({
   "src/commands/scope.ts"() {
     "use strict";
     import_yaml5 = __toESM(require_dist(), 1);
     init_paths();
     init_trace();
+    init_model();
     init_args();
     init_errors();
     init_glob();
     init_common2();
+    SLUG_MAX = 40;
+    IO_SEGMENT = /(^|\/)(io|store|stores|adapter|adapters|infra|infrastructure|repo|repository|repositories|gateway|client|clients)(\/|$)/;
   }
 });
 
@@ -16329,7 +16443,11 @@ ph\u1EA1m vi \`${t.scope}\` \xB7 design \`${t.implements}\` \xB7 ph\u1EE5c v\u1E
 
 ### ${sc.id} \u2014 ${sc.title}
 
-phi\xEAn b\u1EA3n \`${sc.version}\` \xB7 tr\u1EA1ng th\xE1i \`${sc.status}\`` + (sc.owner ? ` \xB7 nghi\u1EC7m thu: ${sc.owner}` : " \xB7 \u26A0 ch\u01B0a ai k\xFD nghi\u1EC7m thu") + `
+phi\xEAn b\u1EA3n \`${sc.version}\` \xB7 tr\u1EA1ng th\xE1i \`${sc.status}\`` + (sc.owner ? ` \xB7 nghi\u1EC7m thu: ${sc.owner}` : " \xB7 \u26A0 ch\u01B0a ai k\xFD nghi\u1EC7m thu") + // Bối cảnh phạm vi — cái gì trong, cái gì ngoài, đã hỏi ai. Đặt TRƯỚC
+      // ranh giới code: nó là thứ định khung cho mọi thứ đọc sau đó.
+      (sc.notes ? `
+
+${sc.notes.trim()}` : "") + `
 
 **Ranh gi\u1EDBi code:**
 ${bullet(members)}` + (acceptance.length ? `
@@ -18169,7 +18287,7 @@ async function main() {
   const raw = process.argv.slice(2);
   const argv = parseArgs(raw);
   if (argv.flags["version"] || argv.flags["v"]) {
-    process.stdout.write(`${"0.2.1"}
+    process.stdout.write(`${"0.2.2"}
 `);
     return 0;
   }

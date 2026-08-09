@@ -227,14 +227,55 @@ test("khối tự phụ thuộc chính nó bị từ chối ở schema", () => {
 
 /* --- Khối mồ côi ----------------------------------------------------------- */
 
-test("khối không tới được từ entry → cảnh báo mồ côi", async () => {
+test("khối không nối vào sơ đồ nào → cảnh báo mồ côi", async () => {
   const { codes } = await check({
     ".ganas/scopes/P-chat.yaml": part("P-chat", ["M-a", "M-b", "M-le"], "M-a"),
     ".ganas/modules/M-a.yaml": moduleYaml("M-a"),
     ".ganas/modules/M-b.yaml": moduleYaml("M-b", { dependsOn: ["M-a"] }),
+    // M-le không có cạnh nào với hai khối kia — đây mới là lỗi thật.
     ".ganas/modules/M-le.yaml": moduleYaml("M-le"),
   });
   assert.ok(codes.includes("scope/module-orphaned"));
+});
+
+test("⭐ phạm vi có HAI khối nguồn không còn bị báo mồ côi", async () => {
+  // Đúng ca P-console của znstrack: M-link và M-console-store đều là khối
+  // nguồn (không depends_on ai), nên kiểm "tới được từ MỘT entry" luôn bỏ sót
+  // một cái — cảnh báo thường trực không tắt được, dù sơ đồ hoàn toàn đúng.
+  const { codes } = await check({
+    ".ganas/scopes/P-chat.yaml": part(
+      "P-chat",
+      ["M-console-http", "M-console", "M-console-store", "M-link"],
+      "M-link",
+    ),
+    ".ganas/modules/M-link.yaml": moduleYaml("M-link"),
+    ".ganas/modules/M-console.yaml": moduleYaml("M-console", { dependsOn: ["M-link"] }),
+    ".ganas/modules/M-console-store.yaml": moduleYaml("M-console-store"),
+    ".ganas/modules/M-console-http.yaml": moduleYaml("M-console-http", {
+      dependsOn: ["M-console", "M-console-store"],
+    }),
+  });
+  assert.ok(
+    !codes.includes("scope/module-orphaned"),
+    "sơ đồ nối liền mà vẫn báo mồ côi thì dự án phải sống chung với cảnh báo rác vĩnh viễn",
+  );
+});
+
+test("đổi entry sang khối nguồn khác cũng không đẻ cảnh báo", async () => {
+  const { codes } = await check({
+    ".ganas/scopes/P-chat.yaml": part(
+      "P-chat",
+      ["M-console-http", "M-console", "M-console-store", "M-link"],
+      "M-console-store",
+    ),
+    ".ganas/modules/M-link.yaml": moduleYaml("M-link"),
+    ".ganas/modules/M-console.yaml": moduleYaml("M-console", { dependsOn: ["M-link"] }),
+    ".ganas/modules/M-console-store.yaml": moduleYaml("M-console-store"),
+    ".ganas/modules/M-console-http.yaml": moduleYaml("M-console-http", {
+      dependsOn: ["M-console", "M-console-store"],
+    }),
+  });
+  assert.ok(!codes.includes("scope/module-orphaned"));
 });
 
 /* --- Bằng chứng ------------------------------------------------------------ */

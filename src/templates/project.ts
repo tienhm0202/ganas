@@ -159,8 +159,10 @@ architecture / ports & adapters, áp dụng bất kể ngôn ngữ.
 - \`io\` — **nơi CHẠM I/O thật**. API, hàng đợi, filesystem — đúng như docstring
   của \`MODULE_NATURE\` đã định nghĩa.
 
-Khối lõi cần thứ gì ở ngoài thì khai \`depends_on\` một khối \`nature: io\`, không
-nhét \`fetch\`/\`fs.readFile\`/query thẳng vào code của khối lõi.
+Lõi **định nghĩa port** (interface/Protocol) và không nhét
+\`fetch\`/\`fs.readFile\`/query thẳng vào code của mình. Khối \`io\` **cài đặt** port đó,
+nên chính nó khai \`depends_on: [<khối lõi>]\` — adapter phụ thuộc lõi, không ngược
+lại. Đó cũng là chiều mà \`ganas scope new\` sinh ra khi nó tự tách hai khối.
 
 ## Vì sao
 

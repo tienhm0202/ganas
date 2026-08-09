@@ -4,6 +4,57 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## v0.2.2 — 2026-08-09
+
+Năm mục nhẹ còn lại của cùng đợt báo cáo đã vá ở `v0.2.1`. Cả năm đều được kiểm
+chứng lại bằng source và chạy thử trước khi sửa — mục 5 hoá ra hẹp hơn báo cáo
+mô tả (`--id` vốn đã tồn tại và đã có trong tài liệu).
+
+- **`ganas verify` bóp méo được probe dạng bộ chạy test** — trước đây
+  `mutateProbe` chỉ nhận `test -f`, `grep -q` và chuỗi trong nháy, nên
+  `bun test <thư mục>`, `vitest`, `jest`, `pytest`, `go test`, `cargo test` đều
+  trả `null` ⇒ **đa số probe của một dự án thật chỉ "đạt yếu"**: chạy pass nhưng
+  chưa bao giờ chứng minh được là CÓ THỂ fail. Giờ nhận bộ chạy kèm đối số đường
+  dẫn và bóp méo bằng đúng thủ thuật của `test -f` — nối `.ganas-mutant` vào
+  đường dẫn. Cờ ăn giá trị (`-c`, `-k`, `-t`…) được liệt kê tường minh để cờ
+  boolean (`-v`, `--lib`) không nuốt mất chính đường dẫn cần bóp méo. Bộ chạy
+  **không** có đối số đường dẫn vẫn báo "chưa chứng minh được": cố tình không
+  thêm mẹo `-t <chuỗi vô lý>`, vì `go test -run` thoát 0 khi không khớp test nào
+  và mẹo đó sẽ kết luận `cannot_fail` SAI.
+- **`scope/module-orphaned` hết dương tính giả** — luật cũ BFS một chiều từ một
+  `entry`, nên mọi phạm vi có từ hai khối nguồn trở lên (khối không `depends_on`
+  ai) đều luôn có khối bị báo mồ côi dù sơ đồ hoàn toàn đúng; đổi `entry` chỉ
+  đổi khối nào bị báo, có khi còn nhiều hơn. Dự án buộc phải sống chung với một
+  cảnh báo vĩnh viễn — mà cảnh báo thường trực là thứ người ta quen mắt rồi
+  ngừng đọc, nên cảnh báo thật tiếp theo bị bỏ qua cùng. Giờ kiểm **liên thông
+  trên đồ thị vô hướng**: vẫn bắt đúng lỗi thật (khối bị ném vào `modules` mà
+  không có cạnh nào), hết báo nhầm với sơ đồ nhiều nguồn.
+- **`scope` nhận `notes`** — nó là schema DUY NHẤT thiếu trường này, nên bối
+  cảnh của phạm vi (cái gì trong, cái gì ngoài, đã hỏi ai) phải nhét vào comment
+  YAML, mà comment thì `ganas brief` không đọc được — đúng chỗ đáng ghi nhất lại
+  là chỗ không lên được brief. `renderBrief` in nó ngay dưới dòng phiên bản/trạng
+  thái, trước ranh giới code.
+- **`ganas scope new` tách lõi khỏi I/O** — `--paths` chứa cả vùng lõi lẫn vùng
+  chạm I/O (nhận theo tên đoạn đường dẫn: `io`, `store`, `adapter`, `infra`,
+  `repo`, `gateway`, `client`…) thì sinh **hai** khối: `M-<ten>` (`nature: code`)
+  và `M-<ten>-io` (`nature: io`) khai `depends_on: [M-<ten>]`. Trước đây mọi
+  glob gộp vào một khối `nature: code`, tức lệnh sinh ra một khối vi phạm ngay
+  lúc tạo đúng luật kiến trúc mà `ganas init` vừa phát cho dự án. Dòng gợi ý
+  cuối lệnh trước chỉ nhắc `llm`, giờ nhắc cả `io`.
+- **Chiều `depends_on` giữa lõi và io hết mâu thuẫn** — `architectureRuleMd()`
+  từng viết "khối lõi khai `depends_on` một khối `nature: io`", ngược với ports
+  & adapters và ngược với thứ một dự án thật đang làm. Adapter cài đặt port do
+  lõi định nghĩa ⇒ **io phụ thuộc lõi**. Sửa câu đó, và đó cũng là chiều
+  `scope new` sinh ra.
+- **Id phạm vi cắt ở biên từ** — `slugify` cắt cứng ở ký tự thứ 40 nên một tiêu
+  đề dài ra id cụt giữa từ (`...-console-va-ch`). Id xuất hiện trong mọi brief,
+  mọi commit message và mọi `depends_on`. Kèm theo: phỏng vấn `scope new` giờ
+  hỏi **5 câu**, câu thứ 5 là id (gợi ý sẵn slug, Enter là nhận) — trước đây chỉ
+  hỏi 4 và người dùng TTY không có đường đặt id trừ khi biết cờ `--id`.
+- Nội bộ: `tokenizeShell`/`looksLikePath` chuyển từ `src/commit.ts` sang
+  `src/util/shell.ts` — `commit` và `verify/mutate` hỏi cùng một câu ("token nào
+  là đường dẫn") mà trước đó chỉ một chỗ có lời giải.
+
 ## v0.2.1 — 2026-08-09
 
 Vá bốn lỗi tìm thấy khi dùng thật trên một dự án ngoài, cộng một tính năng mà

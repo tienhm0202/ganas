@@ -6,10 +6,11 @@ import { test } from "node:test";
 
 import { run as ganasCommit } from "../src/commands/commit.js";
 import { parsePorcelainZ } from "../src/commands/commit.js";
-import { contractPathRefs, contractPaths, ownsGanasFile, tokenizeShell } from "../src/commit.js";
+import { contractPathRefs, contractPaths, ownsGanasFile } from "../src/commit.js";
 import { criterionKey } from "../src/gate.js";
 import { zTask } from "../src/model/index.js";
 import { runShell } from "../src/util/exec.js";
+import { tokenizeShell } from "../src/util/shell.js";
 import { cleanup, design, goal, makeProject, scope } from "./helpers.js";
 
 function taskWith(extra: Record<string, unknown>) {

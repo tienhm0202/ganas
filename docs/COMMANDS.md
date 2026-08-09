@@ -174,12 +174,17 @@ P-dat-lich — Đặt lịch qua Zalo
 
 #### `ganas scope new`
 
-Phỏng vấn **4 câu** rồi ghi `scopes/<id>.yaml`. Nếu chưa khối nào có `paths`
-giao với glob vừa khai thì tạo luôn một khối — nếu không, phạm vi mới không
-hợp lệ (`modules` phải có ít nhất một phần tử) và người dùng lại phải gõ tay
-YAML, đúng thứ lệnh này sinh ra để tránh.
+Phỏng vấn **5 câu** rồi ghi `scopes/<id>.yaml`. Nếu chưa khối nào có `paths`
+giao với glob vừa khai thì tạo luôn khối — nếu không, phạm vi mới không hợp lệ
+(`modules` phải có ít nhất một phần tử) và người dùng lại phải gõ tay YAML,
+đúng thứ lệnh này sinh ra để tránh.
 
-Không có TTY (hoặc có `--yes`) thì bốn câu phải đưa qua tuỳ chọn.
+Câu thứ 5 là **id**, gợi ý sẵn slug suy từ tiêu đề (Enter là nhận). Slug cắt ở
+**biên từ** chứ không cắt cứng ở ký tự thứ 40: id xuất hiện trong mọi brief,
+mọi commit message và mọi `depends_on`, nên một id cụt giữa từ làm hỏng khả
+năng đọc của tất cả những chỗ đó.
+
+Không có TTY (hoặc có `--yes`) thì năm câu phải đưa qua tuỳ chọn.
 
 | Tuỳ chọn | Ý nghĩa |
 |---|---|
@@ -187,16 +192,27 @@ Không có TTY (hoặc có `--yes`) thì bốn câu phải đưa qua tuỳ chọ
 | `--paths <glob,glob>` | *Code nằm ở đâu?* Danh sách glob cách nhau bởi dấu phẩy. |
 | `--accept <lệnh>` | *Làm sao biết là xong?* Thành `acceptance` mức phạm vi, chạy trên luồng đã ghép. |
 | `--owner <@ten>` | *Ai ký nghiệm thu?* Bỏ trống thì `validate` cảnh báo `scope/without-owner`. |
-| `--id <P-...>` | Ghi đè id tự suy. |
+| `--id <P-...>` | Ghi đè id tự suy. Nên dùng — id ngắn đọc tốt hơn slug suy từ tiêu đề dài. |
 | `--yes, -y` | Không hỏi, đọc hết từ tuỳ chọn. |
 
 **Mã thoát:** `0` nếu tạo được; `2` (GanasError) nếu thiếu một trong bốn câu,
 `owner` sai dạng `@ten`, hoặc id đã tồn tại.
 
-Khối mới luôn được tạo với `nature: code` và lệnh **nói thẳng** rằng nếu vùng
-đó có gọi LLM thì phải đổi sang `nature: llm` (khi đó bắt buộc có eval). Đây
-là chỗ cố ý không đoán: đoán sai `nature` nghĩa là bỏ qua lớp bằng chứng duy
-nhất kiểm được hành vi của LLM.
+**Tách lõi khỏi I/O.** `--paths` chứa cả vùng lõi lẫn vùng chạm I/O (nhận theo
+tên đoạn đường dẫn: `io`, `store`, `adapter`, `infra`, `repo`, `gateway`,
+`client`…) thì lệnh sinh **hai** khối: `M-<ten>` (`nature: code` — lõi) và
+`M-<ten>-io` (`nature: io`) khai `depends_on: [M-<ten>]`. Adapter cài đặt port
+do lõi định nghĩa, nên adapter phụ thuộc lõi chứ không ngược lại.
+
+Gộp cả hai vùng vào một khối `nature: code` là sinh ra một khối vi phạm ngay
+lúc tạo đúng luật kiến trúc mà `ganas init` vừa phát cho dự án
+(`.claude/rules/architecture.md`: khối `code` là **lõi**, không tự mở file,
+không tự gọi network, không tự query DB).
+
+Chỉ có một vùng thì vẫn một khối `nature: code`, và lệnh **nói thẳng** rằng
+vùng chạm I/O phải là khối `nature: io` riêng, còn vùng có gọi LLM thì phải
+`nature: llm` (khi đó bắt buộc có eval). `llm` là chỗ cố ý không đoán: đoán sai
+nghĩa là bỏ qua lớp bằng chứng duy nhất kiểm được hành vi của LLM.
 
 #### `ganas scope assign`
 
@@ -319,6 +335,12 @@ hoặc theo tiền tố `id/`.
 | `--tier <smoke\|full\|all>` | Chọn tầng bằng chứng. Mặc định `smoke`. `full` bao gồm cả `smoke`; `all` không lọc theo tier. |
 | `--dry-run` | Chỉ in ra sẽ chạy gì (và ước tính chi phí nếu có), không chạy thật, không ghi sổ. |
 | `--no-mutation` | Bỏ bước kiểm mutation (bóp méo probe rồi chạy lại để xem probe có bắt được lỗi không) khi chạy target. |
+
+**Dạng probe bóp méo được:** `test -f <path>` (và `-d -e -s -r`), `grep -q
+'<pattern>' <file>` (kể cả `rg`/`ag`), **bộ chạy test kèm đường dẫn** (`bun test
+<path>`, `vitest`, `jest`, `pytest`, `go test`, `cargo test`), hoặc bất kỳ lệnh nào
+có chuỗi trong nháy. Không nhận ra dạng thì `ganas verify` nói thẳng "chưa
+chứng minh được là có thể fail" chứ không im lặng coi như đã chứng minh.
 | `--max-cost-usd <n>` | Hạn mức chi phí (USD) cho lần chạy này — dừng **trước khi** chạy target sẽ vượt hạn mức (chặn trước, không hoàn tiền sau). Target chưa có lịch sử chi phí không bị chặn ở lần chạy đầu (chưa đoán được). |
 | `--session <id>` | Gắn `by: session:<id>` vào các dòng ghi sổ thay vì `by: cli`. |
 | `--json` | Xuất `{ ran, cost_usd, stopped_for_budget, results: [{target, result, score, proof, reason}] }`. |

@@ -313,3 +313,50 @@ test("⭐ brief trỏ đúng chỗ chứa tri thức kế thừa, dù nó nằm 
     }
   }
 });
+
+/* --- notes của phạm vi ------------------------------------------------------ */
+
+test("⭐ brief in `notes` của phạm vi — bối cảnh là chỗ đáng ghi nhất", async () => {
+  const NOTES = "Trong: đăng nhập partner. Ngoài: SSO nội bộ. Đã hỏi @tienhm 2026-08-01.";
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/scopes/P-thu.yaml": scope("P-thu", {
+      extra: `notes: ${JSON.stringify(NOTES)}\n`,
+    }),
+  });
+  try {
+    const graph = await loadGraph(root);
+    // Trước đây `notes` là lỗi schema cứng, nên bối cảnh phạm vi phải nhét vào
+    // comment YAML — mà comment thì brief không đọc được.
+    assert.deepEqual(
+      graph.loadDiagnostics.filter((d) => d.severity === "error"),
+      [],
+    );
+    const picked = selectNextTask(graph)!;
+    const brief = renderBrief({ graph, task: picked.task, freshness: await computeFreshness(graph) });
+    assert.ok(brief.includes(NOTES), "brief phải in notes của phạm vi");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("phạm vi không có notes thì brief không đổi", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+  });
+  try {
+    const graph = await loadGraph(root);
+    const picked = selectNextTask(graph)!;
+    const brief = renderBrief({ graph, task: picked.task, freshness: await computeFreshness(graph) });
+    assert.match(brief, /nghiệm thu: @nguoi-duyet\n\n\*\*Ranh giới code:\*\*/);
+  } finally {
+    await cleanup(root);
+  }
+});

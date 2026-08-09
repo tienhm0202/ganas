@@ -1,5 +1,6 @@
 import type { Expect } from "../model/index.js";
 import { judge, runShell } from "../util/exec.js";
+import { looksLikePath, stripOperators, type TokenSpan, tokenSpans } from "../util/shell.js";
 
 /**
  * Mutation test cho probe.
@@ -34,6 +35,67 @@ const GREP_BARE = /\b(grep|rg|ag)\b((?:\s+-[A-Za-z-]+)*)\s+([^\s'"|;&-][^\s|;&]*
 const QUOTED = /(['"])((?:(?!\1).){2,})\1/;
 
 /**
+ * Bộ chạy test kèm đối số đường dẫn: `bun test src/x`, `pytest tests/`…
+ *
+ * Đây là dạng probe phổ biến nhất của một dự án thật, mà trước đây không mẫu
+ * nào nhận ra ⇒ đa số probe chỉ "đạt yếu": chạy pass nhưng chưa bao giờ được
+ * chứng minh là CÓ THỂ fail.
+ */
+const RUNNER = /\b(?:bun\s+test|vitest(?:\s+run)?|jest|pytest|go\s+test|cargo\s+test)\b/;
+
+/**
+ * Cờ ĂN token kế tiếp làm giá trị — token đó không phải đối số đường dẫn.
+ *
+ * Cố tình liệt kê tường minh thay vì đoán "cờ nào cũng ăn giá trị": cờ boolean
+ * (`-v`, `--lib`, `--watch`) phổ biến hơn nhiều trong lệnh test, và coi chúng
+ * là cờ ăn giá trị sẽ nuốt mất chính đường dẫn cần bóp méo.
+ */
+const VALUE_FLAGS = new Set([
+  "-c",
+  "--config",
+  "-p",
+  "--project",
+  "--rootdir",
+  "-k",
+  "-t",
+  "--testNamePattern",
+  "--test-name-pattern",
+  "--testPathPattern",
+  "-n",
+  "--numprocesses",
+  "--reporter",
+  "-o",
+]);
+
+/**
+ * Đối số đường dẫn đầu tiên sau tên bộ chạy.
+ *
+ * Trả về span (kèm vị trí) để người gọi thay đúng chỗ trong chuỗi gốc — không
+ * dùng `String.replace` được, vì cùng một chuỗi có thể xuất hiện nhiều lần.
+ */
+function runnerPathSpan(run: string): TokenSpan | null {
+  const m = RUNNER.exec(run);
+  if (!m) return null;
+
+  const after = m.index + m[0].length;
+  const spans = tokenSpans(run.slice(after)).map((s) => ({ ...s, start: s.start + after }));
+
+  let skipNext = false;
+  for (const span of spans) {
+    if (span.text.startsWith("-")) {
+      skipNext = VALUE_FLAGS.has(span.text);
+      continue;
+    }
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+    if (looksLikePath(stripOperators(span.text))) return span;
+  }
+  return null;
+}
+
+/**
  * Sinh bản bóp méo. Trả về null nếu không nhận ra dạng — người gọi biến điều đó
  * thành `probe_unproven`, chứ không đoán bừa.
  */
@@ -63,6 +125,19 @@ export function mutateProbe(run: string): Mutation | null {
     return {
       run: run.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
       what: `đổi pattern \`${pattern}\` thành chuỗi không thể khớp`,
+    };
+  }
+
+  // Trước QUOTED: với `bun test x.ts -t 'tên'` thì đổi ĐƯỜNG DẪN là bài kiểm
+  // mạnh hơn đổi chuỗi lọc — nó chứng minh probe thật sự phụ thuộc vào chỗ file
+  // nằm, chứ không chỉ vào một cái tên.
+  const runnerPath = runnerPathSpan(run);
+  if (runnerPath) {
+    const path = stripOperators(runnerPath.text);
+    const replaced = runnerPath.text.replace(path, `${path}${MUTANT_SUFFIX}`);
+    return {
+      run: run.slice(0, runnerPath.start) + replaced + run.slice(runnerPath.start + runnerPath.text.length),
+      what: `đổi đường dẫn \`${path}\` thành đường dẫn không tồn tại`,
     };
   }
 
@@ -103,7 +178,9 @@ export async function proveCanFail(
       status: "unproven",
       message:
         `không nhận ra dạng probe để bóp méo, nên chưa chứng minh được nó có thể fail. ` +
-        `Dạng kiểm được: \`test -f <path>\`, \`grep -q '<pattern>' <file>\`, hoặc lệnh có chuỗi trong nháy.`,
+        `Dạng kiểm được: \`test -f <path>\`, \`grep -q '<pattern>' <file>\`, ` +
+        `bộ chạy test kèm đường dẫn (\`bun test <path>\`, \`vitest\`, \`jest\`, \`pytest\`, ` +
+        `\`go test\`, \`cargo test\`), hoặc lệnh có chuỗi trong nháy.`,
     };
   }
 
