@@ -480,7 +480,7 @@ test("brief không kèm phần biến động thì lặp lại y hệt", async (
     const b = renderBrief({ graph, task: t, freshness });
     assert.equal(a, b, "brief phải xác định được — nếu không, prompt cache miss mọi phiên");
     // Không được có dấu thời gian đầy đủ (giờ:phút:giây) trong phần ổn định.
-    // Ngày trần thì được — chúng đến từ dữ liệu (ID sprint, ngày verify), không
+    // Ngày trần thì được — chúng đến từ dữ liệu (ID phạm vi, ngày verify), không
     // đổi theo lúc chạy.
     assert.equal(
       /\d{2}:\d{2}:\d{2}/.test(a),

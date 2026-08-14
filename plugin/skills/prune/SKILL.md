@@ -1,7 +1,7 @@
 ---
 name: prune
-description: Dọn dẹp .ganas/ — xoá handoff cũ và session mồ côi (local, không chia sẻ), archive task done/sprint closed đủ tuổi sang thư mục con (giữ git history, không xoá). Mặc định chỉ xem trước, không đụng đĩa. Dùng khi .ganas/ bắt đầu đầy task/sprint cũ hoặc runs/ chất đống.
-when_to_use: "tasks/ hoặc runs/ có vẻ đầy đồ cũ, trước khi xem lại sprint kế tiếp, dọn định kỳ"
+description: Dọn dẹp .ganas/ — xoá handoff cũ và session mồ côi (local, không chia sẻ), archive task done đủ tuổi sang thư mục con (giữ git history, không xoá). Mặc định chỉ xem trước, không đụng đĩa. Dùng khi .ganas/ bắt đầu đầy task cũ hoặc runs/ chất đống.
+when_to_use: "tasks/ hoặc runs/ có vẻ đầy đồ cũ, dọn định kỳ"
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/ganas.mjs" *)
 ---
 
@@ -16,11 +16,13 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/ganas.mjs" *)
 | Tầng | Gồm | Hành động |
 |---|---|---|
 | Ephemeral, local | `runs/*.md` của phiên đã kết thúc, session mồ côi trong `state.json` | **Xoá thẳng** — không chia sẻ, không phải bằng chứng |
-| Shared, đã đóng | `tasks/` status `done`, `sprints/` status `closed`, đủ tuổi (mặc định 7 ngày) | **Archive** — dời sang `done/`/`closed/`, giữ trong git history |
-| Vĩnh viễn | `verify-ledger.jsonl`, `claims/`, `decisions/`, `facts/` | Ngoài phạm vi lệnh này, tuyệt đối không đụng |
+| Shared, đã đóng | `tasks/` status `done`, đủ tuổi (mặc định 7 ngày) | **Archive** — dời sang `done/`, giữ trong git history |
+| Vĩnh viễn | `verify-ledger.jsonl`, `claims/`, `decisions/`, `facts/`, phạm vi công việc (`scopes/`) dù đã `delivered` | Ngoài phạm vi lệnh này, tuyệt đối không đụng |
 
-Task/sprint còn bị thứ khác tham chiếu tới (`blocked_by`, hoặc task khác vẫn
-dùng sprint đó) thì **giữ lại**, không archive — tránh để lại liên kết treo.
+Task còn bị thứ khác tham chiếu tới (`blocked_by`) thì **giữ lại**, không
+archive — tránh để lại liên kết treo. Phạm vi công việc không bao giờ bị
+archive: khối vẫn khai `scope:` trỏ vào nó và fact vẫn còn hiệu lực trong nó,
+kể cả sau khi bàn giao xong.
 
 ## Luôn xem trước
 
@@ -35,7 +37,7 @@ node "${CLAUDE_PLUGIN_ROOT}/bin/ganas.mjs" prune --yes
 
 ## Sau khi archive
 
-Task/sprint bị dời file, không bị xoá — vẫn xem lại được trong
-`tasks/done/`, `sprints/closed/`, hoặc qua git history. Chúng biến mất khỏi
+Task bị dời file, không bị xoá — vẫn xem lại được trong `tasks/done/`, hoặc
+qua git history. Chúng biến mất khỏi
 `ganas validate`/`ganas next` vì không còn "đang hoạt động", không phải vì
 mất dữ liệu.

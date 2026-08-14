@@ -19,7 +19,7 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/ganas.mjs" *)
    `touches`. Không `git add -A` — không đụng tới file ngoài phạm vi task.
 3. Dựng commit message TỪ kết quả gate thật (không phải tự viết tổng kết):
    dòng đầu là `<task id>: <tiêu đề>`, thân liệt kê từng tiêu chí đã ✓, cuối
-   là goal/design/sprint task phục vụ.
+   là goal/design/scope task phục vụ.
 4. Không có gì để commit (cây làm việc trong phạm vi task đã sạch) thì báo
    vậy, không tạo commit rỗng.
 

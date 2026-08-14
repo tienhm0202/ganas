@@ -237,8 +237,10 @@ Nói cách khác: không có "sơ đồ kiến trúc" vẽ tay tách biệt kh�
 `src/model/scope.ts`. **Đơn vị mà một câu nói của người dùng được dịch sang**:
 bàn giao cái gì (`title`), code nằm ở đâu (`modules` → `module.paths`), làm sao
 biết là xong (`acceptance`), ai ký (`owner`). Có `version` (bắt buộc semver),
-`status` (`draft`/`active`/`delivered`), `entry` (khối đầu luồng), và `window`
-tuỳ chọn (`starts_at`/`ends_at` — thay vai trò Sprint cũ, đã bỏ ở M1′).
+`status` (`draft`/`active`/`delivered`), `entry` (khối đầu luồng), và `notes`
+tuỳ chọn (bối cảnh: cái gì trong/ngoài phạm vi, đã hỏi ai — trường này phải
+gánh phần đáng ghi nhất, vì scope là record duy nhất không nhận comment YAML
+mà `ganas brief` đọc được).
 
 `acceptance` chạy trên **luồng đã ghép**, không phải tổng nghiệm thu từng khối:
 "một luồng có thể đúng ở từng khối mà vẫn sai khi ghép".

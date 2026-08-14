@@ -159,7 +159,7 @@ test("ID trùng giữa hai file bị bắt", async () => {
   assert.ok(err, "cùng một ID ở hai file phải bị từ chối");
 });
 
-test("task trỏ sprint/design không tồn tại đều bị bắt", async () => {
+test("task trỏ design/scope không tồn tại đều bị bắt", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),
     ".ganas/tasks/T-001.yaml": task("T-001", { implements: "D-999", scope: "P-thu" }),
