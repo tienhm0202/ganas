@@ -283,7 +283,18 @@ export function renderBrief(input: BriefInput): string {
     if (d.scope === undefined || d.scope === t.scope) decisionIds.add(d.id);
   }
 
+  // Tập "đã chết": dựng từ TOÀN BỘ graph.decisions, không chỉ những decision
+  // sắp in. Một decision khai `supersedes` ở scope KHÁC vẫn giết decision cũ
+  // ở mức DỰ ÁN — quyết định đã bị thay thế thì không còn hiệu lực ở đâu cả.
+  // Không in decision chết dưới dạng lịch sử: chỉ loại khỏi mục "không được
+  // đi ngược", dữ liệu vẫn nguyên trong YAML.
+  const superseded = new Set<string>();
+  for (const sourced of graph.decisions.values()) {
+    for (const oldId of sourced.value.supersedes) superseded.add(oldId);
+  }
+
   const decisions = [...decisionIds]
+    .filter((id) => !superseded.has(id))
     .sort((a, b) => a.localeCompare(b))
     .map((id) => graph.decisions.get(id)?.value)
     .filter((d): d is NonNullable<typeof d> => Boolean(d))
@@ -493,9 +504,15 @@ export function renderBrief(input: BriefInput): string {
       case "manual":
         manual.push(c.check);
         break;
-      case "verification":
-        auto.push(`bằng chứng \`${c.target}\``);
+      case "verification": {
+        // Dùng đúng định dạng mà "Nghiệm thu luồng ghép" của Scope đã dùng
+        // (xem trên, tra `freshness.get`) — hai chỗ nói cùng loại thông tin
+        // thì phải nói giống nhau, không phát minh định dạng thứ hai.
+        const info = freshness.get(c.target);
+        const state = info ? `${info.freshness} — ${info.reason}` : undefined;
+        auto.push(`bằng chứng \`${c.target}\`` + (state ? ` — ${state}` : ""));
         break;
+      }
       default:
         // Bắt buộc TS báo lỗi biên dịch nếu `ExitCriterion` thêm `kind` mới mà
         // quên xử lý ở đây — đúng lỗi vừa xảy ra với `verification` (N7 thêm

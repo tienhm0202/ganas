@@ -194,6 +194,191 @@ test("decision của phạm vi KHÁC không lọt vào brief", async () => {
   }
 });
 
+/* --- Decision: quyết định đã bị thay thế thì không còn hiệu lực ----------- */
+
+/** Dựng dự án với một mảng decision tuỳ ý, một phạm vi + một phạm vi khác. */
+async function withDecisionYaml(decisionsYaml: string): Promise<string> {
+  return makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/scopes/P-khac.yaml": scope("P-khac", { modules: ["M-b"] }),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/modules/M-b.yaml": moduleYaml("M-b", { scope: "P-khac", paths: ["src/b/**"] }),
+    ".ganas/decisions/d.yaml": decisionsYaml,
+  });
+}
+
+test("DEC đã bị supersede thì KHÔNG in, dù cùng phạm vi với task", async () => {
+  const root = await withDecisionYaml(`- id: DEC-004
+  scope: P-thu
+  statement: "Cách cũ: gọi trực tiếp REST"
+  decided_by: "@tien"
+  decided_at: 2026-01-01T00:00:00Z
+- id: DEC-009
+  scope: P-thu
+  statement: "Cách mới: qua hàng đợi"
+  decided_by: "@tien"
+  decided_at: 2026-02-01T00:00:00Z
+  supersedes: ["DEC-004"]
+`);
+  try {
+    const brief = await briefOf(root);
+    assert.match(brief, /DEC-009/, "decision còn hiệu lực phải in");
+    assert.doesNotMatch(brief, /DEC-004/, "decision đã bị thay thế không được in như còn hiệu lực");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("decision không bị ai thay thế thì vẫn in như cũ (chống hồi quy)", async () => {
+  const root = await withDecisionYaml(`- id: DEC-001
+  scope: P-thu
+  statement: "Dùng Postgres, không dùng Mongo"
+  decided_by: "@tien"
+  decided_at: 2026-01-01T00:00:00Z
+`);
+  try {
+    assert.match(await briefOf(root), /DEC-001/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("chuỗi ba đời supersedes: chỉ decision mới nhất còn hiệu lực được in", async () => {
+  const root = await withDecisionYaml(`- id: DEC-001
+  scope: P-thu
+  statement: "Đời 1: đồng bộ"
+  decided_by: "@tien"
+  decided_at: 2026-01-01T00:00:00Z
+- id: DEC-002
+  scope: P-thu
+  statement: "Đời 2: bất đồng bộ qua callback"
+  decided_by: "@tien"
+  decided_at: 2026-02-01T00:00:00Z
+  supersedes: ["DEC-001"]
+- id: DEC-003
+  scope: P-thu
+  statement: "Đời 3: bất đồng bộ qua hàng đợi"
+  decided_by: "@tien"
+  decided_at: 2026-03-01T00:00:00Z
+  supersedes: ["DEC-002"]
+`);
+  try {
+    const brief = await briefOf(root);
+    assert.match(brief, /DEC-003/, "đời mới nhất phải in");
+    assert.doesNotMatch(brief, /DEC-002/, "đời giữa đã bị thay thế không được in");
+    assert.doesNotMatch(brief, /DEC-001/, "đời đầu đã bị thay thế không được in");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ DEC ở phạm vi KHÁC supersede DEC ở phạm vi task: DEC cũ vẫn phải bị loại", async () => {
+  // DEC-009 thuộc P-khac nên bản thân nó KHÔNG được in trong brief của task
+  // (scope P-thu) — nhưng nó vẫn khai supersedes: [DEC-004], và DEC-004 chết
+  // ở mức DỰ ÁN bất kể DEC-009 có lọt vào brief này hay không. Khoá đúng
+  // quyết định "lấy tập chết từ toàn bộ graph.decisions", không chỉ từ những
+  // decision sắp in.
+  const root = await withDecisionYaml(`- id: DEC-004
+  scope: P-thu
+  statement: "Cách cũ: gọi trực tiếp REST"
+  decided_by: "@tien"
+  decided_at: 2026-01-01T00:00:00Z
+- id: DEC-009
+  scope: P-khac
+  statement: "Cách mới, quyết ở phạm vi khác"
+  decided_by: "@tien"
+  decided_at: 2026-02-01T00:00:00Z
+  supersedes: ["DEC-004"]
+`);
+  try {
+    const brief = await briefOf(root);
+    assert.doesNotMatch(brief, /DEC-009/, "decision phạm vi khác không tự lọt vào brief này");
+    assert.doesNotMatch(
+      brief,
+      /DEC-004/,
+      "decision đã bị thay thế thì chết ở mức dự án, dù ai thay thế nó thuộc phạm vi nào",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- exit_contract: verification phải in độ tươi, không phải chuỗi trần --- */
+
+/** Dựng dự án có một fact và một task với `exit_contract` trỏ tới fact đó. */
+async function withVerificationExitContract(target: string): Promise<string> {
+  return makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/tasks/T-001.yaml": `id: T-001
+title: "Task thử"
+serves:
+  - G-001
+implements: D-001
+scope: P-thu
+status: todo
+exit_contract:
+  - kind: verification
+    target: ${target}
+`,
+    ".ganas/facts/f.yaml": `- id: F-ACC-001
+  scope: P-thu
+  statement: "hàng đợi retry tối đa 3 lần"
+  depends_on: ["src/a/**"]
+  verify:
+    run: "test -d .ganas/scopes"
+  last_verified_at: 2026-08-01T00:00:00Z
+  last_result: pass
+`,
+  });
+}
+
+test("exit_contract verification trỏ target ĐÃ verify → brief in trạng thái độ tươi", async () => {
+  const root = await withVerificationExitContract("F-ACC-001");
+  try {
+    await verifyAllFacts(root);
+    const brief = await briefOf(root);
+    const section = brief.slice(brief.indexOf("## Điều kiện hoàn thành"));
+    assert.match(section, /F-ACC-001/);
+    assert.match(section, /fresh — kiểm lần cuối/, "phải in đúng chuỗi mà freshness.decide() sinh ra");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("exit_contract verification trỏ target CHƯA từng verify → in trạng thái never_verified", async () => {
+  const root = await withVerificationExitContract("F-ACC-001");
+  try {
+    // Không gọi verifyAllFacts: fact chưa có dòng sổ cái nào.
+    const brief = await briefOf(root);
+    const section = brief.slice(brief.indexOf("## Điều kiện hoàn thành"));
+    assert.match(section, /F-ACC-001/);
+    assert.match(
+      section,
+      /never_verified — chưa chạy lần nào — mới chỉ là niềm tin/,
+      "phải đúng chuỗi never_verified mà decide() sinh ra, không bịa",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("exit_contract verification trỏ target KHÔNG tồn tại trong sổ cái → không ném, in như cũ", async () => {
+  const root = await withVerificationExitContract("F-KHONG-TON-TAI");
+  try {
+    const brief = await briefOf(root);
+    const section = brief.slice(brief.indexOf("## Điều kiện hoàn thành"));
+    assert.match(section, /bằng chứng `F-KHONG-TON-TAI`/, "in nguyên như cũ khi không tra được");
+  } finally {
+    await cleanup(root);
+  }
+});
+
 /* --- Liên tục phạm vi khi chọn task --------------------------------------- */
 
 test("⭐ hai task ngang hạng: task cùng phạm vi với phiên trước được chọn", async () => {
