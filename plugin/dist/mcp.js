@@ -24420,30 +24420,14 @@ var init_ledger = __esm({
   }
 });
 
-// src/commit.ts
-var commit_exports = {};
-__export(commit_exports, {
-  buildCommitMessage: () => buildCommitMessage,
+// src/boundary.ts
+var boundary_exports = {};
+__export(boundary_exports, {
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
   ownsGanasFile: () => ownsGanasFile,
-  pathsToStage: () => pathsToStage
+  taskBoundary: () => taskBoundary
 });
-function buildCommitMessage(graph, task, gate) {
-  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
-  for (const r of gate.results) {
-    const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
-    lines.push(`  ${mark} ${r.label}`);
-  }
-  const design = graph.designs.get(task.implements)?.value;
-  const context = [
-    `ph\u1EE5c v\u1EE5 ${task.serves.join(", ")}`,
-    design ? `design ${design.id} \u2014 ${design.title}` : `design ${task.implements}`,
-    `ph\u1EA1m vi ${task.scope}`
-  ].join(" \xB7 ");
-  lines.push("", context);
-  return lines.join("\n") + "\n";
-}
 function contractPathRefs(task) {
   const refs = [];
   const seen = /* @__PURE__ */ new Set();
@@ -24468,7 +24452,7 @@ function contractPathRefs(task) {
 function contractPaths(task) {
   return contractPathRefs(task).map((r) => r.path);
 }
-function pathsToStage(task, graph) {
+function taskBoundary(task, graph) {
   const patterns = /* @__PURE__ */ new Set();
   for (const moduleId of task.touches) {
     const mod = graph.modules.get(moduleId)?.value;
@@ -24487,8 +24471,8 @@ function ownsGanasFile(task, relPath) {
   return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
 }
 var YAML_EXT;
-var init_commit = __esm({
-  "src/commit.ts"() {
+var init_boundary = __esm({
+  "src/boundary.ts"() {
     "use strict";
     init_paths();
     init_shell();
@@ -36737,11 +36721,28 @@ init_zod();
 
 // src/commands/commit.ts
 var import_yaml4 = __toESM(require_dist2(), 1);
-init_commit();
+init_boundary();
 import { existsSync as existsSync6 } from "node:fs";
 import { mkdtemp as mkdtemp2, readFile as readFile8, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
 import { join as join7 } from "node:path";
+
+// src/commit.ts
+function buildCommitMessage(graph, task, gate) {
+  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
+  for (const r of gate.results) {
+    const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
+    lines.push(`  ${mark} ${r.label}`);
+  }
+  const design = graph.designs.get(task.implements)?.value;
+  const context = [
+    `ph\u1EE5c v\u1EE5 ${task.serves.join(", ")}`,
+    design ? `design ${design.id} \u2014 ${design.title}` : `design ${task.implements}`,
+    `ph\u1EA1m vi ${task.scope}`
+  ].join(" \xB7 ");
+  lines.push("", context);
+  return lines.join("\n") + "\n";
+}
 
 // src/gate.ts
 init_paths();
@@ -37071,7 +37072,7 @@ ${formatGate(gateResult)}
   const baseline = await baselineFor(root, sessionId, taskId);
   const baselineWarning = reportBaseline(gateResult, baseline);
   const allGanas = flag(argv, "all-ganas");
-  const codePaths = pathsToStage(task, graph);
+  const codePaths = taskBoundary(task, graph);
   const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
   if (flag(argv, "dry-run")) {
     const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
@@ -38031,8 +38032,8 @@ async function flowContext(cwd) {
   const picked = selectNextTask(graph);
   const task = picked?.task.value ?? null;
   const gate = task ? await evaluateGate(graph, task, freshness) : null;
-  const { pathsToStage: pathsToStage2 } = await Promise.resolve().then(() => (init_commit(), commit_exports));
-  const paths = task ? [...pathsToStage2(task, graph), ".ganas"] : [".ganas"];
+  const { taskBoundary: taskBoundary2 } = await Promise.resolve().then(() => (init_boundary(), boundary_exports));
+  const paths = task ? [...taskBoundary2(task, graph), ".ganas"] : [".ganas"];
   const spec = paths.map((p) => JSON.stringify(p)).join(" ");
   const status = await runShell2(`git status --porcelain -- ${spec}`, {
     cwd: root,

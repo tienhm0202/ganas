@@ -4,9 +4,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { contractPathRefs, contractPaths, ownsGanasFile } from "../src/boundary.js";
 import { run as ganasCommit } from "../src/commands/commit.js";
 import { parsePorcelainZ } from "../src/commands/commit.js";
-import { contractPathRefs, contractPaths, ownsGanasFile } from "../src/commit.js";
 import { criterionKey } from "../src/gate.js";
 import { zTask } from "../src/model/index.js";
 import { runShell } from "../src/util/exec.js";

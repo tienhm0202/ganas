@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 import { parseDocument } from "yaml";
 
-import { buildCommitMessage, contractPathRefs, ownsGanasFile, pathsToStage } from "../commit.js";
+import { contractPathRefs, ownsGanasFile, taskBoundary } from "../boundary.js";
+import { buildCommitMessage } from "../commit.js";
 import { alreadyGreen, evaluateGate, formatGate, type GateResult } from "../gate.js";
 import { GANAS_DIR } from "../graph/paths.js";
 import type { Sourced } from "../graph/types.js";
@@ -155,7 +156,7 @@ export async function run(argv: Argv): Promise<number> {
   const baselineWarning = reportBaseline(gateResult, baseline);
 
   const allGanas = flag(argv, "all-ganas");
-  const codePaths = pathsToStage(task, graph);
+  const codePaths = taskBoundary(task, graph);
 
   // Đóng task TRƯỚC khi stage, để thay đổi đó nằm trong chính commit này chứ
   // không lơ lửng trong working tree sau đó.

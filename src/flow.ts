@@ -298,11 +298,11 @@ export async function flowContext(cwd: string): Promise<FlowContext> {
 
   // Hỏi git đúng những đường dẫn mà `ganas commit` sẽ stage — một nguồn sự thật,
   // không tự đoán lại danh sách đó ở đây.
-  // `pathsToStage` chỉ trả pathspec CODE (từ v0.2.1 nó không còn nuốt cả
+  // `taskBoundary` chỉ trả pathspec CODE (từ v0.2.1 nó không còn nuốt cả
   // `.ganas`). Ở đây vẫn hỏi cả `.ganas` vì flow chỉ cần biết "có gì để commit
   // không", không cần biết thứ đó thuộc task nào.
-  const { pathsToStage } = await import("./commit.js");
-  const paths = task ? [...pathsToStage(task, graph), ".ganas"] : [".ganas"];
+  const { taskBoundary } = await import("./boundary.js");
+  const paths = task ? [...taskBoundary(task, graph), ".ganas"] : [".ganas"];
   const spec = paths.map((p) => JSON.stringify(p)).join(" ");
   const status = await runShell(`git status --porcelain -- ${spec}`, {
     cwd: root,
