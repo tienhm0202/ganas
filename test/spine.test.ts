@@ -133,6 +133,74 @@ test("vòng lặp phụ thuộc giữa task bị bắt", async () => {
   assert.match(err.message, /T-00\d → T-00\d/);
 });
 
+/* --- Chu trình supersedes giữa decision (N1) -------------------------------
+ *
+ * Trước đây một chu trình giữa các decision vô hại — không ai đọc
+ * `Decision.supersedes` cả. Từ khi brief loại khỏi bàn giao MỌI decision nằm
+ * trong tập "bị supersede", một chu trình đưa cả cụm vào tập chết đó cùng
+ * lúc: brief nuốt mất cả cụm, phiên làm việc không thấy một mệnh lệnh nào,
+ * im lặng hoàn toàn. Đây không còn là dữ liệu xấu đơn thuần.
+ */
+
+function decisionsYaml(...decisions: Array<{ id: string; supersedes?: string[] }>): string {
+  return decisions
+    .map(
+      (d) =>
+        `- id: ${d.id}
+  statement: "Quyết định thử"
+  decided_by: "@tien"
+  decided_at: 2026-01-01T00:00:00Z` +
+        (d.supersedes ? `\n  supersedes: [${d.supersedes.join(", ")}]` : ""),
+    )
+    .join("\n");
+}
+
+test("chu trình hai đời giữa decision (DEC-A supersedes DEC-B, DEC-B supersedes DEC-A) bị bắt", async () => {
+  const { codes } = await check({
+    ".ganas/decisions/d.yaml": decisionsYaml(
+      { id: "DEC-001", supersedes: ["DEC-002"] },
+      { id: "DEC-002", supersedes: ["DEC-001"] },
+    ),
+  });
+  assert.ok(codes.includes("spine/decision-cycle"), `phải bắt được vòng lặp: ${JSON.stringify(codes)}`);
+});
+
+test("chuỗi thẳng DEC-003 → DEC-002 → DEC-001 không phải chu trình — không báo nhầm", async () => {
+  const { codes } = await check({
+    ".ganas/decisions/d.yaml": decisionsYaml(
+      { id: "DEC-001" },
+      { id: "DEC-002", supersedes: ["DEC-001"] },
+      { id: "DEC-003", supersedes: ["DEC-002"] },
+    ),
+  });
+  assert.ok(!codes.includes("spine/decision-cycle"), `chuỗi thẳng không phải chu trình: ${JSON.stringify(codes)}`);
+});
+
+test("chu trình ba đời giữa decision vẫn bị bắt", async () => {
+  const { codes } = await check({
+    ".ganas/decisions/d.yaml": decisionsYaml(
+      { id: "DEC-001", supersedes: ["DEC-003"] },
+      { id: "DEC-002", supersedes: ["DEC-001"] },
+      { id: "DEC-003", supersedes: ["DEC-002"] },
+    ),
+  });
+  assert.ok(codes.includes("spine/decision-cycle"), `phải bắt được vòng lặp ba đời: ${JSON.stringify(codes)}`);
+});
+
+test("thông điệp chu trình decision nêu đúng các id trong chuỗi", async () => {
+  const { diagnostics } = await check({
+    ".ganas/decisions/d.yaml": decisionsYaml(
+      { id: "DEC-001", supersedes: ["DEC-002"] },
+      { id: "DEC-002", supersedes: ["DEC-001"] },
+    ),
+  });
+  const err = diagnostics.find((d) => d.code === "spine/decision-cycle");
+  assert.ok(err, "phải có diagnostic chu trình decision");
+  assert.match(err.message, /DEC-001/);
+  assert.match(err.message, /DEC-002/);
+  assert.match(err.message, /→/);
+});
+
 test("design mồ côi khi mọi goal nó phục vụ đã closed", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal("G-001", "closed_at: 2026-02-01T00:00:00Z").replace(

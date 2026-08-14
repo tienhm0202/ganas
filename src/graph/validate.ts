@@ -561,6 +561,27 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     });
   }
 
+  // `Decision.supersedes` không vô hại như trước: brief loại khỏi bàn giao
+  // MỌI decision nằm trong tập "bị supersede" (xem `src/render/brief.ts`).
+  // Một chu trình — DEC-A supersedes DEC-B, DEC-B supersedes DEC-A — đưa cả
+  // hai vào tập chết đó cùng lúc, nên brief nuốt mất cả cụm: phiên làm việc
+  // không thấy một mệnh lệnh nào, im lặng hoàn toàn, không phải dữ liệu xấu
+  // đơn thuần như chu trình module/task/design.
+  const decisionEdges = new Map<string, readonly string[]>();
+  for (const [id, dec] of graph.decisions) decisionEdges.set(id, dec.value.supersedes);
+  const decisionCycle = findCycle(decisionEdges);
+  if (decisionCycle) {
+    const head = graph.decisions.get(decisionCycle[0]!)!;
+    diags.push({
+      severity: "error",
+      code: "spine/decision-cycle",
+      message: `vòng lặp thay thế giữa các decision: ${decisionCycle.join(" → ")}`,
+      file: head.file,
+      line: at(graph, head, "supersedes"),
+      hint: `Chu trình khiến brief loại cả cụm decision khỏi bàn giao — không phiên nào thấy được.`,
+    });
+  }
+
   /* --- Goal không ai phục vụ ------------------------------------------- */
 
   const servedGoals = new Set<string>();
