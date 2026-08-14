@@ -22,6 +22,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   init: () => import("./commands/init.js"),
   validate: () => import("./commands/validate.js"),
   scope: () => import("./commands/scope.js"),
+  id: () => import("./commands/id.js"),
   brief: () => import("./commands/brief.js"),
   next: () => import("./commands/next.js"),
   gate: () => import("./commands/gate.js"),
@@ -44,6 +45,7 @@ Lệnh:
   init                 Khởi tạo .ganas/ cho dự án mới (greenfield)
   validate             Kiểm tra graph: schema, liên kết, luật spine
   scope [new|assign]   Phạm vi công việc: liệt kê, tạo mới (phỏng vấn), vá chỗ quên khai
+  id <loại>            Cấp id kế tiếp (goal/design/task/claim/decision/fact)
   next                 Chọn task kế tiếp và in brief đầy đủ
   brief [task]         In brief của một task
   gate [task]          Chấm điều kiện hoàn thành của task

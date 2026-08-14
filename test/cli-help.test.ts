@@ -25,6 +25,7 @@ const EXPECTED_COMMANDS = [
   "init",
   "validate",
   "scope",
+  "id",
   "brief",
   "next",
   "gate",

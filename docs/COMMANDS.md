@@ -96,13 +96,14 @@ ganas --help          # menu lệnh đầy đủ
 ### `ganas init`
 
 Khởi tạo `.ganas/` cho dự án mới (greenfield): tạo cây thư mục con
-(`goals/`, `sprints/`, `designs/`, `tasks/`, `parts/`, `modules/`, `facts/`,
+(`goals/`, `designs/`, `tasks/`, `scopes/`, `modules/`, `facts/`,
 `claims/`, `decisions/`, `domains/`, `legacy-imported/`, `map-surveys/`,
 `proposals/`, `runs/`), `config.yaml`, `state.json`, `.ganas/README.md`,
 `.claude/rules/ganas-knowledge.md`, `.claude/rules/architecture.md`,
 `.claude/rules/ganas-git.md` (tag semver, ký commit local, không
-Co-Authored-By), `CLAUDE.md`/`AGENTS.md`, một goal mẫu (`G-001`) và một
-sprint mẫu, thêm mục `.ganas/runs/` vào `.gitignore` nếu dự án dùng git, và
+Co-Authored-By), `CLAUDE.md`/`AGENTS.md`, một goal mẫu (`G-001`) — không sinh
+phạm vi mẫu, nó cần ranh giới code thật mà chỉ `ganas scope new` mới hỏi
+được — thêm mục `.ganas/runs/` vào `.gitignore` nếu dự án dùng git, và
 — nếu dự án dùng git — sinh `.githooks/commit-msg` (tự xoá dòng
 `Co-Authored-By` nhắc AI khỏi mọi commit) rồi bật bằng
 `git config core.hooksPath .githooks`.
@@ -241,11 +242,52 @@ ganas scope assign          # xem trước
 ganas scope assign --write  # ghi thật
 ```
 
+### `ganas id <loại>`
+
+Cấp id kế tiếp cho một loại đánh số, để agent không còn lý do đi bịa nhãn tạm
+("Lô 3", "T4a", "$3") — tự liệt kê `.ganas/tasks/` rồi đoán số kế tiếp quá đắt
+để làm mỗi lần nhắc tới một task mới.
+
+Chỉ nhận loại **đánh số** (tiền tố cố định + số tăng dần): `goal`, `design`,
+`task`, `claim`, `decision`, `fact`. Loại **đặt tên theo nghĩa** (`module`,
+`scope`, `verification`) không có "id kế tiếp" nào để cấp — lệnh từ chối và
+trỏ sang `ganas scope new`, nơi id được suy từ tiêu đề.
+
+**Đối số định vị:** `<loại>` — bắt buộc, một trong sáu loại đánh số ở trên.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--count <n>` | Số id liên tiếp cần cấp, mỗi id một dòng. Mặc định `1`. |
+| `--group <nhóm>` | **Bắt buộc** khi `<loại>` là `fact` — id fact có thêm đoạn nhóm ở giữa (`F-<NHÓM>-003`), phải khớp `^[A-Z0-9]+$`. |
+| `--json` | Xuất `{ kind, group?, ids: [...] }`. |
+
+**Giới hạn đã biết — chỉ là GỢI Ý, không phải KHOÁ.** Lệnh này không ghi file
+nào cả, chỉ tính số lớn nhất đang dùng trong graph rồi +1 và in ra; việc ghi
+file task/fact/... do agent tự làm bằng công cụ Write. `ganas scope new`
+chống trùng id bằng cách ghi file với cờ `wx` (từ chối ghi đè nếu đã tồn tại);
+`ganas id` không có lớp đó. Hai phiên gọi `ganas id task` gần như đồng thời sẽ
+nhận **cùng một số** — phiên ghi file sau sẽ **ghi đè âm thầm** lên file của
+phiên trước, và luật `load/duplicate-id` không bắt được vì trên đĩa rốt cuộc
+chỉ còn một file. Đừng dựa vào lệnh này để chống đua giữa các phiên song song.
+
+**Mã thoát:** `0` khi cấp được id; `1` (`GanasError`) nếu thiếu `<loại>`,
+loại không tồn tại, loại là slug (`module`/`scope`/`verification`), `fact`
+thiếu `--group`, `--group` sai dạng, hoặc `--count` không phải số nguyên
+dương.
+
+**Ví dụ:**
+```
+ganas id task                  # T-017
+ganas id task --count 4        # bốn id liên tiếp, mỗi id một dòng
+ganas id fact --group ACC      # F-ACC-003
+ganas id task --json           # {"kind":"task","ids":["T-017"]}
+```
+
 ### `ganas next`
 
 Chọn task kế tiếp nên làm và in brief đầy đủ của task đó. Ưu tiên task đang
 `in_progress` (nối tiếp việc dở trước khi mở việc mới), rồi tới task thuộc
-sprint đang `active`; task không còn `blocked_by` mở nào mới được xét. Ghi
+phạm vi đang `active`; task không còn `blocked_by` mở nào mới được xét. Ghi
 lại lựa chọn vào `state.json` (hoặc gắn với `--session` nếu có) để `ganas
 brief`/`gate`/hook sau đó biết đang làm task nào.
 
@@ -463,11 +505,10 @@ ganas handoff --session sess-42 --task T-014 --transcript ./transcript.jsonl
 
 Dọn `.ganas/`: **xoá thẳng** ephemeral cục bộ (handoff cũ của phiên đã kết
 thúc trong `runs/`, session mồ côi trong `state.json`); **archive** (dời
-file, giữ git history) task `done` sang `tasks/done/` và sprint `closed`
-sang `sprints/closed/` nếu đủ tuổi và không còn bị tham chiếu (`blocked_by`,
-sprint đang dùng). Không đụng tới dữ liệu vĩnh viễn (`verify-ledger.jsonl`,
-`claims/`, `decisions/`, `facts/`). **Mặc định chỉ xem trước (dry-run)**,
-không đụng đĩa.
+file, giữ git history) task `done` sang `tasks/done/` nếu đủ tuổi và không
+còn bị tham chiếu (`blocked_by`). Không đụng tới dữ liệu vĩnh viễn
+(`verify-ledger.jsonl`, `claims/`, `decisions/`, `facts/`, phạm vi công việc
+dù đã `delivered`). **Mặc định chỉ xem trước (dry-run)**, không đụng đĩa.
 
 Không có đối số định vị.
 
@@ -475,7 +516,7 @@ Không có đối số định vị.
 |---|---|
 | `--older-than <ngày>` | Ngưỡng tuổi để coi là "cũ" đủ để dọn/archive. Mặc định `7`. |
 | `--yes, -y` | Thực thi thật kế hoạch dọn dẹp thay vì chỉ in ra (mặc định). |
-| `--json` | Xuất kế hoạch dọn dẹp (`staleRuns`, `deadSessions`, `doneTasks`, `closedSprints`) kèm `applied`. |
+| `--json` | Xuất kế hoạch dọn dẹp (`staleRuns`, `deadSessions`, `doneTasks`) kèm `applied`. |
 
 **Mã thoát:** luôn `0` — kể cả dry-run và kể cả khi không có gì cần dọn.
 
