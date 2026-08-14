@@ -29,6 +29,13 @@ triển thật, không phải số phát minh ra sau).
     `touched_paths` — kiểm này im lặng. Vắng cảnh báo không phải bằng chứng đã
     ở trong ranh giới.
 
+- **`plan-to-tasks` dạy luật "tiêu chí phải ĐỎ lúc viết task"** — luật này vốn
+  đã được cưỡng chế bằng máy (`recordBaseline` chụp baseline lúc `ganas next
+  --session`, `alreadyGreen` đối chiếu lúc chấm gate), nhưng chỉ nổ ra SAU KHI
+  task đã viết xong. Giờ nó được nói ngay ở chỗ chẻ task, kèm ca hay gặp nhất:
+  task sửa bug mà tiêu chí là `npm test` — cả bộ test đang xanh sẵn nên tiêu
+  chí đó không gác gì cả. `docs/CONCEPTS.md` mô tả cơ chế baseline tương ứng.
+
 ## v0.2.2 — 2026-08-09
 
 Năm mục nhẹ còn lại của cùng đợt báo cáo đã vá ở `v0.2.1`. Cả năm đều được kiểm

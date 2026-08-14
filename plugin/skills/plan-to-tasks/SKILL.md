@@ -27,6 +27,17 @@ context của phiên này.
      `kind: verification` kiểm nó (luật `spine/task-missing-verification`,
      đã có sẵn — không viết luật mới).
 
+   Có tiêu chí thôi chưa đủ: mỗi tiêu chí phải **ĐỎ ngay lúc viết task**.
+   Xanh sẵn thì nó không gác gì — task có thể "xong" mà chẳng ai phải sửa
+   dòng nào. Trước khi ghi task xuống, chạy thử chính lệnh trong `run:`; nếu
+   nó đạt ngay, viết lại tiêu chí tới khi nó đòi đúng thứ task này sắp tạo
+   ra. Ca hay gặp nhất: task sửa bug mà tiêu chí là `npm test` — cả bộ test
+   đang xanh sẵn nên tiêu chí này không gác gì cả; đúng phải là một test
+   *tái hiện được bug*, đỏ bây giờ và chỉ xanh sau khi sửa. `ganas next
+   --session` có chụp baseline và cảnh báo chuyện này, nhưng lúc đó task đã
+   viết xong — vá ở đây, lúc chẻ, rẻ hơn nhiều. **Một gate tự xanh trước khi
+   sửa là gate không tồn tại.**
+
 4. **Gán `model` cho MỌI task, ngay lúc chẻ.** Field `Task.model`, một trong
    ba tier có sẵn trong `config.yaml` (`main`/`verifier`/`scribe`):
    - `main` — việc thật sự khó/mơ hồ, cần phán đoán nhiều.

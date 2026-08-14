@@ -144,6 +144,17 @@ chạy `ganas verify` lên khối vừa sửa. Đây chính là điều luật
 vào nó (hoặc vào `${moduleId}/${verificationId}` của nó) trong
 `exit_contract`.
 
+Có mặt trong `exit_contract` chưa đủ để một tiêu chí gác được gì: nó còn phải
+**đang trượt (đỏ)** tại thời điểm task được ghi xuống, nếu không thì nó xanh
+sẵn và không kiểm chứng được rằng task đã làm ra thay đổi nào. `ganas next
+--session` thực hiện việc phát hiện này: `recordBaseline()` (`src/commands/next.ts`)
+chạy `evaluateGate()` ngay lúc phiên nhận task rồi lưu kết quả `pass/fail` của
+từng tiêu chí vào `state.sessions[id].baseline`; `alreadyGreen()`
+(`src/gate.ts`) so kết quả gate lúc kết thúc với baseline đó để báo tiêu chí
+nào đã xanh **từ trước khi phiên bắt đầu**. `ganas gate` in cảnh báo này ở
+cuối phiên; lúc đó việc sửa `exit_contract` đã tốn công hơn nhiều so với sửa
+ngay lúc chẻ task (xem `plugin/skills/plan-to-tasks/SKILL.md`).
+
 Các field khác của Task:
 - **`touches`**: mảng Module ID — điểm nối giữa trục VIỆC (task) và trục HỆ
   THỐNG (sơ đồ khối). Chạm khối nào thì phải để lại bằng chứng cho khối đó.
