@@ -75,6 +75,37 @@ test("⭐ config.yaml mới sinh ra (ganas init) không còn field embedder ch�
   assert.doesNotMatch(yaml, /embedder/, "template không được ghi field không ai đọc");
 });
 
+test("⭐ khoá gõ sai (enforcment) → cảnh báo spine/config-unknown-key, loadGraph KHÔNG ném", async () => {
+  await withConfig(`version: 1\nproject: "x"\nenforcment: enforce\n`, async (root) => {
+    const graph = await loadGraph(root);
+    const diag = graph.loadDiagnostics.find((d) => d.code === "spine/config-unknown-key");
+    assert.ok(diag, "phải có diagnostic cho khoá lạ enforcment");
+    assert.equal(diag?.severity, "warning");
+    assert.match(diag.message, /enforcment/);
+  });
+});
+
+test("⭐ field embedder (đã bỏ khỏi schema) → cảnh báo nói 'đã bỏ', không phải 'không nhận ra'", async () => {
+  await withConfig(
+    `version: 1\nproject: "x"\nembedder:\n  provider: voyage\n  model: voyage-3\n`,
+    async (root) => {
+      const graph = await loadGraph(root);
+      const diag = graph.loadDiagnostics.find((d) => d.code === "spine/config-unknown-key");
+      assert.ok(diag, "phải có diagnostic cho embedder");
+      assert.match(diag.message, /đã bỏ/, "phải nói field đã bỏ, không phải khoá lạ vô danh");
+      assert.doesNotMatch(diag.message, /không nhận ra/, "đừng đổ đồng với khoá gõ sai vô danh");
+    },
+  );
+});
+
+test("⭐ config sạch (chỉ khoá hợp lệ) → không có diagnostic spine/config-unknown-key", async () => {
+  await withConfig(`version: 1\nproject: "x"\nenforcement: enforce\n`, async (root) => {
+    const graph = await loadGraph(root);
+    const diag = graph.loadDiagnostics.find((d) => d.code === "spine/config-unknown-key");
+    assert.equal(diag, undefined);
+  });
+});
+
 test("lỗi config khác version vẫn giữ thông điệp cũ", async () => {
   await withConfig(`version: 1\nproject: ""\n`, async (root) => {
     await assert.rejects(

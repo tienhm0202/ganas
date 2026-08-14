@@ -37,6 +37,54 @@ function issuesToDiagnostics(
   }));
 }
 
+/**
+ * Field từng có trong `zConfig`, đã bị bỏ khỏi schema — báo khác với khoá lạ
+ * vô danh, vì người đọc không gõ sai, họ đang mang một config từ bản cũ.
+ *
+ * `embedder` bị xoá ở commit 7c62e28 (v0.3.x). Không xoá lịch sử ở đây khi
+ * field mới bị bỏ tiếp — danh sách chỉ lớn dần, và mỗi dòng cứu một dự án cũ
+ * khỏi bị coi là gõ sai.
+ */
+const REMOVED_CONFIG_KEYS: Record<string, string> = {
+  embedder: "field này đã bỏ ở v0.3.x, không còn tác dụng — xoá dòng đó đi cho sạch.",
+};
+
+/**
+ * Đối chiếu khoá thật trong config.yaml với `zConfig.shape` — nơi DUY NHẤT
+ * còn thấy object YAML thô của config, trước khi `zConfig.safeParse` lọc
+ * sạch khoá lạ (`zConfig` không `.strict()`, cố ý — xem test/config-version.test.ts).
+ *
+ * Khoá lạ là CẢNH BÁO, không phải lỗi chặn: config cũ vẫn phải load được.
+ * Nhưng im lặng bỏ qua thì `enforcment: enforce` (thiếu một chữ `e`) không ai
+ * biết — dự án chạy không hàng rào trong khi người viết tin là đang cưỡng chế.
+ */
+function configKeyDiagnostics(loaded: LoadedYaml, root: string, configFile: string): Diagnostic[] {
+  const raw = loaded.value;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return [];
+
+  const known = new Set(Object.keys(zConfig.shape));
+  const file = relative(root, configFile) || configFile;
+  const diagnostics: Diagnostic[] = [];
+
+  for (const key of Object.keys(raw)) {
+    if (known.has(key)) continue;
+
+    const removed = REMOVED_CONFIG_KEYS[key];
+    diagnostics.push({
+      severity: "warning",
+      code: "spine/config-unknown-key",
+      message: removed
+        ? `config.yaml có field \`${key}\`: ${removed}`
+        : `config.yaml có khoá lạ \`${key}\` — ganas không nhận ra, có thể do gõ sai tên field.`,
+      file,
+      line: lineOfPath(loaded, [key]),
+      hint: removed ?? `Khoá hợp lệ: ${[...known].sort().join(", ")}.`,
+    });
+  }
+
+  return diagnostics;
+}
+
 async function listYaml(dir: string): Promise<string[]> {
   if (!existsSync(dir)) return [];
   const entries = await readdir(dir, { withFileTypes: true });
@@ -193,6 +241,8 @@ export async function loadGraph(root: string): Promise<Graph> {
     );
   }
 
+  const configDiagnostics = configKeyDiagnostics(loadedConfig, root, configFile);
+
   const ledgerRaw = await readLedger(root);
   const ledger = indexByTarget(ledgerRaw);
 
@@ -240,6 +290,7 @@ export async function loadGraph(root: string): Promise<Graph> {
       ...decisions.sources,
     ]),
     loadDiagnostics: [
+      ...configDiagnostics,
       ...goals.diagnostics,
       ...designs.diagnostics,
       ...tasks.diagnostics,
