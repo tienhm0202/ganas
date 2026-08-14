@@ -26453,6 +26453,26 @@ function issuesToDiagnostics(loaded, issues, root) {
     line: lineOfPath(loaded, issue2.path)
   }));
 }
+function configKeyDiagnostics(loaded, root, configFile) {
+  const raw = loaded.value;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return [];
+  const known = new Set(Object.keys(zConfig.shape));
+  const file = relative2(root, configFile) || configFile;
+  const diagnostics = [];
+  for (const key of Object.keys(raw)) {
+    if (known.has(key)) continue;
+    const removed = REMOVED_CONFIG_KEYS[key];
+    diagnostics.push({
+      severity: "warning",
+      code: "spine/config-unknown-key",
+      message: removed ? `config.yaml c\xF3 field \`${key}\`: ${removed}` : `config.yaml c\xF3 kho\xE1 l\u1EA1 \`${key}\` \u2014 ganas kh\xF4ng nh\u1EADn ra, c\xF3 th\u1EC3 do g\xF5 sai t\xEAn field.`,
+      file,
+      line: lineOfPath(loaded, [key]),
+      hint: removed ?? `Kho\xE1 h\u1EE3p l\u1EC7: ${[...known].sort().join(", ")}.`
+    });
+  }
+  return diagnostics;
+}
 async function listYaml(dir) {
   if (!existsSync5(dir)) return [];
   const entries = await readdir2(dir, { withFileTypes: true });
@@ -26565,6 +26585,7 @@ async function loadGraph(root) {
       `${where(first.path)}: config kh\xF4ng h\u1EE3p l\u1EC7 \u2014 ${first.path.join(".")}: ${first.message}`
     );
   }
+  const configDiagnostics = configKeyDiagnostics(loadedConfig, root, configFile);
   const ledgerRaw = await readLedger(root);
   const ledger = indexByTarget(ledgerRaw);
   const gitignoreFile = join6(root, ".gitignore");
@@ -26609,6 +26630,7 @@ async function loadGraph(root) {
       ...decisions.sources
     ]),
     loadDiagnostics: [
+      ...configDiagnostics,
       ...goals.diagnostics,
       ...designs.diagnostics,
       ...tasks.diagnostics,
@@ -26620,6 +26642,7 @@ async function loadGraph(root) {
     ]
   };
 }
+var REMOVED_CONFIG_KEYS;
 var init_load = __esm({
   "src/graph/load.ts"() {
     "use strict";
@@ -26628,6 +26651,9 @@ var init_load = __esm({
     init_yaml();
     init_ledger();
     init_paths();
+    REMOVED_CONFIG_KEYS = {
+      embedder: "field n\xE0y \u0111\xE3 b\u1ECF \u1EDF v0.3.x, kh\xF4ng c\xF2n t\xE1c d\u1EE5ng \u2014 xo\xE1 d\xF2ng \u0111\xF3 \u0111i cho s\u1EA1ch."
+    };
   }
 });
 
@@ -36829,12 +36855,12 @@ var StdioServerTransport = class {
 init_zod();
 
 // src/commands/commit.ts
-var import_yaml4 = __toESM(require_dist2(), 1);
+var import_yaml5 = __toESM(require_dist2(), 1);
 init_boundary();
-import { existsSync as existsSync6 } from "node:fs";
+import { existsSync as existsSync7 } from "node:fs";
 import { mkdtemp as mkdtemp2, readFile as readFile8, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 
 // src/commit.ts
 function buildCommitMessage(graph, task, gate) {
@@ -37094,268 +37120,382 @@ async function volatileStatus(root) {
   return lines.join("\n");
 }
 
-// src/commands/commit.ts
-function quote(p) {
-  return `'${p.replace(/'/g, `'\\''`)}'`;
-}
-function parsePorcelainZ(stdout) {
-  const fields = stdout.split("\0");
-  const entries = [];
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i];
-    if (!field || field.length < 4) continue;
-    const x = field[0];
-    const y = field[1];
-    entries.push({ x, y, path: field.slice(3) });
-    if (x === "R" || x === "C" || y === "R" || y === "C") {
-      const other = fields[++i];
-      if (other) entries.push({ x, y, path: other });
-    }
+// src/debt.ts
+var SCORES = {
+  /* --- spine: design ---------------------------------------------------- */
+  // Liên kết treo (design → goal/decision/design khác không tồn tại): phá vỡ
+  // giả định mà brief/trace dựa vào để suy luận, nhưng cách sửa hầu hết là
+  // trỏ lại đúng ID hoặc tạo bản ghi thiếu — một sửa đổi YAML nhỏ.
+  "spine/design-missing-goal": { weight: 3, ease: 5 },
+  "spine/design-missing-decision": { weight: 3, ease: 5 },
+  "spine/design-missing-supersede": { weight: 3, ease: 5 },
+  // Thông tin quy trình (goal chưa duyệt, design mồ côi vì goal đã closed) —
+  // không sai lệch gì, chỉ nhắc một trạng thái đang chờ.
+  "spine/design-serves-draft-goal": { weight: 1, ease: 3 },
+  "spine/design-orphaned": { weight: 1, ease: 5 },
+  /* --- spine: task -------------------------------------------------------- */
+  "spine/task-missing-goal": { weight: 3, ease: 5 },
+  "spine/task-missing-design": { weight: 3, ease: 5 },
+  "spine/task-goal-not-in-design": { weight: 3, ease: 5 },
+  "spine/task-missing-blocker": { weight: 3, ease: 5 },
+  "spine/task-missing-module": { weight: 3, ease: 5 },
+  // Task "chạm khối" mà không có tiêu chí verification kiểm khối đó — task
+  // "done" được mà chưa ai chạy verify: đúng nghĩa "sinh kết luận sai". Sửa
+  // cần thêm một mục exit_contract, đôi khi phải viết bằng chứng mới cho khối.
+  "spine/task-missing-verification": { weight: 3, ease: 3 },
+  // Thiếu `model`: không ai quyết tier — không sai lệch dữ liệu, chỉ là ngỏ.
+  "spine/task-missing-model": { weight: 1, ease: 5 },
+  // "large": rủi ro compact giữa chừng làm tri thức mất/méo — hỏng nền của
+  // chính phiên đó. Sửa = chẻ nhỏ task, một việc thiết kế lại thật sự.
+  "spine/task-too-large": { weight: 3, ease: 1 },
+  /* --- scope: task/module/phạm vi ----------------------------------------- */
+  "scope/task-scope-not-found": { weight: 3, ease: 5 },
+  // Có cả lối sửa nhanh (thêm khối vào phạm vi) lẫn lối phải chẻ task — chấm
+  // ở mức giữa.
+  "scope/task-touches-outside-scope": { weight: 3, ease: 3 },
+  "scope/missing-module": { weight: 3, ease: 5 },
+  // Phạm vi active mà thiếu tiêu chí nghiệm thu / chưa ai ký: "bàn giao xong"
+  // trở thành ý kiến — cùng nhóm "sinh kết luận sai". Thiếu owner sửa bằng
+  // một dòng; thiếu acceptance phải viết tiêu chí thật.
+  "scope/without-acceptance": { weight: 3, ease: 3 },
+  "scope/without-owner": { weight: 1, ease: 5 },
+  "scope/module-without-scope": { weight: 1, ease: 5 },
+  "scope/module-scope-not-found": { weight: 3, ease: 5 },
+  "scope/module-scope-mismatch": { weight: 3, ease: 5 },
+  // Khối không nối được vào sơ đồ của phạm vi — không có sẵn "lối sửa nhanh"
+  // đúng: nối depends_on nghĩa là quyết định lại kiến trúc luồng.
+  "scope/module-orphaned": { weight: 1, ease: 1 },
+  /* --- sơ đồ khối --------------------------------------------------------- */
+  "spine/module-missing-dependency": { weight: 3, ease: 5 },
+  // Có lối sửa nhanh (đổi `to`) nhưng cũng có thể cần tạo khối mới.
+  "spine/contract-missing-target": { weight: 3, ease: 5 },
+  // Khối chưa có bằng chứng nào — mọi luồng qua nó "không tin được": sinh kết
+  // luận sai. Sửa cần viết một bằng chứng (probe/eval) thật, không phải một
+  // dòng YAML.
+  "verify/module-unverified": { weight: 3, ease: 3 },
+  // Eval yếu (ngưỡng/dataset đáng ngờ) đóng dấu xanh giả — cùng mức độ hại,
+  // sửa cần cải lại dataset/ngưỡng.
+  "verify/eval-weak": { weight: 3, ease: 3 },
+  /* --- chu trình: chỉ sửa được bằng cách thiết kế lại phụ thuộc ----------- */
+  "spine/module-cycle": { weight: 3, ease: 1 },
+  "spine/task-cycle": { weight: 3, ease: 1 },
+  "spine/design-cycle": { weight: 3, ease: 1 },
+  // Chu trình decision KHÁC hẳn ba cái trên, cả hai trục — đừng chấm theo họ
+  // hàng, chấm theo hậu quả:
+  //
+  // weight 4: chu trình module/task/design là cấu trúc phụ thuộc sai, nhìn ra
+  // được. Chu trình decision làm brief loại CẢ CỤM khỏi mục "không được đi
+  // ngược" — phiên làm việc không thấy MỘT ràng buộc nào, và không có dấu hiệu
+  // gì cho biết có thứ đã bị nuốt. Im lặng tệ hơn sai.
+  //
+  // ease 5: hai decision khai `supersedes` trỏ vòng vào nhau gần như luôn là
+  // gõ nhầm, không phải thiết kế sai — xoá một dòng YAML là xong. Khác chu
+  // trình module/task, nơi vòng lặp phản ánh phụ thuộc thật phải gỡ.
+  "spine/decision-cycle": { weight: 4, ease: 5 },
+  /* --- goal ----------------------------------------------------------------- */
+  // Goal active không design nào phục vụ: rủi ro ở tương lai (không có đường
+  // đi tới hành động), chưa gây kết luận sai ngay bây giờ. Sửa cần viết một
+  // design mới — không phải chỉ đổi một trường.
+  "spine/goal-without-design": { weight: 1, ease: 3 },
+  /* --- tri thức: fact --------------------------------------------------- */
+  // Khai đã verify nhưng sổ cái không có bản ghi khớp — lần verify đó KHÔNG
+  // xảy ra: chính là ví dụ "sinh kết luận sai" trong đề bài. Sửa = chạy lại
+  // `ganas verify`.
+  "knowledge/unbacked-verification": { weight: 3, ease: 3 },
+  // Định nghĩa đổi sau lần verify cuối — kết quả cũ đang nói về một thứ khác.
+  "knowledge/definition-changed": { weight: 3, ease: 3 },
+  "knowledge/result-mismatch": { weight: 3, ease: 3 },
+  // Chưa verify lần nào: trung thực về tình trạng của nó (không giả vờ đã
+  // kiểm), nên weight thấp hơn hẳn hai mã phía trên — nhưng vẫn phải CHẠY
+  // verify thật để sửa, không phải sửa YAML.
+  "knowledge/fact-never-verified": { weight: 1, ease: 3 },
+  // Probe fail ở lần chạy gần nhất — phát biểu ĐANG sai, đang chủ động đánh
+  // lừa bất kỳ ai đọc fact này. Sửa cần điều tra statement hay code sai.
+  "knowledge/fact-failing": { weight: 3, ease: 3 },
+  "knowledge/fact-missing-promoted-from": { weight: 1, ease: 5 },
+  "knowledge/claim-missing-promoted-fact": { weight: 3, ease: 5 },
+  // Claim bị bác bỏ: giữ lại làm thông tin ("đừng tin lại"), không có gì để
+  // "sửa" — ví dụ đúng nguyên văn của đề bài.
+  "knowledge/claim-refuted": { weight: 1, ease: 5 },
+  "knowledge/task-missing-fact": { weight: 3, ease: 5 },
+  /* --- sổ cái hỏng: mất dữ liệu / hỏng nền -------------------------------- */
+  "knowledge/ledger-corrupt": { weight: 5, ease: 1 },
+  "knowledge/ledger-chain-broken": { weight: 5, ease: 1 },
+  /* --- .gitignore: rò rỉ state riêng vào git ------------------------------ */
+  "spine/gitignore-missing-local": { weight: 3, ease: 5 },
+  /* --- load: config/YAML/ID trùng ----------------------------------------- */
+  // Khoá lạ trong config.yaml (vd gõ sai "enforcment") có thể âm thầm tắt một
+  // hàng rào mà người viết tưởng đang bật — sinh kết luận sai đúng nghĩa.
+  "spine/config-unknown-key": { weight: 3, ease: 5 },
+  // YAML không đọc được / ID trùng bị bỏ qua: cả bản ghi biến mất khỏi graph
+  // KHÔNG một tiếng động — downstream coi như nó chưa từng tồn tại.
+  "load/yaml": { weight: 3, ease: 5 },
+  "load/duplicate-id": { weight: 3, ease: 5 },
+  /* --- computeDebt: nợ riêng của sơ đồ khối (DebtKind, không có "/") ------ */
+  // Cạnh `depends_on` không cạnh contract nào kiểm — sơ đồ TRÔNG như đã nối
+  // nhưng chưa ai kiểm tương thích thật.
+  "uncovered-edge": { weight: 3, ease: 3 },
+  // Cạnh contract ĐANG fail — tích hợp giữa hai khối thật sự đang gãy ngay
+  // lúc này, không phải nguy cơ tương lai: cùng hạng với sổ cái hỏng.
+  "broken-contract": { weight: 5, ease: 3 },
+  // Trùng điều kiện với `verify/module-unverified` (khối chưa có bằng chứng
+  // nào) — chấm giống nhau cho nhất quán.
+  "unverified-module": { weight: 3, ease: 3 }
+};
+var NAMESPACE_DEFAULTS = {
+  schema: { weight: 3, ease: 5 },
+  verify: { weight: 3, ease: 3 }
+};
+function scoreOf(code) {
+  const exact = SCORES[code];
+  if (exact) return exact;
+  const slash = code.indexOf("/");
+  if (slash > 0) {
+    const fallback = NAMESPACE_DEFAULTS[code.slice(0, slash)];
+    if (fallback) return fallback;
   }
-  return entries;
-}
-function notFullyStaged(e) {
-  return e.x === "?" || e.y !== " ";
-}
-function ownedPaths(task, entries) {
-  return [...new Set(entries.filter((e) => ownsGanasFile(task, e.path)).map((e) => e.path))];
-}
-function foreignPaths(task, entries) {
-  return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
-}
-async function changedUnder(root, pathspec) {
-  if (pathspec.length === 0) return [];
-  const spec = pathspec.map(quote).join(" ");
-  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
-    cwd: root,
-    timeoutMs: 15e3
-  });
-  if (res.code !== 0) return [];
-  return parsePorcelainZ(res.stdout);
-}
-async function closeTaskFile(root, sourced) {
-  const file = join7(root, sourced.file);
-  const original = await readFile8(file, "utf8");
-  const doc = (0, import_yaml4.parseDocument)(original);
-  const base2 = sourced.index === void 0 ? [] : [sourced.index];
-  doc.setIn([...base2, "status"], "done");
-  doc.setIn([...base2, "done_at"], (/* @__PURE__ */ new Date()).toISOString());
-  await writeFile3(file, doc.toString(), "utf8");
-  return original;
-}
-function reportBaseline(gate, baseline) {
-  const green = alreadyGreen(gate, baseline);
-  if (green.length === 0) return "";
-  return `
-\u26A0 ${green.length} ti\xEAu ch\xED \u0111\xE3 XANH S\u1EB4N t\u1EEB tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u task:
-` + green.map((r) => `    ${r.label}`).join("\n") + `
-  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC.
-  M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
-`;
-}
-async function run(argv) {
-  const { root, graph, freshness } = await openProject(argv);
-  const sessionId = option(argv, "session");
-  const taskId = argv.positional[0] ?? option(argv, "task") ?? await taskForSession(root, sessionId);
-  if (!taskId) throw new GanasError("ch\u01B0a bi\u1EBFt \u0111ang l\xE0m task n\xE0o \u2014 ch\u1EA1y `ganas next` tr\u01B0\u1EDBc");
-  const sourced = graph.tasks.get(taskId);
-  if (!sourced) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
-  const task = sourced.value;
-  const chain = verifyChain(graph.ledgerRaw);
-  if (!chain.ok) {
-    throw new GanasError(
-      `hash-chain c\u1EE7a s\u1ED5 c\xE1i x\xE1c minh \u0111\u1EE9t \u1EDF d\xF2ng ${(chain.brokenAt ?? 0) + 1} (.ganas/verify-ledger.jsonl).
-S\u1ED5 c\xE1i l\xE0 append-only: \u0111\u1EE9t chain ngh\u0129a l\xE0 c\xF3 d\xF2ng b\u1ECB s\u1EEDa, xo\xE1 ho\u1EB7c \u0111\u1EA3o th\u1EE9 t\u1EF1 sau khi ghi. Xem \`ganas ledger --check\` v\xE0 \`ganas validate\`, ph\u1EE5c h\u1ED3i t\u1EEB git tr\u01B0\u1EDBc khi commit ti\u1EBFp.`
-    );
-  }
-  const gateResult = await evaluateGate(graph, task, freshness, sessionId);
-  if (!gateResult.ok) {
-    process.stdout.write(
-      `Ch\u01B0a commit \u0111\u01B0\u1EE3c \u2014 \u0111i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh c\u1EE7a ${taskId} ch\u01B0a tho\u1EA3:
-
-${formatGate(gateResult)}
-`
-    );
-    return 1;
-  }
-  const baseline = await baselineFor(root, sessionId, taskId);
-  const baselineWarning = reportBaseline(gateResult, baseline);
-  const allGanas = flag(argv, "all-ganas");
-  const codePaths = taskBoundary(task, graph);
-  const touched = await touchedPathsFor(root, sessionId, taskId);
-  const outsideWarning = formatBoundaryWarning(
-    taskId,
-    codePaths,
-    touched,
-    outsideBoundary(task, graph, touched)
+  throw new Error(
+    `debt.ts: m\xE3 "${code}" kh\xF4ng c\xF3 \u0111i\u1EC3m trong SCORES v\xE0 kh\xF4ng kh\u1EDBp namespace m\u1EB7c \u0111\u1ECBnh n\xE0o (schema/*, verify/*) \u2014 th\xEAm v\xE0o SCORES ho\u1EB7c NAMESPACE_DEFAULTS trong src/debt.ts`
   );
-  const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
-  if (flag(argv, "dry-run")) {
-    const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
-    const owned2 = ownedPaths(task, ganasChanged2);
-    const foreign2 = foreignPaths(task, ganasChanged2);
-    const message2 = buildCommitMessage(graph, task, gateResult);
-    process.stdout.write(
-      `--- ganas commit ${taskId} (dry-run, KH\xD4NG stage, KH\xD4NG commit) ---
-
-S\u1EBD stage:
-` + [...allGanas ? [GANAS_DIR] : owned2, ...codePaths].map((p) => `  + ${p}`).join("\n") + (foreign2.length > 0 ? `
-
-\u0110\u1EC3 l\u1EA1i (kh\xF4ng thu\u1ED9c ${taskId}):
-` + foreign2.map((p) => `  \xB7 ${p}`).join("\n") : "") + (willClose ? `
-
-S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + outsideWarning + `
-
---- commit message ---
-${message2}`
-    );
-    return 0;
+}
+function rowMessage(row) {
+  return row.source.origin === "diagnostic" ? row.source.diagnostic.message : row.source.item.message;
+}
+function compareRows(a, b) {
+  if (b.total !== a.total) return b.total - a.total;
+  if (a.code !== b.code) return a.code < b.code ? -1 : 1;
+  const am = rowMessage(a);
+  const bm = rowMessage(b);
+  if (am !== bm) return am < bm ? -1 : 1;
+  return 0;
+}
+function scopeIndex(graph) {
+  const index = /* @__PURE__ */ new Map();
+  for (const task of graph.tasks.values()) index.set(task.file, task.value.scope);
+  for (const mod of graph.modules.values()) {
+    if (mod.value.scope !== void 0) index.set(mod.file, mod.value.scope);
   }
-  let originalTaskFile = null;
-  if (willClose) originalTaskFile = await closeTaskFile(root, sourced);
-  const ganasChanged = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
-  const owned = ownedPaths(task, ganasChanged);
-  const foreign = foreignPaths(task, ganasChanged);
-  for (const p of [...allGanas ? [GANAS_DIR] : owned, ...codePaths]) {
-    await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
-  }
-  const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
-  if (staged.code === 0) {
-    if (originalTaskFile !== null) {
-      await writeFile3(join7(root, sourced.file), originalTaskFile, "utf8");
-    }
-    process.stdout.write(
-      `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} \u0111ang s\u1EA1ch.
-` + (foreign.length > 0 ? `
-${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId}:
-` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
-Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBFu mu\u1ED1n g\u1ED9p.
-` : "") + outsideWarning
-    );
-    return 0;
-  }
-  const message = buildCommitMessage(graph, task, gateResult);
-  const dir = await mkdtemp2(join7(tmpdir2(), "ganas-commit-"));
-  try {
-    const msgFile = join7(dir, "MSG");
-    await writeFile3(msgFile, message, "utf8");
-    const result = await runShell(`git commit -F ${quote(msgFile)}`, {
-      cwd: root,
-      timeoutMs: 3e4
+  for (const fact of graph.facts.values()) index.set(fact.file, fact.value.scope);
+  for (const claim of graph.claims.values()) index.set(claim.file, claim.value.scope);
+  return index;
+}
+function scopeOfDebtItem(item, graph) {
+  if (item.moduleId === void 0) return void 0;
+  return graph.modules.get(item.moduleId)?.value.scope;
+}
+function debtRows(diagnostics, items, graph) {
+  const index = scopeIndex(graph);
+  const rows = [];
+  for (const diagnostic of diagnostics) {
+    const score = scoreOf(diagnostic.code);
+    rows.push({
+      code: diagnostic.code,
+      score,
+      total: score.weight + score.ease,
+      severity: diagnostic.severity,
+      scopeId: index.get(diagnostic.file),
+      source: { origin: "diagnostic", diagnostic }
     });
-    if (result.code !== 0) {
-      if (originalTaskFile !== null) {
-        await writeFile3(join7(root, sourced.file), originalTaskFile, "utf8");
+  }
+  for (const item of items) {
+    const score = scoreOf(item.kind);
+    rows.push({
+      code: item.kind,
+      score,
+      total: score.weight + score.ease,
+      severity: void 0,
+      scopeId: scopeOfDebtItem(item, graph),
+      source: { origin: "debt-item", item }
+    });
+  }
+  return rows.sort(compareRows);
+}
+function rowsInScope(rows, scopeId) {
+  return rows.filter((r) => r.scopeId === scopeId);
+}
+
+// src/graph/trace.ts
+init_exec();
+init_ledger();
+init_lint();
+function contractEdges(graph) {
+  const out = [];
+  for (const [id, sourced] of graph.modules) {
+    for (const v of sourced.value.verify) {
+      if (v.kind === "contract") {
+        out.push({
+          from: id,
+          to: v.to,
+          verificationId: v.id,
+          verification: v,
+          statement: sourced.value.title
+        });
       }
-      throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
-${result.stderr || result.stdout}`);
     }
-    process.stdout.write(
-      `\u2713 \u0110\xE3 commit cho ${taskId}.
-
-${message}` + (willClose ? `
-${taskId} \u0111\xE3 \u0111\xE1nh d\u1EA5u \`status: done\`.
-` : "") + (!willClose && gateResult.pendingHuman.length > 0 ? `
-${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn:
-` + gateResult.pendingHuman.map((p) => `  \u2026 ${p.label}`).join("\n") + `
-` : "") + reportUnstagedContract(task, await unstagedContractPaths(root, task)) + (foreign.length > 0 ? `
-${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
-` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
-Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
-` : "") + baselineWarning + outsideWarning
-    );
-    return 0;
-  } finally {
-    await rm2(dir, { recursive: true, force: true });
   }
+  return out;
 }
-async function unstagedContractPaths(root, task) {
-  const existing = contractPathRefs(task).filter((r) => existsSync6(join7(root, r.path)));
-  if (existing.length === 0) return [];
-  const changed = await changedUnder(
-    root,
-    existing.map((r) => r.path)
-  );
-  return [...new Set(changed.filter(notFullyStaged).map((e) => e.path))];
+function portIssues(from, to) {
+  const outputs = new Map(from.contract.outputs.map((p) => [p.name, p]));
+  const issues = [];
+  for (const input of to.contract.inputs) {
+    if (input.optional) continue;
+    const out = outputs.get(input.name);
+    if (!out) {
+      issues.push({
+        port: input.name,
+        reason: `${from.id} kh\xF4ng c\xF3 c\u1ED5ng ra t\xEAn "${input.name}" m\xE0 ${to.id} c\u1EA7n`
+      });
+      continue;
+    }
+    if (out.shape.trim() !== input.shape.trim()) {
+      issues.push({
+        port: input.name,
+        reason: `c\u1ED5ng "${input.name}" l\u1EC7ch ki\u1EC3u \u2014 ${from.id} xu\u1EA5t \`${out.shape}\`, ${to.id} c\u1EA7n \`${input.shape}\``
+      });
+    }
+  }
+  return issues;
 }
-function reportUnstagedContract(task, left) {
-  if (left.length === 0) return "";
-  const refs = contractPathRefs(task);
-  return `
-\u26A0 ${left.length} file m\xE0 \`exit_contract\` c\u1EE7a ${task.id} ch\u1EA1y v\u1EABn CH\u01AFA v\xE0o git:
-` + left.map((p) => {
-    const from = refs.find((r) => r.path === p)?.from;
-    return `  \xB7 ${p}${from ? `
-      ${from}` : ""}`;
-  }).join("\n") + `
-  Clone v\u1EC1 m\xE1y kh\xE1c, gate c\u1EE7a ${task.id} s\u1EBD \u0111\u1ECF. \`git add\` ch\xFAng r\u1ED3i commit ti\u1EBFp.
-`;
-}
-
-// src/flow.ts
-init_paths();
-
-// src/graph/select.ts
-function openBlockers(graph, task) {
-  return task.blocked_by.filter((id) => {
-    const blocker = graph.tasks.get(id);
-    return !blocker || blocker.value.status !== "done";
+async function checkEdge(graph, edge, root) {
+  const from = graph.modules.get(edge.from)?.value;
+  const to = graph.modules.get(edge.to)?.value;
+  if (!from || !to) {
+    const missing = !from ? edge.from : edge.to;
+    return {
+      edge,
+      result: "unprovable",
+      issues: [],
+      reason: `kh\u1ED1i ${missing} kh\xF4ng t\u1ED3n t\u1EA1i`
+    };
+  }
+  const issues = portIssues(from, to);
+  if (issues.length > 0) {
+    return { edge, result: "fail", issues, reason: issues.map((i) => i.reason).join("; ") };
+  }
+  const run8 = edge.verification.run;
+  if (!run8) return { edge, result: "pass", issues: [] };
+  const findings = lintProbe({
+    run: run8,
+    statement: `${from.id} \u2192 ${to.id}`,
+    context: [
+      ...from.contract.outputs.map((p) => p.name),
+      ...to.contract.inputs.map((p) => p.name)
+    ]
   });
+  if (hasBlockingFinding(findings)) {
+    const blocking = findings.filter((f) => f.severity === "error");
+    return {
+      edge,
+      result: "unprovable",
+      issues: [],
+      reason: blocking.map((f) => f.message).join("; ")
+    };
+  }
+  const result = await runShell(run8, { cwd: root, timeoutMs: 6e4 });
+  const verdict = judge(result, "exit_zero");
+  if (!verdict.pass) {
+    return { edge, result: "fail", issues: [], reason: verdict.reason };
+  }
+  return { edge, result: "pass", issues: [] };
 }
-function candidates(graph) {
-  return [...graph.tasks.values()].filter((t) => t.value.status !== "done").map((task) => ({ task, blockers: openBlockers(graph, task.value) }));
+async function checkAllEdges(graph, root) {
+  const edges = contractEdges(graph);
+  return Promise.all(edges.map((edge) => checkEdge(graph, edge, root)));
 }
-function rankedCandidates(graph, opts = {}) {
-  const open2 = candidates(graph).filter((c) => c.blockers.length === 0);
-  if (open2.length === 0) return [];
-  const rank = (c) => {
-    const t = c.task.value;
-    const scope = graph.scopes.get(t.scope)?.value;
-    let score = 0;
-    if (t.status === "in_progress") score -= 1e3;
-    if (scope?.status === "active") score -= 100;
-    if (scope?.status === "delivered") score += 100;
-    if (opts.preferScope !== void 0 && t.scope === opts.preferScope) score -= 50;
-    if (t.estimated_context === "small") score -= 1;
-    return score;
-  };
-  return open2.sort((a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id));
+async function recordEdgeChecks(graph, checks, opts) {
+  const ctx = await runContext(opts.root, opts.by);
+  for (const check2 of checks) {
+    if (check2.result === "unprovable") continue;
+    await appendEntry(opts.root, {
+      target: `${check2.edge.from}/${check2.edge.verificationId}`,
+      kind: "contract",
+      at: (/* @__PURE__ */ new Date()).toISOString(),
+      def: defHash(check2.edge.verification, check2.edge.statement),
+      result: check2.result,
+      output: check2.reason ? sha256(check2.reason) : void 0,
+      ...ctx
+    });
+  }
 }
-function selectNextTask(graph, opts = {}) {
-  return rankedCandidates(graph, opts)[0] ?? null;
+function nodeId(id) {
+  return id.replace(/[^A-Za-z0-9_]/g, "_");
 }
-function staticPrefix(glob) {
-  const cut = glob.search(/[*?[{]/);
-  const head = cut === -1 ? glob : glob.slice(0, cut);
-  const slash = head.lastIndexOf("/");
-  return slash === -1 ? "" : head.slice(0, slash + 1);
-}
-function pathsOverlap(a, b) {
-  for (const x of a.map(staticPrefix)) {
-    for (const y of b.map(staticPrefix)) {
-      if (x.startsWith(y) || y.startsWith(x)) return true;
+function renderDiagram(graph, opts = {}) {
+  const lines = ["flowchart LR"];
+  const inScope = /* @__PURE__ */ new Set();
+  for (const [scopeId, sourced] of graph.scopes) {
+    const sc = sourced.value;
+    lines.push(`  subgraph ${nodeId(scopeId)}["${scopeId} (${sc.version})"]`);
+    for (const moduleId of sc.modules) {
+      const mod = graph.modules.get(moduleId)?.value;
+      inScope.add(moduleId);
+      lines.push(`    ${nodeId(moduleId)}["${moduleLabel(moduleId, mod)}"]`);
+    }
+    lines.push("  end");
+  }
+  const loose = [...graph.modules.keys()].filter((id) => !inScope.has(id));
+  if (loose.length > 0) {
+    lines.push(`  subgraph unmapped["(ch\u01B0a g\xE1n ph\u1EA1m vi)"]`);
+    for (const moduleId of loose) {
+      lines.push(
+        `    ${nodeId(moduleId)}["${moduleLabel(moduleId, graph.modules.get(moduleId)?.value)}"]`
+      );
+    }
+    lines.push("  end");
+  }
+  for (const [id, sourced] of graph.modules) {
+    for (const dep of sourced.value.depends_on) {
+      lines.push(`  ${nodeId(dep)} --> ${nodeId(id)}`);
     }
   }
-  return false;
+  for (const edge of contractEdges(graph)) {
+    const key = `${edge.from}/${edge.verificationId}`;
+    const result = opts.edgeResults?.get(key);
+    const mark = result === "pass" ? "\u2713" : result === "fail" ? "\u2717" : result === void 0 ? "?" : result;
+    lines.push(`  ${nodeId(edge.from)} -.->|h\u1EE3p \u0111\u1ED3ng ${mark}| ${nodeId(edge.to)}`);
+  }
+  return lines.join("\n");
 }
-function taskPaths(graph, task) {
-  return task.touches.flatMap((id) => graph.modules.get(id)?.value.paths ?? []);
+function moduleLabel(id, mod) {
+  if (!mod) return `${id}<br/>? kh\u1ED1i m\u1ED3 c\xF4i`;
+  return `${id}<br/>${mod.nature} \xB7 ${mod.status}`;
 }
-function parallelCandidates(graph, task) {
-  const mine = new Set(task.touches);
-  const minePaths = taskPaths(graph, task);
-  if (task.touches.length === 0) return [];
-  return candidates(graph).filter((c) => {
-    const t = c.task.value;
-    if (t.id === task.id || c.blockers.length > 0) return false;
-    if (t.blocked_by.includes(task.id) || task.blocked_by.includes(t.id)) return false;
-    if (t.touches.length === 0) return false;
-    if (t.touches.some((m) => mine.has(m))) return false;
-    return !pathsOverlap(taskPaths(graph, t), minePaths);
-  }).map((c) => c.task).sort((a, b) => a.value.id.localeCompare(b.value.id));
-}
-function blockedTasks(graph) {
-  return candidates(graph).filter((c) => c.blockers.length > 0).sort((a, b) => a.task.value.id.localeCompare(b.task.value.id));
+function computeDebt(graph, checks) {
+  const items = [];
+  const checkedPairs = new Set(contractEdges(graph).map((e) => `${e.from}->${e.to}`));
+  for (const [id, sourced] of graph.modules) {
+    for (const dep of sourced.value.depends_on) {
+      if (!checkedPairs.has(`${dep}->${id}`)) {
+        items.push({
+          kind: "uncovered-edge",
+          edge: { from: dep, to: id },
+          message: `c\u1EA1nh ${dep} \u2192 ${id} c\xF3 trong depends_on nh\u01B0ng kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng \`kind: contract\` n\xE0o ki\u1EC3m n\xF3`
+        });
+      }
+    }
+  }
+  for (const check2 of checks) {
+    if (check2.result === "fail") {
+      items.push({
+        kind: "broken-contract",
+        moduleId: check2.edge.from,
+        edge: { from: check2.edge.from, to: check2.edge.to },
+        message: `h\u1EE3p \u0111\u1ED3ng ${check2.edge.from}/${check2.edge.verificationId} \u2192 ${check2.edge.to} TR\u01AF\u1EE2T: ${check2.reason ?? ""}`
+      });
+    }
+  }
+  for (const [id, sourced] of graph.modules) {
+    const m = sourced.value;
+    if (m.verify.length === 0 && m.status !== "unmapped") {
+      items.push({
+        kind: "unverified-module",
+        moduleId: id,
+        message: `kh\u1ED1i ${id} ch\u01B0a c\xF3 b\u1EB1ng ch\u1EE9ng n\xE0o`
+      });
+    }
+  }
+  return items;
 }
 
 // src/graph/validate.ts
@@ -37364,8 +37504,8 @@ init_yaml();
 init_ledger();
 init_lint();
 init_paths();
-import { existsSync as existsSync7 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync6 } from "node:fs";
+import { join as join7 } from "node:path";
 function at(graph, sourced, ...path) {
   const loaded = graph.sources.get(sourced.file);
   if (!loaded) return void 0;
@@ -37802,6 +37942,20 @@ function validateGraph(graph) {
       line: at(graph, head, "supersedes")
     });
   }
+  const decisionEdges = /* @__PURE__ */ new Map();
+  for (const [id, dec] of graph.decisions) decisionEdges.set(id, dec.value.supersedes);
+  const decisionCycle = findCycle(decisionEdges);
+  if (decisionCycle) {
+    const head = graph.decisions.get(decisionCycle[0]);
+    diags.push({
+      severity: "error",
+      code: "spine/decision-cycle",
+      message: `v\xF2ng l\u1EB7p thay th\u1EBF gi\u1EEFa c\xE1c decision: ${decisionCycle.join(" \u2192 ")}`,
+      file: head.file,
+      line: at(graph, head, "supersedes"),
+      hint: `Chu tr\xECnh khi\u1EBFn brief lo\u1EA1i c\u1EA3 c\u1EE5m decision kh\u1ECFi b\xE0n giao \u2014 kh\xF4ng phi\xEAn n\xE0o th\u1EA5y \u0111\u01B0\u1EE3c.`
+    });
+  }
   const servedGoals = /* @__PURE__ */ new Set();
   for (const d of graph.designs.values()) for (const g of d.value.serves) servedGoals.add(g);
   for (const goal of graph.goals.values()) {
@@ -37936,7 +38090,7 @@ function validateGraph(graph) {
       hint: `S\u1ED5 c\xE1i l\xE0 append-only; hash-chain gi\u1EEF d\u1EA5u v\u1EBFt cho M\u1ECCI d\xF2ng sau m\u1ED9t ch\u1ED7 b\u1ECB s\u1EEDa, kh\xF4ng ch\u1EC9 d\xF2ng b\u1ECB s\u1EEDa. Xem git history quanh d\xF2ng n\xE0y \u0111\u1EC3 bi\u1EBFt ai \u0111\u1ED5i g\xEC.`
     });
   }
-  if (existsSync7(join8(graph.root, ".git"))) {
+  if (existsSync6(join7(graph.root, ".git"))) {
     const lines = new Set((graph.gitignoreRaw ?? "").split("\n").map((l) => l.trim()));
     const missing = LOCAL_ONLY.filter((p) => !lines.has(`.ganas/${p}`));
     if (missing.length > 0) {
@@ -37950,6 +38104,324 @@ function validateGraph(graph) {
     }
   }
   return diags;
+}
+
+// src/commands/debt.ts
+init_state();
+init_errors2();
+var COMMIT_LIMIT = 8;
+function buildDebtRows(graph, checks) {
+  return debtRows(validateGraph(graph), computeDebt(graph, checks), graph);
+}
+function rowLocation(row) {
+  if (row.source.origin === "diagnostic") {
+    const d = row.source.diagnostic;
+    return d.line !== void 0 ? `${d.file}:${d.line}` : d.file;
+  }
+  const item = row.source.item;
+  if (item.moduleId !== void 0) return item.moduleId;
+  if (item.edge !== void 0) return `${item.edge.from} \u2192 ${item.edge.to}`;
+  return "";
+}
+var CODE_WIDTH = 28;
+function renderRow(row) {
+  return `  ${String(row.total).padStart(2)}  ${row.code.padEnd(CODE_WIDTH)} ${rowLocation(row)}`;
+}
+function renderDebtSection(header, rows, limit) {
+  if (rows.length === 0) return `${header} kh\xF4ng c\xF3 n\u1EE3 n\xE0o.
+`;
+  const shown = rows.slice(0, limit);
+  let out = `${header}
+` + shown.map(renderRow).join("\n") + "\n";
+  const omitted = rows.length - shown.length;
+  if (omitted > 0) {
+    out += `  \u2026 \u0111\xE3 b\u1ECF b\u1EDBt ${omitted} m\u1EE5c (in ${shown.length}/${rows.length}) \u2014 d\xF9ng \`ganas debt --json\` \u0111\u1EC3 l\u1EA5y \u0111\u1EE7.
+`;
+  }
+  return out;
+}
+function commitDebtSummary(graph, scopeId) {
+  try {
+    const rows = buildDebtRows(graph, []);
+    const inScope = rowsInScope(rows, scopeId);
+    const outside = rows.length - inScope.length;
+    if (inScope.length === 0) {
+      return outside > 0 ? `
+Kh\xF4ng c\xF3 n\u1EE3 trong ph\u1EA1m vi ${scopeId}. Ngo\xE0i ph\u1EA1m vi n\xE0y: c\xF2n ${outside} m\u1EE5c \u2014 \`ganas debt --all\`.
+` : "";
+    }
+    return "\n" + renderDebtSection(`N\u1EE3 trong ph\u1EA1m vi ${scopeId}:`, inScope, COMMIT_LIMIT) + (outside > 0 ? `Ngo\xE0i ph\u1EA1m vi n\xE0y: c\xF2n ${outside} m\u1EE5c \u2014 \`ganas debt --all\`
+` : "");
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return `
+\u26A0 kh\xF4ng d\u1EF1ng \u0111\u01B0\u1EE3c b\u1EA3ng n\u1EE3: ${reason} \u2014 ch\u1EA1y \`ganas debt\` \u0111\u1EC3 xem chi ti\u1EBFt
+`;
+  }
+}
+
+// src/commands/commit.ts
+function quote(p) {
+  return `'${p.replace(/'/g, `'\\''`)}'`;
+}
+function parsePorcelainZ(stdout) {
+  const fields = stdout.split("\0");
+  const entries = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (!field || field.length < 4) continue;
+    const x = field[0];
+    const y = field[1];
+    entries.push({ x, y, path: field.slice(3) });
+    if (x === "R" || x === "C" || y === "R" || y === "C") {
+      const other = fields[++i];
+      if (other) entries.push({ x, y, path: other });
+    }
+  }
+  return entries;
+}
+function notFullyStaged(e) {
+  return e.x === "?" || e.y !== " ";
+}
+function ownedPaths(task, entries) {
+  return [...new Set(entries.filter((e) => ownsGanasFile(task, e.path)).map((e) => e.path))];
+}
+function foreignPaths(task, entries) {
+  return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
+}
+async function changedUnder(root, pathspec) {
+  if (pathspec.length === 0) return [];
+  const spec = pathspec.map(quote).join(" ");
+  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
+    cwd: root,
+    timeoutMs: 15e3
+  });
+  if (res.code !== 0) return [];
+  return parsePorcelainZ(res.stdout);
+}
+async function closeTaskFile(root, sourced) {
+  const file = join8(root, sourced.file);
+  const original = await readFile8(file, "utf8");
+  const doc = (0, import_yaml5.parseDocument)(original);
+  const base2 = sourced.index === void 0 ? [] : [sourced.index];
+  doc.setIn([...base2, "status"], "done");
+  doc.setIn([...base2, "done_at"], (/* @__PURE__ */ new Date()).toISOString());
+  await writeFile3(file, doc.toString(), "utf8");
+  return original;
+}
+function reportBaseline(gate, baseline) {
+  const green = alreadyGreen(gate, baseline);
+  if (green.length === 0) return "";
+  return `
+\u26A0 ${green.length} ti\xEAu ch\xED \u0111\xE3 XANH S\u1EB4N t\u1EEB tr\u01B0\u1EDBc khi b\u1EAFt \u0111\u1EA7u task:
+` + green.map((r) => `    ${r.label}`).join("\n") + `
+  Ho\u1EB7c task n\xE0y \u0111\xE3 xong t\u1EEB tr\u01B0\u1EDBc, ho\u1EB7c ti\xEAu ch\xED \u0111\xF3 kh\xF4ng g\xE1c g\xEC.
+  M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
+`;
+}
+async function run(argv) {
+  const { root, graph, freshness } = await openProject(argv);
+  const sessionId = option(argv, "session");
+  const taskId = argv.positional[0] ?? option(argv, "task") ?? await taskForSession(root, sessionId);
+  if (!taskId) throw new GanasError("ch\u01B0a bi\u1EBFt \u0111ang l\xE0m task n\xE0o \u2014 ch\u1EA1y `ganas next` tr\u01B0\u1EDBc");
+  const sourced = graph.tasks.get(taskId);
+  if (!sourced) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
+  const task = sourced.value;
+  const chain = verifyChain(graph.ledgerRaw);
+  if (!chain.ok) {
+    throw new GanasError(
+      `hash-chain c\u1EE7a s\u1ED5 c\xE1i x\xE1c minh \u0111\u1EE9t \u1EDF d\xF2ng ${(chain.brokenAt ?? 0) + 1} (.ganas/verify-ledger.jsonl).
+S\u1ED5 c\xE1i l\xE0 append-only: \u0111\u1EE9t chain ngh\u0129a l\xE0 c\xF3 d\xF2ng b\u1ECB s\u1EEDa, xo\xE1 ho\u1EB7c \u0111\u1EA3o th\u1EE9 t\u1EF1 sau khi ghi. Xem \`ganas ledger --check\` v\xE0 \`ganas validate\`, ph\u1EE5c h\u1ED3i t\u1EEB git tr\u01B0\u1EDBc khi commit ti\u1EBFp.`
+    );
+  }
+  const gateResult = await evaluateGate(graph, task, freshness, sessionId);
+  if (!gateResult.ok) {
+    process.stdout.write(
+      `Ch\u01B0a commit \u0111\u01B0\u1EE3c \u2014 \u0111i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh c\u1EE7a ${taskId} ch\u01B0a tho\u1EA3:
+
+${formatGate(gateResult)}
+`
+    );
+    return 1;
+  }
+  const baseline = await baselineFor(root, sessionId, taskId);
+  const baselineWarning = reportBaseline(gateResult, baseline);
+  const allGanas = flag(argv, "all-ganas");
+  const codePaths = taskBoundary(task, graph);
+  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const outsideWarning = formatBoundaryWarning(
+    taskId,
+    codePaths,
+    touched,
+    outsideBoundary(task, graph, touched)
+  );
+  const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
+  if (flag(argv, "dry-run")) {
+    const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+    const owned2 = ownedPaths(task, ganasChanged2);
+    const foreign2 = foreignPaths(task, ganasChanged2);
+    const message2 = buildCommitMessage(graph, task, gateResult);
+    process.stdout.write(
+      `--- ganas commit ${taskId} (dry-run, KH\xD4NG stage, KH\xD4NG commit) ---
+
+S\u1EBD stage:
+` + [...allGanas ? [GANAS_DIR] : owned2, ...codePaths].map((p) => `  + ${p}`).join("\n") + (foreign2.length > 0 ? `
+
+\u0110\u1EC3 l\u1EA1i (kh\xF4ng thu\u1ED9c ${taskId}):
+` + foreign2.map((p) => `  \xB7 ${p}`).join("\n") : "") + (willClose ? `
+
+S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + outsideWarning + `
+
+--- commit message ---
+${message2}`
+    );
+    return 0;
+  }
+  let originalTaskFile = null;
+  if (willClose) originalTaskFile = await closeTaskFile(root, sourced);
+  const ganasChanged = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+  const owned = ownedPaths(task, ganasChanged);
+  const foreign = foreignPaths(task, ganasChanged);
+  for (const p of [...allGanas ? [GANAS_DIR] : owned, ...codePaths]) {
+    await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
+  }
+  const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
+  if (staged.code === 0) {
+    if (originalTaskFile !== null) {
+      await writeFile3(join8(root, sourced.file), originalTaskFile, "utf8");
+    }
+    process.stdout.write(
+      `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} \u0111ang s\u1EA1ch.
+` + (foreign.length > 0 ? `
+${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId}:
+` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
+Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBFu mu\u1ED1n g\u1ED9p.
+` : "") + outsideWarning
+    );
+    return 0;
+  }
+  const message = buildCommitMessage(graph, task, gateResult);
+  const dir = await mkdtemp2(join8(tmpdir2(), "ganas-commit-"));
+  try {
+    const msgFile = join8(dir, "MSG");
+    await writeFile3(msgFile, message, "utf8");
+    const result = await runShell(`git commit -F ${quote(msgFile)}`, {
+      cwd: root,
+      timeoutMs: 3e4
+    });
+    if (result.code !== 0) {
+      if (originalTaskFile !== null) {
+        await writeFile3(join8(root, sourced.file), originalTaskFile, "utf8");
+      }
+      throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
+${result.stderr || result.stdout}`);
+    }
+    process.stdout.write(
+      `\u2713 \u0110\xE3 commit cho ${taskId}.
+
+${message}` + (willClose ? `
+${taskId} \u0111\xE3 \u0111\xE1nh d\u1EA5u \`status: done\`.
+` : "") + (!willClose && gateResult.pendingHuman.length > 0 ? `
+${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn:
+` + gateResult.pendingHuman.map((p) => `  \u2026 ${p.label}`).join("\n") + `
+` : "") + reportUnstagedContract(task, await unstagedContractPaths(root, task)) + (foreign.length > 0 ? `
+${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
+` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
+Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
+` : "") + baselineWarning + outsideWarning + commitDebtSummary(graph, task.scope)
+    );
+    return 0;
+  } finally {
+    await rm2(dir, { recursive: true, force: true });
+  }
+}
+async function unstagedContractPaths(root, task) {
+  const existing = contractPathRefs(task).filter((r) => existsSync7(join8(root, r.path)));
+  if (existing.length === 0) return [];
+  const changed = await changedUnder(
+    root,
+    existing.map((r) => r.path)
+  );
+  return [...new Set(changed.filter(notFullyStaged).map((e) => e.path))];
+}
+function reportUnstagedContract(task, left) {
+  if (left.length === 0) return "";
+  const refs = contractPathRefs(task);
+  return `
+\u26A0 ${left.length} file m\xE0 \`exit_contract\` c\u1EE7a ${task.id} ch\u1EA1y v\u1EABn CH\u01AFA v\xE0o git:
+` + left.map((p) => {
+    const from = refs.find((r) => r.path === p)?.from;
+    return `  \xB7 ${p}${from ? `
+      ${from}` : ""}`;
+  }).join("\n") + `
+  Clone v\u1EC1 m\xE1y kh\xE1c, gate c\u1EE7a ${task.id} s\u1EBD \u0111\u1ECF. \`git add\` ch\xFAng r\u1ED3i commit ti\u1EBFp.
+`;
+}
+
+// src/flow.ts
+init_paths();
+
+// src/graph/select.ts
+function openBlockers(graph, task) {
+  return task.blocked_by.filter((id) => {
+    const blocker = graph.tasks.get(id);
+    return !blocker || blocker.value.status !== "done";
+  });
+}
+function candidates(graph) {
+  return [...graph.tasks.values()].filter((t) => t.value.status !== "done").map((task) => ({ task, blockers: openBlockers(graph, task.value) }));
+}
+function rankedCandidates(graph, opts = {}) {
+  const open2 = candidates(graph).filter((c) => c.blockers.length === 0);
+  if (open2.length === 0) return [];
+  const rank = (c) => {
+    const t = c.task.value;
+    const scope = graph.scopes.get(t.scope)?.value;
+    let score = 0;
+    if (t.status === "in_progress") score -= 1e3;
+    if (scope?.status === "active") score -= 100;
+    if (scope?.status === "delivered") score += 100;
+    if (opts.preferScope !== void 0 && t.scope === opts.preferScope) score -= 50;
+    if (t.estimated_context === "small") score -= 1;
+    return score;
+  };
+  return open2.sort((a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id));
+}
+function selectNextTask(graph, opts = {}) {
+  return rankedCandidates(graph, opts)[0] ?? null;
+}
+function staticPrefix(glob) {
+  const cut = glob.search(/[*?[{]/);
+  const head = cut === -1 ? glob : glob.slice(0, cut);
+  const slash = head.lastIndexOf("/");
+  return slash === -1 ? "" : head.slice(0, slash + 1);
+}
+function pathsOverlap(a, b) {
+  for (const x of a.map(staticPrefix)) {
+    for (const y of b.map(staticPrefix)) {
+      if (x.startsWith(y) || y.startsWith(x)) return true;
+    }
+  }
+  return false;
+}
+function taskPaths(graph, task) {
+  return task.touches.flatMap((id) => graph.modules.get(id)?.value.paths ?? []);
+}
+function parallelCandidates(graph, task) {
+  const mine = new Set(task.touches);
+  const minePaths = taskPaths(graph, task);
+  if (task.touches.length === 0) return [];
+  return candidates(graph).filter((c) => {
+    const t = c.task.value;
+    if (t.id === task.id || c.blockers.length > 0) return false;
+    if (t.blocked_by.includes(task.id) || task.blocked_by.includes(t.id)) return false;
+    if (t.touches.length === 0) return false;
+    if (t.touches.some((m) => mine.has(m))) return false;
+    return !pathsOverlap(taskPaths(graph, t), minePaths);
+  }).map((c) => c.task).sort((a, b) => a.value.id.localeCompare(b.value.id));
+}
+function blockedTasks(graph) {
+  return candidates(graph).filter((c) => c.blockers.length > 0).sort((a, b) => a.task.value.id.localeCompare(b.task.value.id));
 }
 
 // src/flow.ts
@@ -38416,6 +38888,12 @@ function relevantLegacyClaims(graph, task) {
 function bullet(lines) {
   return lines.map((l) => `- ${l}`).join("\n");
 }
+function findSupersededBy(graph, designId) {
+  for (const sourced of graph.designs.values()) {
+    if (sourced.value.supersedes.includes(designId)) return sourced.value.id;
+  }
+  return void 0;
+}
 function dispatchSection(graph, t) {
   const H = `## Giao vi\u1EC7c`;
   if (!t.model) {
@@ -38568,13 +39046,23 @@ ${bullet(criteria)}`
 
 ${goalBlocks.join("\n\n")}`);
   if (design) {
-    parts.push(
-      `## Design \u0111ang hi\u1EC7n th\u1EF1c
+    const d = design.value;
+    let warning = "";
+    if (d.status === "superseded") {
+      const supersededBy = findSupersededBy(graph, d.id);
+      warning = `
 
-### ${design.value.id} \u2014 ${design.value.title}
+> \u26A0 **Design n\xE0y \u0111\xE3 b\u1ECB thay th\u1EBF** \u2014 hi\u1EC7n th\u1EF1c n\xF3 l\xE0 hi\u1EC7n th\u1EF1c m\u1ED9t h\u01B0\u1EDBng \u0111\xE3 b\u1ECB b\u1ECF, ` + (supersededBy ? `thay b\u1EDFi \`${supersededBy}\`. \u0110\u1ECDc \`${supersededBy}\` tr\u01B0\u1EDBc khi vi\u1EBFt d\xF2ng n\xE0o, \u0111\u1EEBng l\xE0m theo c\xE1i \u0111\xE3 ch\u1EBFt.` : `nh\u01B0ng kh\xF4ng tra \u0111\u01B0\u1EE3c design n\xE0o khai \u0111\xE3 thay n\xF3 (kh\xF4ng c\xF3 c\u1EA1nh ng\u01B0\u1EE3c \`superseded_by\` trong model). H\u1ECFi ng\u01B0\u1EDDi ph\u1EE5 tr\xE1ch tr\u01B0\u1EDBc khi ti\u1EBFp t\u1EE5c.`);
+    } else if (d.status === "archived") {
+      warning = `
 
-${design.value.summary}`
-    );
+> \u26A0 **Design n\xE0y \u0111\xE3 l\u01B0u kho (archived)** \u2014 kh\xF4ng c\xF2n l\xE0 h\u01B0\u1EDBng \u0111ang d\xF9ng, d\xF9 ch\u01B0a b\u1ECB design n\xE0o kh\xE1c thay th\u1EBF th\u1EB3ng. Task khai \`implements\` m\u1ED9t design \u0111\xE3 l\u01B0u kho th\xEC nhi\u1EC1u kh\u1EA3 n\u0103ng b\u1EA3n th\xE2n task c\u0169ng l\u1ED7i th\u1EDDi \u2014 x\xE1c nh\u1EADn l\u1EA1i tr\u01B0\u1EDBc khi l\xE0m, \u0111\u1EEBng m\u1EB7c \u0111\u1ECBnh n\xF3 c\xF2n \u0111\xFAng.`;
+    }
+    parts.push(`## Design \u0111ang hi\u1EC7n th\u1EF1c
+
+### ${d.id} \u2014 ${d.title}
+
+${d.summary}${warning}`);
   }
   const decisionIds = new Set(design?.value.decisions ?? []);
   for (const sourced2 of graph.decisions.values()) {
@@ -38907,192 +39395,6 @@ init_paths();
 import { existsSync as existsSync9 } from "node:fs";
 import { mkdir as mkdir4, readdir as readdir4, readFile as readFile10, writeFile as writeFile4 } from "node:fs/promises";
 import { dirname as dirname5, join as join10, relative as relative3 } from "node:path";
-
-// src/graph/trace.ts
-init_exec();
-init_ledger();
-init_lint();
-function contractEdges(graph) {
-  const out = [];
-  for (const [id, sourced] of graph.modules) {
-    for (const v of sourced.value.verify) {
-      if (v.kind === "contract") {
-        out.push({
-          from: id,
-          to: v.to,
-          verificationId: v.id,
-          verification: v,
-          statement: sourced.value.title
-        });
-      }
-    }
-  }
-  return out;
-}
-function portIssues(from, to) {
-  const outputs = new Map(from.contract.outputs.map((p) => [p.name, p]));
-  const issues = [];
-  for (const input of to.contract.inputs) {
-    if (input.optional) continue;
-    const out = outputs.get(input.name);
-    if (!out) {
-      issues.push({
-        port: input.name,
-        reason: `${from.id} kh\xF4ng c\xF3 c\u1ED5ng ra t\xEAn "${input.name}" m\xE0 ${to.id} c\u1EA7n`
-      });
-      continue;
-    }
-    if (out.shape.trim() !== input.shape.trim()) {
-      issues.push({
-        port: input.name,
-        reason: `c\u1ED5ng "${input.name}" l\u1EC7ch ki\u1EC3u \u2014 ${from.id} xu\u1EA5t \`${out.shape}\`, ${to.id} c\u1EA7n \`${input.shape}\``
-      });
-    }
-  }
-  return issues;
-}
-async function checkEdge(graph, edge, root) {
-  const from = graph.modules.get(edge.from)?.value;
-  const to = graph.modules.get(edge.to)?.value;
-  if (!from || !to) {
-    const missing = !from ? edge.from : edge.to;
-    return {
-      edge,
-      result: "unprovable",
-      issues: [],
-      reason: `kh\u1ED1i ${missing} kh\xF4ng t\u1ED3n t\u1EA1i`
-    };
-  }
-  const issues = portIssues(from, to);
-  if (issues.length > 0) {
-    return { edge, result: "fail", issues, reason: issues.map((i) => i.reason).join("; ") };
-  }
-  const run8 = edge.verification.run;
-  if (!run8) return { edge, result: "pass", issues: [] };
-  const findings = lintProbe({
-    run: run8,
-    statement: `${from.id} \u2192 ${to.id}`,
-    context: [
-      ...from.contract.outputs.map((p) => p.name),
-      ...to.contract.inputs.map((p) => p.name)
-    ]
-  });
-  if (hasBlockingFinding(findings)) {
-    const blocking = findings.filter((f) => f.severity === "error");
-    return {
-      edge,
-      result: "unprovable",
-      issues: [],
-      reason: blocking.map((f) => f.message).join("; ")
-    };
-  }
-  const result = await runShell(run8, { cwd: root, timeoutMs: 6e4 });
-  const verdict = judge(result, "exit_zero");
-  if (!verdict.pass) {
-    return { edge, result: "fail", issues: [], reason: verdict.reason };
-  }
-  return { edge, result: "pass", issues: [] };
-}
-async function checkAllEdges(graph, root) {
-  const edges = contractEdges(graph);
-  return Promise.all(edges.map((edge) => checkEdge(graph, edge, root)));
-}
-async function recordEdgeChecks(graph, checks, opts) {
-  const ctx = await runContext(opts.root, opts.by);
-  for (const check2 of checks) {
-    if (check2.result === "unprovable") continue;
-    await appendEntry(opts.root, {
-      target: `${check2.edge.from}/${check2.edge.verificationId}`,
-      kind: "contract",
-      at: (/* @__PURE__ */ new Date()).toISOString(),
-      def: defHash(check2.edge.verification, check2.edge.statement),
-      result: check2.result,
-      output: check2.reason ? sha256(check2.reason) : void 0,
-      ...ctx
-    });
-  }
-}
-function nodeId(id) {
-  return id.replace(/[^A-Za-z0-9_]/g, "_");
-}
-function renderDiagram(graph, opts = {}) {
-  const lines = ["flowchart LR"];
-  const inScope = /* @__PURE__ */ new Set();
-  for (const [scopeId, sourced] of graph.scopes) {
-    const sc = sourced.value;
-    lines.push(`  subgraph ${nodeId(scopeId)}["${scopeId} (${sc.version})"]`);
-    for (const moduleId of sc.modules) {
-      const mod = graph.modules.get(moduleId)?.value;
-      inScope.add(moduleId);
-      lines.push(`    ${nodeId(moduleId)}["${moduleLabel(moduleId, mod)}"]`);
-    }
-    lines.push("  end");
-  }
-  const loose = [...graph.modules.keys()].filter((id) => !inScope.has(id));
-  if (loose.length > 0) {
-    lines.push(`  subgraph unmapped["(ch\u01B0a g\xE1n ph\u1EA1m vi)"]`);
-    for (const moduleId of loose) {
-      lines.push(
-        `    ${nodeId(moduleId)}["${moduleLabel(moduleId, graph.modules.get(moduleId)?.value)}"]`
-      );
-    }
-    lines.push("  end");
-  }
-  for (const [id, sourced] of graph.modules) {
-    for (const dep of sourced.value.depends_on) {
-      lines.push(`  ${nodeId(dep)} --> ${nodeId(id)}`);
-    }
-  }
-  for (const edge of contractEdges(graph)) {
-    const key = `${edge.from}/${edge.verificationId}`;
-    const result = opts.edgeResults?.get(key);
-    const mark = result === "pass" ? "\u2713" : result === "fail" ? "\u2717" : result === void 0 ? "?" : result;
-    lines.push(`  ${nodeId(edge.from)} -.->|h\u1EE3p \u0111\u1ED3ng ${mark}| ${nodeId(edge.to)}`);
-  }
-  return lines.join("\n");
-}
-function moduleLabel(id, mod) {
-  if (!mod) return `${id}<br/>? kh\u1ED1i m\u1ED3 c\xF4i`;
-  return `${id}<br/>${mod.nature} \xB7 ${mod.status}`;
-}
-function computeDebt(graph, checks) {
-  const items = [];
-  const checkedPairs = new Set(contractEdges(graph).map((e) => `${e.from}->${e.to}`));
-  for (const [id, sourced] of graph.modules) {
-    for (const dep of sourced.value.depends_on) {
-      if (!checkedPairs.has(`${dep}->${id}`)) {
-        items.push({
-          kind: "uncovered-edge",
-          edge: { from: dep, to: id },
-          message: `c\u1EA1nh ${dep} \u2192 ${id} c\xF3 trong depends_on nh\u01B0ng kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng \`kind: contract\` n\xE0o ki\u1EC3m n\xF3`
-        });
-      }
-    }
-  }
-  for (const check2 of checks) {
-    if (check2.result === "fail") {
-      items.push({
-        kind: "broken-contract",
-        moduleId: check2.edge.from,
-        edge: { from: check2.edge.from, to: check2.edge.to },
-        message: `h\u1EE3p \u0111\u1ED3ng ${check2.edge.from}/${check2.edge.verificationId} \u2192 ${check2.edge.to} TR\u01AF\u1EE2T: ${check2.reason ?? ""}`
-      });
-    }
-  }
-  for (const [id, sourced] of graph.modules) {
-    const m = sourced.value;
-    if (m.verify.length === 0 && m.status !== "unmapped") {
-      items.push({
-        kind: "unverified-module",
-        moduleId: id,
-        message: `kh\u1ED1i ${id} ch\u01B0a c\xF3 b\u1EB1ng ch\u1EE9ng n\xE0o`
-      });
-    }
-  }
-  return items;
-}
-
-// src/commands/scope.ts
 init_model();
 init_errors2();
 init_glob();
@@ -39795,7 +40097,7 @@ var TOOLS = [
 function createServer() {
   const server = new McpServer({
     name: "ganas",
-    version: true ? "0.3.0" : "0.0.0"
+    version: true ? "0.4.0" : "0.0.0"
   });
   for (const tool of TOOLS) {
     server.registerTool(

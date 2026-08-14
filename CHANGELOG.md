@@ -4,6 +4,47 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## v0.4.0 — 2026-08-14
+
+- **`ganas debt` — xếp hạng nợ hai trục.** Nợ vốn nằm ở hai nguồn rời nhau và
+  không cái nào chấm điểm: `validateGraph` trả `Diagnostic` (46 mã, chỉ sort một
+  trục theo severity, chỉ trong lệnh `validate`) và `computeDebt` trả `DebtItem`
+  (3 loại, không severity, không sort). Đọc xong không biết làm gì trước.
+
+  Mỗi mục giờ chấm hai trục **cùng thang 1–5** rồi cộng: *quan trọng* (1 chỉ là
+  thông tin · 5 mất dữ liệu, hỏng nền) và *dễ làm* (1 phải thiết kế lại · 5 sửa
+  một dòng YAML). Tổng cao là làm ngay. Bảng lọc theo phạm vi của task vừa
+  commit, phần còn lại gộp một dòng đếm — bám nguyên tắc đã có ở `postToolUse`:
+  không bắt chịu trách nhiệm cho mọi lỗi sẵn có trong repo. `ganas commit` in
+  bảng này sau khi commit thành công; `ganas debt --all` xem toàn dự án.
+
+  Điểm là phán đoán của người viết luật, khai một lần. Guard grep `validate.ts`
+  và `load.ts` bắt mọi mã tĩnh phải có điểm — thêm luật mà quên chấm thì test
+  đỏ, không phải im lặng biến mất khỏi báo cáo.
+
+  **Giới hạn đã biết:** guard bắt được điểm THIẾU, không bắt được điểm SAI. Điểm
+  chấm sai thì im lặng mãi. Cách duy nhất là dùng rồi chỉnh.
+
+- **`spine/decision-cycle`.** Design đã có luật chống chu trình `supersedes`,
+  Decision thì chưa. Từ khi brief loại decision đã bị thay thế (v0.3.x), một
+  chu trình khiến CẢ CỤM biến mất khỏi mục "không được đi ngược" — phiên làm
+  việc không thấy một ràng buộc nào, và không dấu hiệu nào cho biết có thứ đã bị
+  nuốt.
+
+- **Cảnh báo khoá lạ trong `config.yaml`.** `zConfig` là schema duy nhất không
+  `.strict()`, nên gõ `enforcment:` thiếu một chữ thì zod bỏ qua im lặng và dự
+  án chạy không hàng rào trong khi người viết tin là đang cưỡng chế. Nay có
+  cảnh báo `spine/config-unknown-key`, lấy danh sách khoá hợp lệ từ
+  `Object.keys(zConfig.shape)` nên tự đúng theo schema. Field đã bỏ (`embedder`)
+  có thông điệp riêng thay vì bị báo như khoá lạ vô danh.
+
+- **Brief nói khi task hiện thực một Design đã `superseded`/`archived`**, kèm tên
+  design đã thay thế nó nếu tra ngược được.
+
+- **`computeFreshness` thôi spawn `git ls-files` cho mỗi target.** Đo được: 11
+  target trước là 11 lần spawn, nay 1; kiểm lại từ ngoài với 41 target vẫn giữ
+  nguyên số lần. Chạy ở mọi `SessionStart`.
+
 ## v0.3.0 — 2026-08-14
 
 - **Cảnh báo file sửa ngoài ranh giới code của task** — `postToolUse` giờ ghi

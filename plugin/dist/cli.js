@@ -12981,31 +12981,31 @@ function tokensOf(text) {
 }
 function lintProbe(input) {
   const findings = [];
-  const run17 = input.run.trim();
+  const run18 = input.run.trim();
   for (const [pattern, what] of DANGEROUS) {
-    if (pattern.test(run17)) {
+    if (pattern.test(run18)) {
       findings.push({
         code: "dangerous",
         severity: "error",
-        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run17}\``,
+        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run18}\``,
         hint: `ganas s\u1EBD KH\xD4NG ch\u1EA1y l\u1EC7nh n\xE0y. Probe ch\u1EC9 \u0111\u01B0\u1EE3c \u0111\u1ECDc v\xE0 ki\u1EC3m tra, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1ED5i tr\u1EA1ng th\xE1i h\u1EC7 th\u1ED1ng.`
       });
       return findings;
     }
   }
-  const simple = run17.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
+  const simple = run18.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
   if (ALWAYS_TRUE.some((re) => re.test(simple))) {
     findings.push({
       code: "tautological",
       severity: "error",
-      message: `probe \`${run17}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
+      message: `probe \`${run18}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
       hint: `Probe ph\u1EA3i c\xF3 kh\u1EA3 n\u0103ng FAIL khi ph\xE1t bi\u1EC3u sai. Vi\u1EBFt l\u1EC7nh th\u1EADt s\u1EF1 ch\u1EA1m v\xE0o th\u1EE9 \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh (vd \`test -f <\u0111\u01B0\u1EDDng-d\u1EABn>\`, \`grep -q '<chu\u1ED7i>' <file>\`, \`npm test -- <t\xEAn-test>\`).`
     });
     return findings;
   }
   const haystack = [input.statement ?? "", ...input.context ?? []].join(" ");
   if (haystack.trim()) {
-    const probeTokens = [...tokensOf(run17)].filter((t) => !SHELL_NOISE.has(t));
+    const probeTokens = [...tokensOf(run18)].filter((t) => !SHELL_NOISE.has(t));
     const claimTokens = tokensOf(haystack);
     const shared = probeTokens.some(
       (t) => [...claimTokens].some((c) => c === t || c.includes(t) || t.includes(c))
@@ -13014,7 +13014,7 @@ function lintProbe(input) {
       findings.push({
         code: "unrelated",
         severity: "warning",
-        message: `probe \`${run17}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
+        message: `probe \`${run18}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
         hint: `Ki\u1EC3m l\u1EA1i xem probe c\xF3 th\u1EADt s\u1EF1 ki\u1EC3m \u0111\xFAng \u0111i\u1EC1u \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh kh\xF4ng.`
       });
     }
@@ -13519,6 +13519,20 @@ function validateGraph(graph) {
       line: at(graph, head, "supersedes")
     });
   }
+  const decisionEdges = /* @__PURE__ */ new Map();
+  for (const [id, dec] of graph.decisions) decisionEdges.set(id, dec.value.supersedes);
+  const decisionCycle = findCycle(decisionEdges);
+  if (decisionCycle) {
+    const head = graph.decisions.get(decisionCycle[0]);
+    diags.push({
+      severity: "error",
+      code: "spine/decision-cycle",
+      message: `v\xF2ng l\u1EB7p thay th\u1EBF gi\u1EEFa c\xE1c decision: ${decisionCycle.join(" \u2192 ")}`,
+      file: head.file,
+      line: at(graph, head, "supersedes"),
+      hint: `Chu tr\xECnh khi\u1EBFn brief lo\u1EA1i c\u1EA3 c\u1EE5m decision kh\u1ECFi b\xE0n giao \u2014 kh\xF4ng phi\xEAn n\xE0o th\u1EA5y \u0111\u01B0\u1EE3c.`
+    });
+  }
   const servedGoals = /* @__PURE__ */ new Set();
   for (const d of graph.designs.values()) for (const g of d.value.serves) servedGoals.add(g);
   for (const goal of graph.goals.values()) {
@@ -13696,6 +13710,26 @@ function issuesToDiagnostics(loaded, issues, root) {
     line: lineOfPath(loaded, issue.path)
   }));
 }
+function configKeyDiagnostics(loaded, root, configFile) {
+  const raw = loaded.value;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return [];
+  const known = new Set(Object.keys(zConfig.shape));
+  const file = relative(root, configFile) || configFile;
+  const diagnostics = [];
+  for (const key of Object.keys(raw)) {
+    if (known.has(key)) continue;
+    const removed = REMOVED_CONFIG_KEYS[key];
+    diagnostics.push({
+      severity: "warning",
+      code: "spine/config-unknown-key",
+      message: removed ? `config.yaml c\xF3 field \`${key}\`: ${removed}` : `config.yaml c\xF3 kho\xE1 l\u1EA1 \`${key}\` \u2014 ganas kh\xF4ng nh\u1EADn ra, c\xF3 th\u1EC3 do g\xF5 sai t\xEAn field.`,
+      file,
+      line: lineOfPath(loaded, [key]),
+      hint: removed ?? `Kho\xE1 h\u1EE3p l\u1EC7: ${[...known].sort().join(", ")}.`
+    });
+  }
+  return diagnostics;
+}
 async function listYaml(dir) {
   if (!existsSync5(dir)) return [];
   const entries = await readdir(dir, { withFileTypes: true });
@@ -13808,6 +13842,7 @@ async function loadGraph(root) {
       `${where(first.path)}: config kh\xF4ng h\u1EE3p l\u1EC7 \u2014 ${first.path.join(".")}: ${first.message}`
     );
   }
+  const configDiagnostics = configKeyDiagnostics(loadedConfig, root, configFile);
   const ledgerRaw = await readLedger(root);
   const ledger = indexByTarget(ledgerRaw);
   const gitignoreFile = join4(root, ".gitignore");
@@ -13852,6 +13887,7 @@ async function loadGraph(root) {
       ...decisions.sources
     ]),
     loadDiagnostics: [
+      ...configDiagnostics,
       ...goals.diagnostics,
       ...designs.diagnostics,
       ...tasks.diagnostics,
@@ -13863,6 +13899,7 @@ async function loadGraph(root) {
     ]
   };
 }
+var REMOVED_CONFIG_KEYS;
 var init_load = __esm({
   "src/graph/load.ts"() {
     "use strict";
@@ -13871,6 +13908,9 @@ var init_load = __esm({
     init_yaml();
     init_ledger();
     init_paths();
+    REMOVED_CONFIG_KEYS = {
+      embedder: "field n\xE0y \u0111\xE3 b\u1ECF \u1EDF v0.3.x, kh\xF4ng c\xF2n t\xE1c d\u1EE5ng \u2014 xo\xE1 d\xF2ng \u0111\xF3 \u0111i cho s\u1EA1ch."
+    };
   }
 });
 
@@ -14149,11 +14189,11 @@ var init_shell = __esm({
 });
 
 // src/verify/mutate.ts
-function runnerPathSpan(run17) {
-  const m = RUNNER.exec(run17);
+function runnerPathSpan(run18) {
+  const m = RUNNER.exec(run18);
   if (!m) return null;
   const after = m.index + m[0].length;
-  const spans = tokenSpans(run17.slice(after)).map((s) => ({ ...s, start: s.start + after }));
+  const spans = tokenSpans(run18.slice(after)).map((s) => ({ ...s, start: s.start + after }));
   let skipNext = false;
   for (const span of spans) {
     if (span.text.startsWith("-")) {
@@ -14168,53 +14208,53 @@ function runnerPathSpan(run17) {
   }
   return null;
 }
-function mutateProbe(run17) {
-  const fileTest = FILE_TEST.exec(run17);
+function mutateProbe(run18) {
+  const fileTest = FILE_TEST.exec(run18);
   if (fileTest) {
     const [full, head, flag2, quote3, path] = fileTest;
     const replaced = `${head}${flag2} ${quote3}${path}${MUTANT_SUFFIX}${quote3}`;
     return {
-      run: run17.replace(full, replaced),
+      run: run18.replace(full, replaced),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const grep = GREP.exec(run17);
+  const grep = GREP.exec(run18);
   if (grep) {
     const [full, cmd, flags, quote3, pattern] = grep;
     return {
-      run: run17.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
+      run: run18.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const grepBare = GREP_BARE.exec(run17);
+  const grepBare = GREP_BARE.exec(run18);
   if (grepBare) {
     const [full, cmd, flags, pattern] = grepBare;
     return {
-      run: run17.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
+      run: run18.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const runnerPath = runnerPathSpan(run17);
+  const runnerPath = runnerPathSpan(run18);
   if (runnerPath) {
     const path = stripOperators(runnerPath.text);
     const replaced = runnerPath.text.replace(path, `${path}${MUTANT_SUFFIX}`);
     return {
-      run: run17.slice(0, runnerPath.start) + replaced + run17.slice(runnerPath.start + runnerPath.text.length),
+      run: run18.slice(0, runnerPath.start) + replaced + run18.slice(runnerPath.start + runnerPath.text.length),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const quoted = QUOTED.exec(run17);
+  const quoted = QUOTED.exec(run18);
   if (quoted) {
     const [full, quote3, body] = quoted;
     return {
-      run: run17.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
+      run: run18.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i chu\u1ED7i \`${body}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
   return null;
 }
-async function proveCanFail(run17, expect, opts) {
-  const mutation = mutateProbe(run17);
+async function proveCanFail(run18, expect, opts) {
+  const mutation = mutateProbe(run18);
   if (!mutation) {
     return {
       status: "unproven",
@@ -14231,7 +14271,7 @@ async function proveCanFail(run17, expect, opts) {
       status: "cannot_fail",
       what: mutation.what,
       message: `b\u1EA3n b\xF3p m\xE9o (${mutation.what}) V\u1EAAN PASS \u2014 probe n\xE0y kh\xF4ng ki\u1EC3m th\u1EE9 n\xF3 n\xF3i l\xE0 \u0111ang ki\u1EC3m.
-    b\u1EA3n g\u1ED1c:    ${run17}
+    b\u1EA3n g\u1ED1c:    ${run18}
     b\xF3p m\xE9o:    ${mutation.run}
     C\u1EA3 hai c\xF9ng pass ngh\u0129a l\xE0 k\u1EBFt qu\u1EA3 pass kh\xF4ng mang th\xF4ng tin g\xEC.`
     };
@@ -14341,10 +14381,10 @@ async function runTarget(target, opts) {
     return { target, result: "unprovable", reason: "ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh thu\u1ED9c `ganas trace`" };
   }
   const v = target.verification;
-  const run17 = target.kind === "eval" ? v.run : target.definition.run;
+  const run18 = target.kind === "eval" ? v.run : target.definition.run;
   const skipIf = v?.skip_if ?? target.definition.skip_if;
   if (target.kind === "probe") {
-    const findings = lintProbe({ run: run17, statement: target.statement, context: target.context });
+    const findings = lintProbe({ run: run18, statement: target.statement, context: target.context });
     if (hasBlockingFinding(findings)) {
       const blocking = findings.filter((f) => f.severity === "error");
       return {
@@ -14367,23 +14407,23 @@ async function runTarget(target, opts) {
     outcome2.entry = await record(target, outcome2, opts);
     return outcome2;
   }
-  const outcome = target.kind === "eval" ? await runEval(target, run17, opts) : await runProbe(target, run17, opts);
+  const outcome = target.kind === "eval" ? await runEval(target, run18, opts) : await runProbe(target, run18, opts);
   outcome.entry = await record(target, outcome, opts);
   if (target.fact && (outcome.result === "pass" || outcome.result === "fail")) {
     await writeBackFact(target.fact, outcome, root);
   }
   return outcome;
 }
-async function runProbe(target, run17, opts) {
+async function runProbe(target, run18, opts) {
   const def = target.definition;
   const expect = def.expect ?? "exit_zero";
-  const result = await runShell(run17, { cwd: opts.root, timeoutMs: def.timeout_ms });
+  const result = await runShell(run18, { cwd: opts.root, timeoutMs: def.timeout_ms });
   const verdict = judge(result, expect);
   if (!verdict.pass) {
     return { target, result: "fail", reason: verdict.reason };
   }
   if (opts.skipMutation) return { target, result: "pass" };
-  const proof = await proveCanFail(run17, expect, { cwd: opts.root });
+  const proof = await proveCanFail(run18, expect, { cwd: opts.root });
   if (proof.status === "cannot_fail") {
     return {
       target,
@@ -14399,12 +14439,12 @@ async function runProbe(target, run17, opts) {
     reason: proof.status === "unproven" ? proof.message : void 0
   };
 }
-async function runEval(target, run17, opts) {
+async function runEval(target, run18, opts) {
   const v = target.verification;
   const dir = await mkdtemp(join6(tmpdir(), "ganas-eval-"));
   const outFile = join6(dir, "result.json");
   try {
-    const result = await runShell(run17, {
+    const result = await runShell(run18, {
       cwd: opts.root,
       timeoutMs: v.timeout_ms ?? 6e5,
       env: { GANAS_EVAL_OUT: outFile }
@@ -15872,10 +15912,10 @@ async function checkEdge(graph, edge, root) {
   if (issues.length > 0) {
     return { edge, result: "fail", issues, reason: issues.map((i) => i.reason).join("; ") };
   }
-  const run17 = edge.verification.run;
-  if (!run17) return { edge, result: "pass", issues: [] };
+  const run18 = edge.verification.run;
+  if (!run18) return { edge, result: "pass", issues: [] };
   const findings = lintProbe({
-    run: run17,
+    run: run18,
     statement: `${from.id} \u2192 ${to.id}`,
     context: [
       ...from.contract.outputs.map((p) => p.name),
@@ -15891,7 +15931,7 @@ async function checkEdge(graph, edge, root) {
       reason: blocking.map((f) => f.message).join("; ")
     };
   }
-  const result = await runShell(run17, { cwd: root, timeoutMs: 6e4 });
+  const result = await runShell(run18, { cwd: root, timeoutMs: 6e4 });
   const verdict = judge(result, "exit_zero");
   if (!verdict.pass) {
     return { edge, result: "fail", issues: [], reason: verdict.reason };
@@ -16580,6 +16620,12 @@ function relevantLegacyClaims(graph, task) {
 function bullet(lines) {
   return lines.map((l) => `- ${l}`).join("\n");
 }
+function findSupersededBy(graph, designId) {
+  for (const sourced of graph.designs.values()) {
+    if (sourced.value.supersedes.includes(designId)) return sourced.value.id;
+  }
+  return void 0;
+}
 function dispatchSection(graph, t) {
   const H = `## Giao vi\u1EC7c`;
   if (!t.model) {
@@ -16732,13 +16778,23 @@ ${bullet(criteria)}`
 
 ${goalBlocks.join("\n\n")}`);
   if (design) {
-    parts.push(
-      `## Design \u0111ang hi\u1EC7n th\u1EF1c
+    const d = design.value;
+    let warning = "";
+    if (d.status === "superseded") {
+      const supersededBy = findSupersededBy(graph, d.id);
+      warning = `
 
-### ${design.value.id} \u2014 ${design.value.title}
+> \u26A0 **Design n\xE0y \u0111\xE3 b\u1ECB thay th\u1EBF** \u2014 hi\u1EC7n th\u1EF1c n\xF3 l\xE0 hi\u1EC7n th\u1EF1c m\u1ED9t h\u01B0\u1EDBng \u0111\xE3 b\u1ECB b\u1ECF, ` + (supersededBy ? `thay b\u1EDFi \`${supersededBy}\`. \u0110\u1ECDc \`${supersededBy}\` tr\u01B0\u1EDBc khi vi\u1EBFt d\xF2ng n\xE0o, \u0111\u1EEBng l\xE0m theo c\xE1i \u0111\xE3 ch\u1EBFt.` : `nh\u01B0ng kh\xF4ng tra \u0111\u01B0\u1EE3c design n\xE0o khai \u0111\xE3 thay n\xF3 (kh\xF4ng c\xF3 c\u1EA1nh ng\u01B0\u1EE3c \`superseded_by\` trong model). H\u1ECFi ng\u01B0\u1EDDi ph\u1EE5 tr\xE1ch tr\u01B0\u1EDBc khi ti\u1EBFp t\u1EE5c.`);
+    } else if (d.status === "archived") {
+      warning = `
 
-${design.value.summary}`
-    );
+> \u26A0 **Design n\xE0y \u0111\xE3 l\u01B0u kho (archived)** \u2014 kh\xF4ng c\xF2n l\xE0 h\u01B0\u1EDBng \u0111ang d\xF9ng, d\xF9 ch\u01B0a b\u1ECB design n\xE0o kh\xE1c thay th\u1EBF th\u1EB3ng. Task khai \`implements\` m\u1ED9t design \u0111\xE3 l\u01B0u kho th\xEC nhi\u1EC1u kh\u1EA3 n\u0103ng b\u1EA3n th\xE2n task c\u0169ng l\u1ED7i th\u1EDDi \u2014 x\xE1c nh\u1EADn l\u1EA1i tr\u01B0\u1EDBc khi l\xE0m, \u0111\u1EEBng m\u1EB7c \u0111\u1ECBnh n\xF3 c\xF2n \u0111\xFAng.`;
+    }
+    parts.push(`## Design \u0111ang hi\u1EC7n th\u1EF1c
+
+### ${d.id} \u2014 ${d.title}
+
+${d.summary}${warning}`);
   }
   const decisionIds = new Set(design?.value.decisions ?? []);
   for (const sourced2 of graph.decisions.values()) {
@@ -17594,6 +17650,324 @@ var init_trace2 = __esm({
   }
 });
 
+// src/debt.ts
+function scoreOf(code) {
+  const exact = SCORES[code];
+  if (exact) return exact;
+  const slash = code.indexOf("/");
+  if (slash > 0) {
+    const fallback = NAMESPACE_DEFAULTS[code.slice(0, slash)];
+    if (fallback) return fallback;
+  }
+  throw new Error(
+    `debt.ts: m\xE3 "${code}" kh\xF4ng c\xF3 \u0111i\u1EC3m trong SCORES v\xE0 kh\xF4ng kh\u1EDBp namespace m\u1EB7c \u0111\u1ECBnh n\xE0o (schema/*, verify/*) \u2014 th\xEAm v\xE0o SCORES ho\u1EB7c NAMESPACE_DEFAULTS trong src/debt.ts`
+  );
+}
+function rowMessage(row) {
+  return row.source.origin === "diagnostic" ? row.source.diagnostic.message : row.source.item.message;
+}
+function compareRows(a, b) {
+  if (b.total !== a.total) return b.total - a.total;
+  if (a.code !== b.code) return a.code < b.code ? -1 : 1;
+  const am = rowMessage(a);
+  const bm = rowMessage(b);
+  if (am !== bm) return am < bm ? -1 : 1;
+  return 0;
+}
+function scopeIndex(graph) {
+  const index = /* @__PURE__ */ new Map();
+  for (const task of graph.tasks.values()) index.set(task.file, task.value.scope);
+  for (const mod of graph.modules.values()) {
+    if (mod.value.scope !== void 0) index.set(mod.file, mod.value.scope);
+  }
+  for (const fact of graph.facts.values()) index.set(fact.file, fact.value.scope);
+  for (const claim of graph.claims.values()) index.set(claim.file, claim.value.scope);
+  return index;
+}
+function scopeOfDebtItem(item, graph) {
+  if (item.moduleId === void 0) return void 0;
+  return graph.modules.get(item.moduleId)?.value.scope;
+}
+function debtRows(diagnostics, items, graph) {
+  const index = scopeIndex(graph);
+  const rows = [];
+  for (const diagnostic of diagnostics) {
+    const score = scoreOf(diagnostic.code);
+    rows.push({
+      code: diagnostic.code,
+      score,
+      total: score.weight + score.ease,
+      severity: diagnostic.severity,
+      scopeId: index.get(diagnostic.file),
+      source: { origin: "diagnostic", diagnostic }
+    });
+  }
+  for (const item of items) {
+    const score = scoreOf(item.kind);
+    rows.push({
+      code: item.kind,
+      score,
+      total: score.weight + score.ease,
+      severity: void 0,
+      scopeId: scopeOfDebtItem(item, graph),
+      source: { origin: "debt-item", item }
+    });
+  }
+  return rows.sort(compareRows);
+}
+function rowsInScope(rows, scopeId) {
+  return rows.filter((r) => r.scopeId === scopeId);
+}
+var SCORES, NAMESPACE_DEFAULTS;
+var init_debt = __esm({
+  "src/debt.ts"() {
+    "use strict";
+    SCORES = {
+      /* --- spine: design ---------------------------------------------------- */
+      // Liên kết treo (design → goal/decision/design khác không tồn tại): phá vỡ
+      // giả định mà brief/trace dựa vào để suy luận, nhưng cách sửa hầu hết là
+      // trỏ lại đúng ID hoặc tạo bản ghi thiếu — một sửa đổi YAML nhỏ.
+      "spine/design-missing-goal": { weight: 3, ease: 5 },
+      "spine/design-missing-decision": { weight: 3, ease: 5 },
+      "spine/design-missing-supersede": { weight: 3, ease: 5 },
+      // Thông tin quy trình (goal chưa duyệt, design mồ côi vì goal đã closed) —
+      // không sai lệch gì, chỉ nhắc một trạng thái đang chờ.
+      "spine/design-serves-draft-goal": { weight: 1, ease: 3 },
+      "spine/design-orphaned": { weight: 1, ease: 5 },
+      /* --- spine: task -------------------------------------------------------- */
+      "spine/task-missing-goal": { weight: 3, ease: 5 },
+      "spine/task-missing-design": { weight: 3, ease: 5 },
+      "spine/task-goal-not-in-design": { weight: 3, ease: 5 },
+      "spine/task-missing-blocker": { weight: 3, ease: 5 },
+      "spine/task-missing-module": { weight: 3, ease: 5 },
+      // Task "chạm khối" mà không có tiêu chí verification kiểm khối đó — task
+      // "done" được mà chưa ai chạy verify: đúng nghĩa "sinh kết luận sai". Sửa
+      // cần thêm một mục exit_contract, đôi khi phải viết bằng chứng mới cho khối.
+      "spine/task-missing-verification": { weight: 3, ease: 3 },
+      // Thiếu `model`: không ai quyết tier — không sai lệch dữ liệu, chỉ là ngỏ.
+      "spine/task-missing-model": { weight: 1, ease: 5 },
+      // "large": rủi ro compact giữa chừng làm tri thức mất/méo — hỏng nền của
+      // chính phiên đó. Sửa = chẻ nhỏ task, một việc thiết kế lại thật sự.
+      "spine/task-too-large": { weight: 3, ease: 1 },
+      /* --- scope: task/module/phạm vi ----------------------------------------- */
+      "scope/task-scope-not-found": { weight: 3, ease: 5 },
+      // Có cả lối sửa nhanh (thêm khối vào phạm vi) lẫn lối phải chẻ task — chấm
+      // ở mức giữa.
+      "scope/task-touches-outside-scope": { weight: 3, ease: 3 },
+      "scope/missing-module": { weight: 3, ease: 5 },
+      // Phạm vi active mà thiếu tiêu chí nghiệm thu / chưa ai ký: "bàn giao xong"
+      // trở thành ý kiến — cùng nhóm "sinh kết luận sai". Thiếu owner sửa bằng
+      // một dòng; thiếu acceptance phải viết tiêu chí thật.
+      "scope/without-acceptance": { weight: 3, ease: 3 },
+      "scope/without-owner": { weight: 1, ease: 5 },
+      "scope/module-without-scope": { weight: 1, ease: 5 },
+      "scope/module-scope-not-found": { weight: 3, ease: 5 },
+      "scope/module-scope-mismatch": { weight: 3, ease: 5 },
+      // Khối không nối được vào sơ đồ của phạm vi — không có sẵn "lối sửa nhanh"
+      // đúng: nối depends_on nghĩa là quyết định lại kiến trúc luồng.
+      "scope/module-orphaned": { weight: 1, ease: 1 },
+      /* --- sơ đồ khối --------------------------------------------------------- */
+      "spine/module-missing-dependency": { weight: 3, ease: 5 },
+      // Có lối sửa nhanh (đổi `to`) nhưng cũng có thể cần tạo khối mới.
+      "spine/contract-missing-target": { weight: 3, ease: 5 },
+      // Khối chưa có bằng chứng nào — mọi luồng qua nó "không tin được": sinh kết
+      // luận sai. Sửa cần viết một bằng chứng (probe/eval) thật, không phải một
+      // dòng YAML.
+      "verify/module-unverified": { weight: 3, ease: 3 },
+      // Eval yếu (ngưỡng/dataset đáng ngờ) đóng dấu xanh giả — cùng mức độ hại,
+      // sửa cần cải lại dataset/ngưỡng.
+      "verify/eval-weak": { weight: 3, ease: 3 },
+      /* --- chu trình: chỉ sửa được bằng cách thiết kế lại phụ thuộc ----------- */
+      "spine/module-cycle": { weight: 3, ease: 1 },
+      "spine/task-cycle": { weight: 3, ease: 1 },
+      "spine/design-cycle": { weight: 3, ease: 1 },
+      // Chu trình decision KHÁC hẳn ba cái trên, cả hai trục — đừng chấm theo họ
+      // hàng, chấm theo hậu quả:
+      //
+      // weight 4: chu trình module/task/design là cấu trúc phụ thuộc sai, nhìn ra
+      // được. Chu trình decision làm brief loại CẢ CỤM khỏi mục "không được đi
+      // ngược" — phiên làm việc không thấy MỘT ràng buộc nào, và không có dấu hiệu
+      // gì cho biết có thứ đã bị nuốt. Im lặng tệ hơn sai.
+      //
+      // ease 5: hai decision khai `supersedes` trỏ vòng vào nhau gần như luôn là
+      // gõ nhầm, không phải thiết kế sai — xoá một dòng YAML là xong. Khác chu
+      // trình module/task, nơi vòng lặp phản ánh phụ thuộc thật phải gỡ.
+      "spine/decision-cycle": { weight: 4, ease: 5 },
+      /* --- goal ----------------------------------------------------------------- */
+      // Goal active không design nào phục vụ: rủi ro ở tương lai (không có đường
+      // đi tới hành động), chưa gây kết luận sai ngay bây giờ. Sửa cần viết một
+      // design mới — không phải chỉ đổi một trường.
+      "spine/goal-without-design": { weight: 1, ease: 3 },
+      /* --- tri thức: fact --------------------------------------------------- */
+      // Khai đã verify nhưng sổ cái không có bản ghi khớp — lần verify đó KHÔNG
+      // xảy ra: chính là ví dụ "sinh kết luận sai" trong đề bài. Sửa = chạy lại
+      // `ganas verify`.
+      "knowledge/unbacked-verification": { weight: 3, ease: 3 },
+      // Định nghĩa đổi sau lần verify cuối — kết quả cũ đang nói về một thứ khác.
+      "knowledge/definition-changed": { weight: 3, ease: 3 },
+      "knowledge/result-mismatch": { weight: 3, ease: 3 },
+      // Chưa verify lần nào: trung thực về tình trạng của nó (không giả vờ đã
+      // kiểm), nên weight thấp hơn hẳn hai mã phía trên — nhưng vẫn phải CHẠY
+      // verify thật để sửa, không phải sửa YAML.
+      "knowledge/fact-never-verified": { weight: 1, ease: 3 },
+      // Probe fail ở lần chạy gần nhất — phát biểu ĐANG sai, đang chủ động đánh
+      // lừa bất kỳ ai đọc fact này. Sửa cần điều tra statement hay code sai.
+      "knowledge/fact-failing": { weight: 3, ease: 3 },
+      "knowledge/fact-missing-promoted-from": { weight: 1, ease: 5 },
+      "knowledge/claim-missing-promoted-fact": { weight: 3, ease: 5 },
+      // Claim bị bác bỏ: giữ lại làm thông tin ("đừng tin lại"), không có gì để
+      // "sửa" — ví dụ đúng nguyên văn của đề bài.
+      "knowledge/claim-refuted": { weight: 1, ease: 5 },
+      "knowledge/task-missing-fact": { weight: 3, ease: 5 },
+      /* --- sổ cái hỏng: mất dữ liệu / hỏng nền -------------------------------- */
+      "knowledge/ledger-corrupt": { weight: 5, ease: 1 },
+      "knowledge/ledger-chain-broken": { weight: 5, ease: 1 },
+      /* --- .gitignore: rò rỉ state riêng vào git ------------------------------ */
+      "spine/gitignore-missing-local": { weight: 3, ease: 5 },
+      /* --- load: config/YAML/ID trùng ----------------------------------------- */
+      // Khoá lạ trong config.yaml (vd gõ sai "enforcment") có thể âm thầm tắt một
+      // hàng rào mà người viết tưởng đang bật — sinh kết luận sai đúng nghĩa.
+      "spine/config-unknown-key": { weight: 3, ease: 5 },
+      // YAML không đọc được / ID trùng bị bỏ qua: cả bản ghi biến mất khỏi graph
+      // KHÔNG một tiếng động — downstream coi như nó chưa từng tồn tại.
+      "load/yaml": { weight: 3, ease: 5 },
+      "load/duplicate-id": { weight: 3, ease: 5 },
+      /* --- computeDebt: nợ riêng của sơ đồ khối (DebtKind, không có "/") ------ */
+      // Cạnh `depends_on` không cạnh contract nào kiểm — sơ đồ TRÔNG như đã nối
+      // nhưng chưa ai kiểm tương thích thật.
+      "uncovered-edge": { weight: 3, ease: 3 },
+      // Cạnh contract ĐANG fail — tích hợp giữa hai khối thật sự đang gãy ngay
+      // lúc này, không phải nguy cơ tương lai: cùng hạng với sổ cái hỏng.
+      "broken-contract": { weight: 5, ease: 3 },
+      // Trùng điều kiện với `verify/module-unverified` (khối chưa có bằng chứng
+      // nào) — chấm giống nhau cho nhất quán.
+      "unverified-module": { weight: 3, ease: 3 }
+    };
+    NAMESPACE_DEFAULTS = {
+      schema: { weight: 3, ease: 5 },
+      verify: { weight: 3, ease: 3 }
+    };
+  }
+});
+
+// src/commands/debt.ts
+var debt_exports = {};
+__export(debt_exports, {
+  COMMIT_LIMIT: () => COMMIT_LIMIT,
+  TEXT_LIMIT: () => TEXT_LIMIT,
+  buildDebtRows: () => buildDebtRows,
+  commitDebtSummary: () => commitDebtSummary,
+  renderDebtSection: () => renderDebtSection,
+  run: () => run11
+});
+function buildDebtRows(graph, checks) {
+  return debtRows(validateGraph(graph), computeDebt(graph, checks), graph);
+}
+function rowLocation(row) {
+  if (row.source.origin === "diagnostic") {
+    const d = row.source.diagnostic;
+    return d.line !== void 0 ? `${d.file}:${d.line}` : d.file;
+  }
+  const item = row.source.item;
+  if (item.moduleId !== void 0) return item.moduleId;
+  if (item.edge !== void 0) return `${item.edge.from} \u2192 ${item.edge.to}`;
+  return "";
+}
+function renderRow(row) {
+  return `  ${String(row.total).padStart(2)}  ${row.code.padEnd(CODE_WIDTH)} ${rowLocation(row)}`;
+}
+function renderDebtSection(header, rows, limit) {
+  if (rows.length === 0) return `${header} kh\xF4ng c\xF3 n\u1EE3 n\xE0o.
+`;
+  const shown = rows.slice(0, limit);
+  let out = `${header}
+` + shown.map(renderRow).join("\n") + "\n";
+  const omitted = rows.length - shown.length;
+  if (omitted > 0) {
+    out += `  \u2026 \u0111\xE3 b\u1ECF b\u1EDBt ${omitted} m\u1EE5c (in ${shown.length}/${rows.length}) \u2014 d\xF9ng \`ganas debt --json\` \u0111\u1EC3 l\u1EA5y \u0111\u1EE7.
+`;
+  }
+  return out;
+}
+function commitDebtSummary(graph, scopeId) {
+  try {
+    const rows = buildDebtRows(graph, []);
+    const inScope = rowsInScope(rows, scopeId);
+    const outside = rows.length - inScope.length;
+    if (inScope.length === 0) {
+      return outside > 0 ? `
+Kh\xF4ng c\xF3 n\u1EE3 trong ph\u1EA1m vi ${scopeId}. Ngo\xE0i ph\u1EA1m vi n\xE0y: c\xF2n ${outside} m\u1EE5c \u2014 \`ganas debt --all\`.
+` : "";
+    }
+    return "\n" + renderDebtSection(`N\u1EE3 trong ph\u1EA1m vi ${scopeId}:`, inScope, COMMIT_LIMIT) + (outside > 0 ? `Ngo\xE0i ph\u1EA1m vi n\xE0y: c\xF2n ${outside} m\u1EE5c \u2014 \`ganas debt --all\`
+` : "");
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return `
+\u26A0 kh\xF4ng d\u1EF1ng \u0111\u01B0\u1EE3c b\u1EA3ng n\u1EE3: ${reason} \u2014 ch\u1EA1y \`ganas debt\` \u0111\u1EC3 xem chi ti\u1EBFt
+`;
+  }
+}
+async function run11(argv) {
+  const { root, graph } = await openProject(argv);
+  const checks = await checkAllEdges(graph, root);
+  const rows = buildDebtRows(graph, checks);
+  const all = flag(argv, "all");
+  let scopeId;
+  if (!all) {
+    const sessionId = option(argv, "session");
+    const taskId = await taskForSession(root, sessionId);
+    if (!taskId) {
+      throw new GanasError(
+        `ch\u01B0a bi\u1EBFt \u0111ang l\xE0m task n\xE0o \u2014 kh\xF4ng l\u1ECDc \u0111\u01B0\u1EE3c ph\u1EA1m vi n\u1EE3.
+D\xF9ng \`ganas debt --all\` \u0111\u1EC3 xem to\xE0n d\u1EF1 \xE1n, ho\u1EB7c g\u1EAFn task tr\u01B0\u1EDBc b\u1EB1ng \`ganas next\` / \`--session <id>\`.`
+      );
+    }
+    const task = graph.tasks.get(taskId);
+    if (!task) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
+    scopeId = task.value.scope;
+  }
+  const filtered = scopeId === void 0 ? rows : rowsInScope(rows, scopeId);
+  const outside = rows.length - filtered.length;
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify(
+        { scope: scopeId ?? null, all, total: rows.length, shown: filtered.length, outside, rows: filtered },
+        null,
+        2
+      ) + "\n"
+    );
+    return 0;
+  }
+  if (all) {
+    process.stdout.write(renderDebtSection(`N\u1EE3 to\xE0n d\u1EF1 \xE1n (${rows.length} m\u1EE5c):`, rows, TEXT_LIMIT));
+    return 0;
+  }
+  process.stdout.write(renderDebtSection(`N\u1EE3 trong ph\u1EA1m vi ${scopeId}:`, filtered, TEXT_LIMIT));
+  if (outside > 0) {
+    process.stdout.write(`
+Ngo\xE0i ph\u1EA1m vi n\xE0y: c\xF2n ${outside} m\u1EE5c \u2014 \`ganas debt --all\`
+`);
+  }
+  return 0;
+}
+var TEXT_LIMIT, COMMIT_LIMIT, CODE_WIDTH;
+var init_debt2 = __esm({
+  "src/commands/debt.ts"() {
+    "use strict";
+    init_debt();
+    init_trace();
+    init_validate();
+    init_state();
+    init_args();
+    init_errors();
+    init_common2();
+    TEXT_LIMIT = 20;
+    COMMIT_LIMIT = 8;
+    CODE_WIDTH = 28;
+  }
+});
+
 // src/commit.ts
 function buildCommitMessage(graph, task, gate) {
   const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
@@ -17620,7 +17994,7 @@ var init_commit = __esm({
 var commit_exports = {};
 __export(commit_exports, {
   parsePorcelainZ: () => parsePorcelainZ,
-  run: () => run11
+  run: () => run12
 });
 import { existsSync as existsSync10 } from "node:fs";
 import { mkdtemp as mkdtemp2, readFile as readFile11, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
@@ -17684,7 +18058,7 @@ function reportBaseline(gate, baseline) {
   M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
 `;
 }
-async function run11(argv) {
+async function run12(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
   const taskId = argv.positional[0] ?? option(argv, "task") ?? await taskForSession(root, sessionId);
@@ -17793,7 +18167,7 @@ ${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xE
 ${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
 ` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
 Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
-` : "") + baselineWarning + outsideWarning
+` : "") + baselineWarning + outsideWarning + commitDebtSummary(graph, task.scope)
     );
     return 0;
   } finally {
@@ -17837,6 +18211,7 @@ var init_commit2 = __esm({
     init_exec();
     init_ledger();
     init_common2();
+    init_debt2();
   }
 });
 
@@ -17937,7 +18312,7 @@ var init_prune = __esm({
 // src/commands/note.ts
 var note_exports = {};
 __export(note_exports, {
-  run: () => run12
+  run: () => run13
 });
 import { existsSync as existsSync12 } from "node:fs";
 import { appendFile as appendFile3, mkdir as mkdir7, writeFile as writeFile6 } from "node:fs/promises";
@@ -17971,7 +18346,7 @@ function renderEntry(opts) {
   );
   return lines.join("\n") + "\n";
 }
-async function run12(argv) {
+async function run13(argv) {
   const content = argv.positional.join(" ").trim();
   if (!content) {
     throw new GanasError(`c\u1EA7n n\u1ED9i dung ghi ch\xFA \u2014 vd: ganas note "ch\u01B0a r\xF5 v\xEC sao webhook retry 3 l\u1EA7n"`);
@@ -18163,9 +18538,9 @@ var init_handoff = __esm({
 // src/commands/handoff.ts
 var handoff_exports = {};
 __export(handoff_exports, {
-  run: () => run13
+  run: () => run14
 });
-async function run13(argv) {
+async function run14(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
   if (!sessionId) {
@@ -18206,7 +18581,7 @@ var init_handoff2 = __esm({
 // src/commands/prune.ts
 var prune_exports = {};
 __export(prune_exports, {
-  run: () => run14
+  run: () => run15
 });
 function summarize(plan) {
   const lines = [];
@@ -18226,7 +18601,7 @@ function summarize(plan) {
   }
   return lines.join("\n");
 }
-async function run14(argv) {
+async function run15(argv) {
   const { root, graph } = await openProject(argv);
   const olderThanRaw = option(argv, "older-than");
   const olderThanDays = olderThanRaw === void 0 ? DEFAULT_OLDER_THAN_DAYS : Number(olderThanRaw);
@@ -18277,9 +18652,9 @@ var init_prune2 = __esm({
 // src/commands/ledger.ts
 var ledger_exports = {};
 __export(ledger_exports, {
-  run: () => run15
+  run: () => run16
 });
-async function run15(argv) {
+async function run16(argv) {
   const root = requireGanasRoot(process.cwd());
   const entries = await readLedger(root);
   const corrupt = ledgerCorruption(root);
@@ -18619,9 +18994,9 @@ Vi\u1EC7c c\u01A1 h\u1ECDc l\xE0m b\u1EB1ng model m\u1EA1nh nh\u1EA5t ch\xEDnh l
 // src/commands/hook.ts
 var hook_exports = {};
 __export(hook_exports, {
-  run: () => run16
+  run: () => run17
 });
-async function run16(argv) {
+async function run17(argv) {
   const event = argv.positional[0];
   const handler = event ? HANDLERS[event] : void 0;
   if (!handler) {
@@ -18675,6 +19050,7 @@ var COMMANDS = {
   gate: () => Promise.resolve().then(() => (init_gate2(), gate_exports)),
   verify: () => Promise.resolve().then(() => (init_verify(), verify_exports)),
   trace: () => Promise.resolve().then(() => (init_trace2(), trace_exports)),
+  debt: () => Promise.resolve().then(() => (init_debt2(), debt_exports)),
   commit: () => Promise.resolve().then(() => (init_commit2(), commit_exports)),
   note: () => Promise.resolve().then(() => (init_note(), note_exports)),
   handoff: () => Promise.resolve().then(() => (init_handoff2(), handoff_exports)),
@@ -18698,6 +19074,7 @@ L\u1EC7nh:
   gate [task]          Ch\u1EA5m \u0111i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh c\u1EE7a task
   verify [target...]   Ch\u1EA1y b\u1EB1ng ch\u1EE9ng: probe v\xE0 eval, ghi s\u1ED5 c\xE1i (--scope l\u1ECDc theo ph\u1EA1m vi)
   trace                Ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh (contract), in s\u01A1 \u0111\u1ED3 kh\u1ED1i, b\xE1o n\u1EE3 ki\u1EC3m ch\u1EE9ng (--scope)
+  debt [--all]         B\u1EA3ng x\u1EBFp h\u1EA1ng n\u1EE3 theo ph\u1EA1m vi task \u0111ang l\xE0m (--all: to\xE0n d\u1EF1 \xE1n)
   commit [task]        Commit task \u0111\xE3 \u0111\u1EA1t gate \u2014 message d\u1EF1ng t\u1EEB d\u1EEF li\u1EC7u \u0111\xE3 ki\u1EC3m ch\u1EE9ng
   note "..."           Ghi ch\xFA th\xF4 c\u1EE7a phi\xEAn v\xE0o .ganas/runs/notes/ (ch\u01B0a ki\u1EC3m, kh\xF4ng ph\u1EA3i fact)
   handoff --session id Ghi b\u1EA3n ghi ti\u1EBFp n\u1ED1i c\u1EE7a phi\xEAn, d\u1EABn xu\u1EA5t t\u1EEB transcript
@@ -18716,7 +19093,7 @@ async function main() {
   const raw = process.argv.slice(2);
   const argv = parseArgs(raw);
   if (argv.flags["version"] || argv.flags["v"]) {
-    process.stdout.write(`${"0.3.0"}
+    process.stdout.write(`${"0.4.0"}
 `);
     return 0;
   }
