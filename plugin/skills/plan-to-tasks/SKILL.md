@@ -17,11 +17,27 @@ context của phiên này.
    phù hợp, dùng lại nó (`implements` trỏ vào đó). Nếu plan là một hướng
    tiếp cận mới, tạo Design mới — nhớ khai `serves` đúng goal.
 
-2. **Chẻ thành Task vừa một phiên.** Ưu tiên nhiều task nhỏ hơn một task
+2. **Cấp ID thật ngay, từ lần nhắc tới task đầu tiên.** Chạy `ganas id task
+   --count N` một lần cho cả loạt, rồi dùng đúng những id đó trong mọi câu
+   sau — kể cả lúc mới bàn miệng, chưa ghi file nào. Cấm nhãn tạm: "Task 1",
+   "Lô 3", "P1-T2.3", "T4a" — mỗi nhãn tạm là một lớp phiên dịch mà phiên sau
+   phải tự đoán lại, và không nhãn nào tra được bằng `ganas`. Rẻ lúc viết,
+   đắt ở mọi lượt đọc về sau.
+
+   Không có mức "subtask": việc con là task anh em, nối bằng `blocked_by`,
+   thứ tự và cụm đọc được từ DAG. Đánh số `4a/4b/4c` là giả vờ có một tầng
+   không tồn tại trong model.
+
+   Không có "phase"/"sprint"/"lô": đơn vị gom nhóm là **Scope** (`P-`, ranh
+   giới bàn giao + code + người ký) và **Design** (`D-`, một hướng tiếp
+   cận). Một plan vừa duyệt thường ứng với đúng một Design — muốn nói
+   "phase 1" thì gọi tên Design đó.
+
+3. **Chẻ thành Task vừa một phiên.** Ưu tiên nhiều task nhỏ hơn một task
    khổng lồ (`estimated_context: large` bị validator cảnh báo — đó là dấu
    hiệu phải chẻ tiếp, không phải thứ chấp nhận được).
 
-3. **Mỗi task khai đủ:**
+4. **Mỗi task khai đủ:**
    - `touches` — khối nào trong sơ đồ bị chạm.
    - `exit_contract` — mỗi khối trong `touches` phải có ít nhất một tiêu chí
      `kind: verification` kiểm nó (luật `spine/task-missing-verification`,
@@ -38,7 +54,7 @@ context của phiên này.
    viết xong — vá ở đây, lúc chẻ, rẻ hơn nhiều. **Một gate tự xanh trước khi
    sửa là gate không tồn tại.**
 
-4. **Gán `model` cho MỌI task, ngay lúc chẻ.** Field `Task.model`, một trong
+5. **Gán `model` cho MỌI task, ngay lúc chẻ.** Field `Task.model`, một trong
    ba tier có sẵn trong `config.yaml` (`main`/`verifier`/`scribe`):
    - `main` — việc thật sự khó/mơ hồ, cần phán đoán nhiều.
    - `scribe` — việc cơ học, đơn giản, ít quyết định.
@@ -54,7 +70,7 @@ context của phiên này.
    báo `spine/task-missing-model` cho task nào bỏ trống, và brief của task đó
    sẽ mở đầu bằng cảnh báo "chưa ai quyết ai làm".
 
-5. **Chạy `ganas validate`.** Validator hiện có (liên kết goal/design/sprint,
+6. **Chạy `ganas validate`.** Validator hiện có (liên kết goal/design/scope,
    `task-missing-verification`, `estimated_context: large`...) đã đủ để bắt
    lỗi chẻ ẩu — không cần bước kiểm tra thủ công thêm.
 
