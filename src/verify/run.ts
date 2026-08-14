@@ -318,11 +318,22 @@ async function runEval(target: Target, run: string, opts: RunOptions): Promise<R
  * Vân tay nội dung của mọi file khớp `context`. `undefined` khi target không
  * khai glob nào — không có gì để theo dõi thì đừng ghi một hash rỗng, vì hash
  * rỗng trông y hệt "đã kiểm và không có file nào".
+ *
+ * `allProjectFiles`: danh sách file dự án đã liệt kê sẵn, cho người gọi tự
+ * tính MỘT LẦN rồi truyền vào khi cần gọi hàm này lặp lại trên nhiều target
+ * trong cùng một lượt (ví dụ `computeFreshness`) — tránh spawn `git ls-files`
+ * mỗi target. Không truyền thì tự liệt kê như cũ; đây KHÔNG phải cache ẩn vì
+ * người gọi luôn thấy và kiểm soát danh sách được dùng.
  */
-export async function depsHash(context: string[], root: string): Promise<string | undefined> {
+export async function depsHash(
+  context: string[],
+  root: string,
+  allProjectFiles?: string[],
+): Promise<string | undefined> {
   const globs = context.filter((c) => c.includes("*") || c.includes("/"));
   if (globs.length === 0) return undefined;
-  const files = (await listProjectFiles(root)).filter((p) => matchesAny(p, globs)).sort();
+  const all = allProjectFiles ?? (await listProjectFiles(root));
+  const files = all.filter((p) => matchesAny(p, globs)).sort();
   const parts: string[] = [];
   for (const rel of files) parts.push(`${rel}:${await fileHash(join(root, rel))}`);
   return sha256(parts.join("\n"));

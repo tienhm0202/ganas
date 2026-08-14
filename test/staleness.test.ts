@@ -1065,6 +1065,98 @@ test("⭐ nghiệm thu phạm vi STALE khi code của khối thành viên đổi
   }
 });
 
+/* --- Đường nóng: nhiều target cùng lượt tính, không được lẫn glob của nhau --
+ *
+ * `computeFreshness` liệt kê file dự án MỘT LẦN rồi truyền cho `depsHash` của
+ * từng target thay vì để mỗi target tự spawn `git ls-files` (sửa hiệu năng).
+ * Test này khoá rằng việc dùng chung một danh sách file không làm lẫn glob
+ * giữa các target khác nhau, và kết quả vẫn ổn định qua nhiều lần gọi. */
+
+async function multiTargetProject(): Promise<string> {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/facts/f.yaml": `- id: F-X-001
+  scope: P-thu
+  statement: "file src/x tồn tại"
+  verify:
+    run: "test -d src/x"
+  depends_on: ["src/x/**"]
+`,
+    ".ganas/modules/M-a.yaml": `id: M-a
+scope: P-thu
+title: "Khối A"
+nature: code
+paths: ["src/a/**"]
+status: implemented
+verify:
+  - id: V-1
+    kind: probe
+    run: "test -f src/a/index.ts"
+  - id: V-2
+    kind: probe
+    run: "test -d src/a"
+`,
+    ".ganas/scopes/P-thu.yaml": `id: P-thu
+title: "Phạm vi thử"
+version: 0.1.0
+owner: "@nguoi-duyet"
+status: active
+modules: [M-a]
+entry: M-a
+acceptance:
+  - id: V-e2e
+    kind: probe
+    run: "test -f src/a/index.ts"
+`,
+  });
+  await mkdir(join(root, "src", "x"), { recursive: true });
+  await mkdir(join(root, "src", "a"), { recursive: true });
+  await writeFile(join(root, "src", "x", "index.ts"), "export const x = 1;\n", "utf8");
+  await writeFile(join(root, "src", "a", "index.ts"), "export const a = 1;\n", "utf8");
+  return root;
+}
+
+test("⭐ nhiều target dùng chung danh sách file: mỗi target vẫn chỉ thấy glob của chính nó", async () => {
+  const root = await multiTargetProject();
+  try {
+    const graph = await loadGraph(root);
+    const { scopeTargets } = await import("../src/verify/run.js");
+
+    await runTarget(factTarget(graph.facts.get("F-X-001")!), RUN(root));
+    for (const t of moduleTargets(graph.modules.get("M-a")!)) await runTarget(t, RUN(root));
+    for (const t of scopeTargets(graph.scopes.get("P-thu")!, graph)) await runTarget(t, RUN(root));
+
+    const after1 = await computeFreshness(await loadGraph(root));
+    for (const id of ["F-X-001", "M-a/V-1", "M-a/V-2", "P-thu/V-e2e"]) {
+      assert.equal(after1.get(id)?.freshness, "fresh", `${id} phải fresh sau khi verify hết`);
+    }
+
+    // Gọi lại lần hai trên cùng fixture: kết quả phải giống hệt (so sâu Map),
+    // không có rò rỉ trạng thái giữa các lần tính hay giữa các target.
+    const after2 = await computeFreshness(await loadGraph(root));
+    assert.deepEqual([...after2.entries()], [...after1.entries()]);
+
+    // Chỉ sửa file của FACT — module và scope (glob khác) không được báo stale
+    // lây, dù cùng dùng chung một danh sách file liệt kê một lần.
+    const future = new Date(Date.now() + 60_000);
+    const xFile = join(root, "src", "x", "index.ts");
+    await writeFile(xFile, "export const x = 2;\n", "utf8");
+    await utimes(xFile, future, future);
+
+    const after3 = await computeFreshness(await loadGraph(root));
+    assert.equal(after3.get("F-X-001")?.freshness, "stale", "fact phải thấy file phụ thuộc đổi");
+    assert.equal(after3.get("M-a/V-1")?.freshness, "fresh", "module KHÔNG được lây stale từ fact");
+    assert.equal(after3.get("M-a/V-2")?.freshness, "fresh", "module KHÔNG được lây stale từ fact");
+    assert.equal(
+      after3.get("P-thu/V-e2e")?.freshness,
+      "fresh",
+      "phạm vi KHÔNG được lây stale từ fact ngoài glob của nó",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
 test("phạm vi active mà thiếu nghiệm thu / thiếu người ký đều bị cảnh báo", async () => {
   const { codes } = await check({
     ".ganas/goals/G-001.yaml": goal(),

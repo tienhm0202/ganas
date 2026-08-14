@@ -224,7 +224,7 @@ export async function computeFreshness(
 
     const decision = decide({
       entry,
-      depsNow: await depsHash(target.context, graph.root),
+      depsNow: await depsHash(target.context, graph.root, files),
       currentDef: defHash(target.definition, target.statement),
       current: await currentFingerprint(target, graph.root),
       ttlDays: target.ttlDays,
