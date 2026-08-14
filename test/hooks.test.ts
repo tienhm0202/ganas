@@ -8,6 +8,7 @@ import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
 import * as handlers from "../src/hooks/handlers.js";
 import { renderBrief } from "../src/render/brief.js";
+import { markTouched, readState, TOUCHED_PATHS_CAP, touchedPathsFor } from "../src/state.js";
 import { moduleTargets, runTarget } from "../src/verify/run.js";
 import { cleanup, design, goal, makeProject, moduleYaml, scope, task } from "./helpers.js";
 
@@ -504,6 +505,124 @@ test("phần biến động nếu có thì nằm ở CUỐI brief", async () => 
       "phần ổn định phải là tiền tố — đó là điều kiện để prompt cache dùng lại được",
     );
     assert.ok(withTail.endsWith("MOC-THOI-GIAN"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- touched_paths: đường dẫn phiên đã sửa -------------------------------- */
+
+async function pathsOf(root: string, session = "s1"): Promise<string[] | undefined> {
+  return (await readState(root)).sessions[session]?.touched_paths;
+}
+
+test("postToolUse ghi đường dẫn tương đối gốc repo, khử trùng lặp", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root); // src/index.ts
+    await touch(root); // sửa lại đúng file đó
+    assert.deepEqual(await pathsOf(root), ["src/index.ts"]);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("file ngoài cây repo không được ghi vào touched_paths", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Write",
+      tool_input: { file_path: "/etc/hosts" },
+    });
+    const rec = (await readState(root)).sessions["s1"];
+    assert.ok(rec?.touched_at, "vẫn phải tính là đã làm việc");
+    assert.deepEqual(rec?.touched_paths, undefined, "đường dẫn ngoài cây repo không đối chiếu được");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("sửa qua Bash dựng cờ nhưng KHÔNG góp đường dẫn — giới hạn đã biết", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.preToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Bash",
+      tool_input: { command: "sed -i 's/a/b/' src/index.ts" },
+    });
+    const rec = (await readState(root)).sessions["s1"];
+    assert.ok(rec?.touched_at, "sửa qua shell vẫn là sửa file");
+    assert.deepEqual(rec?.touched_paths, undefined, "ganas không parse shell để đoán đường dẫn");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ Stop hạ touched_at nhưng GIỮ touched_paths", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
+    await handlers.stop({ cwd: root, session_id: "s1" });
+
+    const rec = (await readState(root)).sessions["s1"];
+    assert.equal(rec?.touched_at, undefined, "cờ của MỘT lượt phải hạ sau khi chấm");
+    assert.deepEqual(
+      rec?.touched_paths,
+      ["src/index.ts"],
+      "danh sách là của CẢ task: xoá theo lượt thì nó rỗng đúng lúc có người chạy `ganas gate`",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("bind lại phiên vào task thì touched_paths trở về rỗng", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
+    assert.deepEqual(await pathsOf(root), ["src/index.ts"]);
+
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    assert.deepEqual(await pathsOf(root), undefined, "bindSession thay cả bản ghi — như baseline");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("touched_paths có trần: đầy thì giữ phần cũ, bỏ đường dẫn mới", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    for (let i = 0; i < TOUCHED_PATHS_CAP + 5; i++) {
+      await markTouched(root, "s1", `src/f${i}.ts`);
+    }
+    const paths = (await pathsOf(root))!;
+    assert.equal(paths.length, TOUCHED_PATHS_CAP);
+    assert.equal(paths[0], "src/f0.ts", "giữ đoạn đi lạc SỚM nhất, không phải FIFO");
+    assert.ok(!paths.includes(`src/f${TOUCHED_PATHS_CAP + 4}.ts`));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("touchedPathsFor chỉ trả khi phiên còn bind đúng task đó", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await touch(root);
+
+    assert.deepEqual(await touchedPathsFor(root, "s1", "T-001"), ["src/index.ts"]);
+    assert.deepEqual(await touchedPathsFor(root, "s1", "T-999"), [], "task khác thì vô nghĩa");
+    assert.deepEqual(await touchedPathsFor(root, undefined, "T-001"), []);
+    assert.deepEqual(await touchedPathsFor(root, "s2", "T-001"), [], "không rơi về current_task");
   } finally {
     await cleanup(root);
   }

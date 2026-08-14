@@ -24484,6 +24484,7 @@ var init_boundary = __esm({
 // src/state.ts
 var state_exports = {};
 __export(state_exports, {
+  TOUCHED_PATHS_CAP: () => TOUCHED_PATHS_CAP,
   baselineFor: () => baselineFor,
   bindSession: () => bindSession,
   clearTouched: () => clearTouched,
@@ -24493,6 +24494,7 @@ __export(state_exports, {
   sessionRecord: () => sessionRecord,
   setBaseline: () => setBaseline,
   taskForSession: () => taskForSession,
+  touchedPathsFor: () => touchedPathsFor,
   updateState: () => updateState,
   writeState: () => writeState
 });
@@ -24549,6 +24551,12 @@ async function baselineFor(root, sessionId, taskId) {
   if (!rec || rec.task !== taskId) return void 0;
   return rec.baseline;
 }
+async function touchedPathsFor(root, sessionId, taskId) {
+  if (!sessionId) return [];
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return [];
+  return rec.touched_paths ?? [];
+}
 async function taskForSession(root, sessionId) {
   const state = await readState(root);
   if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
@@ -24558,11 +24566,23 @@ async function sessionRecord(root, sessionId) {
   const state = await readState(root);
   return state.sessions[sessionId] ?? null;
 }
-async function markTouched(root, sessionId) {
+async function markTouched(root, sessionId, relPath) {
   const state = await readState(root);
   const rec = state.sessions[sessionId];
-  if (!rec || rec.touched_at) return;
-  rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+  if (!rec) return;
+  let dirty = false;
+  if (!rec.touched_at) {
+    rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+    dirty = true;
+  }
+  if (relPath) {
+    const list = rec.touched_paths ??= [];
+    if (!list.includes(relPath) && list.length < TOUCHED_PATHS_CAP) {
+      list.push(relPath);
+      dirty = true;
+    }
+  }
+  if (!dirty) return;
   await writeState(root, state);
 }
 async function clearTouched(root, sessionId) {
@@ -24570,12 +24590,13 @@ async function clearTouched(root, sessionId) {
     delete s.sessions[sessionId]?.touched_at;
   });
 }
-var EMPTY;
+var EMPTY, TOUCHED_PATHS_CAP;
 var init_state = __esm({
   "src/state.ts"() {
     "use strict";
     init_paths();
     EMPTY = { version: 1, current_task: null, sessions: {} };
+    TOUCHED_PATHS_CAP = 200;
   }
 });
 

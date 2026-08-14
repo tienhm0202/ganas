@@ -199,6 +199,12 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
       // dấu ở PRE vì với Bash đây là lần duy nhất ganas nhìn thấy nội dung lệnh.
       // Đánh dấu nhầm (lệnh sau đó fail) chỉ tốn thêm một lần chấm gate; bỏ sót
       // thì cả một đợt sửa code thoát khỏi exit_contract.
+      //
+      // KHÔNG kèm đường dẫn: Bash chỉ cho ta chuỗi lệnh thô, và parse nó để đoán
+      // file nào bị sửa thì sai nhiều hơn đúng (`sed -i` sau `xargs`, biến, glob
+      // do shell bung). Nên đợt sửa qua Bash dựng `touched_at` mà không góp
+      // `touched_paths` nào — nó VÔ HÌNH với mọi kiểm dựa trên đường dẫn. Bỏ
+      // sót thì còn im lặng được, báo sai thì cảnh báo bị tắt vĩnh viễn.
       if (input.session_id) await markTouched(root, input.session_id);
     }
   }
@@ -217,15 +223,20 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
   const root = findGanasRoot(cwd);
   if (!root) return ALLOW;
 
-  // Trước cả bộ lọc `.ganas/` bên dưới: ghi code cũng là làm việc, và đó chính
-  // là thứ Stop hook cần biết để phân biệt lượt sửa với lượt hỏi đáp.
-  if (input.session_id) await markTouched(root, input.session_id);
-
   const raw = input.tool_input?.["file_path"];
-  if (typeof raw !== "string") return ALLOW;
+  const abs = typeof raw === "string" ? (isAbsolute(raw) ? raw : resolve(cwd, raw)) : undefined;
+  const rel = abs === undefined ? undefined : relative(root, abs).split("\\").join("/");
 
-  const abs = isAbsolute(raw) ? raw : resolve(cwd, raw);
-  const rel = relative(root, abs).split("\\").join("/");
+  // File ngoài cây repo (`../..`, ổ đĩa khác) không đối chiếu được với ranh giới
+  // của task — ranh giới là pathspec tương đối gốc repo. Ghi vào chỉ tạo nhiễu.
+  const inTree = rel !== undefined && rel !== "" && !rel.startsWith("../");
+
+  // Trước cả bộ lọc `.ganas/` bên dưới: ghi code cũng là làm việc, và đó chính
+  // là thứ Stop hook cần biết để phân biệt lượt sửa với lượt hỏi đáp. Vẫn phải
+  // gọi kể cả khi không có đường dẫn — NotebookEdit gửi `notebook_path`.
+  if (input.session_id) await markTouched(root, input.session_id, inTree ? rel : undefined);
+
+  if (rel === undefined) return ALLOW;
   if (!rel.startsWith(`${GANAS_DIR}/`)) return ALLOW; // chỉ gác kho tri thức
 
   const graph = await loadGraph(root);

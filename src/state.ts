@@ -28,6 +28,29 @@ export interface SessionRecord {
    */
   touched_at?: string;
   /**
+   * Đường dẫn (tương đối gốc repo, dấu `/`) mà phiên này đã ghi kể từ khi bind
+   * vào task hiện tại.
+   *
+   * KHÁC `touched_at` về vòng đời, và khác có chủ ý: `touched_at` là cờ của MỘT
+   * lượt — Stop hook hạ nó xuống ngay sau khi chấm. Còn danh sách này là của CẢ
+   * task, vì câu hỏi nó phục vụ ("phiên có sửa ra ngoài ranh giới code của task
+   * không") hỏi về toàn bộ việc đã làm, không phải về lượt cuối. Người ta chạy
+   * `ganas gate` sau NHIỀU lượt có sửa; xoá theo lượt thì danh sách rỗng đúng
+   * lúc có người nhìn. Nên `clearTouched` cố ý KHÔNG đụng tới nó.
+   *
+   * Vòng đời đúng — "còn bind vào task này" — đã sẵn miễn phí: `bindSession`
+   * thay cả `SessionRecord`, `releaseSession` xoá hẳn. Y hệt `baseline`.
+   *
+   * Chỉ Write/Edit mới góp được vào đây: sửa qua Bash (`sed -i`, `>`) chỉ dựng
+   * `touched_at` — xem `preToolUse`, ganas không parse shell để đoán đường dẫn.
+   *
+   * `.ganas/state.json` là file local, không commit (`LOCAL_ONLY` trong
+   * graph/paths.ts). Nên clone mới, máy thứ hai, hay phiên mở trước khi có
+   * field này đều KHÔNG có lịch sử ở đây, và mọi kiểm dựa vào nó sẽ im lặng.
+   * VẮNG CẢNH BÁO KHÔNG PHẢI BẰNG CHỨNG ĐÃ Ở TRONG RANH GIỚI.
+   */
+  touched_paths?: string[];
+  /**
    * Kết quả chấm `exit_contract` NGAY LÚC nhận task, theo `criterionKey`.
    *
    * Tiêu chí đã `true` ở đây mà lúc commit vẫn `true` thì nó không gác gì —
@@ -45,6 +68,17 @@ export interface State {
 }
 
 const EMPTY: State = { version: 1, current_task: null, sessions: {} };
+
+/**
+ * Trần số đường dẫn ghi lại cho một phiên — state.json là file trạng thái nhỏ,
+ * không phải log.
+ *
+ * Đầy thì BỎ đường dẫn mới, giữ nguyên phần đã có — cố ý không phải FIFO: FIFO
+ * vứt đi đúng đoạn đi lạc SỚM nhất, thứ đáng báo nhất. Và 200 file khác nhau
+ * trong một task tự nó đã là tín hiệu, nên không cần thêm cờ "đã tràn": chỗ nào
+ * cần biết thì so `length === TOUCHED_PATHS_CAP`.
+ */
+export const TOUCHED_PATHS_CAP = 200;
 
 export async function readState(root: string): Promise<State> {
   const file = ganasPath(root, STATE_FILE);
@@ -116,6 +150,23 @@ export async function baselineFor(
   return rec.baseline;
 }
 
+/**
+ * Đường dẫn phiên này đã ghi, CHỈ khi nó còn đang bind vào đúng task đó.
+ *
+ * Không rơi về `current_task`, cùng lý do với `baselineFor`: file mà phiên khác
+ * sửa cho việc khác đem ra chấm ranh giới của task này là kết luận sai.
+ */
+export async function touchedPathsFor(
+  root: string,
+  sessionId: string | undefined,
+  taskId: string,
+): Promise<string[]> {
+  if (!sessionId) return [];
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return [];
+  return rec.touched_paths ?? [];
+}
+
 /** Task của một phiên; rơi về current_task khi không có session id. */
 export async function taskForSession(root: string, sessionId?: string): Promise<string | null> {
   const state = await readState(root);
@@ -139,16 +190,52 @@ export async function sessionRecord(
   return state.sessions[sessionId] ?? null;
 }
 
-/** Đánh dấu phiên vừa ghi file. Không tạo bản ghi mới: phiên chưa bind thì không có gì để chấm. */
-export async function markTouched(root: string, sessionId: string): Promise<void> {
+/**
+ * Đánh dấu phiên vừa ghi file. Không tạo bản ghi mới: phiên chưa bind thì không
+ * có gì để chấm.
+ *
+ * `relPath` là tuỳ chọn vì không phải lượt ghi nào cũng cho biết đường dẫn:
+ * NotebookEdit gửi `notebook_path`, còn Bash thì chỉ có chuỗi lệnh thô. Những
+ * lượt đó vẫn PHẢI dựng được `touched_at` — thiếu nó thì Stop hook hết phân
+ * biệt được lượt sửa với lượt hỏi đáp.
+ */
+export async function markTouched(
+  root: string,
+  sessionId: string,
+  relPath?: string,
+): Promise<void> {
   const state = await readState(root);
   const rec = state.sessions[sessionId];
-  if (!rec || rec.touched_at) return; // đã có cờ rồi thì khỏi ghi lại đĩa mỗi lần Edit
-  rec.touched_at = new Date().toISOString();
+  if (!rec) return;
+
+  // Hàm này chạy ở MỌI lần Edit, nên chỉ chạm đĩa khi thật sự có gì mới —
+  // sửa đi sửa lại cùng một file không được biến thành một chuỗi ghi state.
+  let dirty = false;
+
+  if (!rec.touched_at) {
+    rec.touched_at = new Date().toISOString();
+    dirty = true;
+  }
+
+  if (relPath) {
+    const list = (rec.touched_paths ??= []);
+    if (!list.includes(relPath) && list.length < TOUCHED_PATHS_CAP) {
+      list.push(relPath);
+      dirty = true;
+    }
+  }
+
+  if (!dirty) return;
   await writeState(root, state);
 }
 
-/** Hạ cờ sau khi đã chấm — lượt hỏi đáp tiếp theo lại đi qua Stop hook mà không tốn gì. */
+/**
+ * Hạ cờ sau khi đã chấm — lượt hỏi đáp tiếp theo lại đi qua Stop hook mà không
+ * tốn gì.
+ *
+ * Cố ý CHỈ hạ `touched_at`, không đụng `touched_paths`: hai thứ đó trả lời hai
+ * câu hỏi khác nhau, ở hai nhịp khác nhau. Xem doc của `touched_paths`.
+ */
 export async function clearTouched(root: string, sessionId: string): Promise<void> {
   await updateState(root, (s) => {
     delete s.sessions[sessionId]?.touched_at;

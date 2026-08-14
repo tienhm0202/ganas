@@ -14733,6 +14733,7 @@ var init_boundary = __esm({
 // src/state.ts
 var state_exports = {};
 __export(state_exports, {
+  TOUCHED_PATHS_CAP: () => TOUCHED_PATHS_CAP,
   baselineFor: () => baselineFor,
   bindSession: () => bindSession,
   clearTouched: () => clearTouched,
@@ -14742,6 +14743,7 @@ __export(state_exports, {
   sessionRecord: () => sessionRecord,
   setBaseline: () => setBaseline,
   taskForSession: () => taskForSession,
+  touchedPathsFor: () => touchedPathsFor,
   updateState: () => updateState,
   writeState: () => writeState
 });
@@ -14798,6 +14800,12 @@ async function baselineFor(root, sessionId, taskId) {
   if (!rec || rec.task !== taskId) return void 0;
   return rec.baseline;
 }
+async function touchedPathsFor(root, sessionId, taskId) {
+  if (!sessionId) return [];
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return [];
+  return rec.touched_paths ?? [];
+}
 async function taskForSession(root, sessionId) {
   const state = await readState(root);
   if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
@@ -14807,11 +14815,23 @@ async function sessionRecord(root, sessionId) {
   const state = await readState(root);
   return state.sessions[sessionId] ?? null;
 }
-async function markTouched(root, sessionId) {
+async function markTouched(root, sessionId, relPath) {
   const state = await readState(root);
   const rec = state.sessions[sessionId];
-  if (!rec || rec.touched_at) return;
-  rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+  if (!rec) return;
+  let dirty = false;
+  if (!rec.touched_at) {
+    rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+    dirty = true;
+  }
+  if (relPath) {
+    const list = rec.touched_paths ??= [];
+    if (!list.includes(relPath) && list.length < TOUCHED_PATHS_CAP) {
+      list.push(relPath);
+      dirty = true;
+    }
+  }
+  if (!dirty) return;
   await writeState(root, state);
 }
 async function clearTouched(root, sessionId) {
@@ -14819,12 +14839,13 @@ async function clearTouched(root, sessionId) {
     delete s.sessions[sessionId]?.touched_at;
   });
 }
-var EMPTY;
+var EMPTY, TOUCHED_PATHS_CAP;
 var init_state = __esm({
   "src/state.ts"() {
     "use strict";
     init_paths();
     EMPTY = { version: 1, current_task: null, sessions: {} };
+    TOUCHED_PATHS_CAP = 200;
   }
 });
 
@@ -18074,11 +18095,12 @@ async function postToolUse(input) {
   const cwd = input.cwd ?? process.cwd();
   const root = findGanasRoot(cwd);
   if (!root) return ALLOW;
-  if (input.session_id) await markTouched(root, input.session_id);
   const raw = input.tool_input?.["file_path"];
-  if (typeof raw !== "string") return ALLOW;
-  const abs = isAbsolute(raw) ? raw : resolve3(cwd, raw);
-  const rel = relative5(root, abs).split("\\").join("/");
+  const abs = typeof raw === "string" ? isAbsolute(raw) ? raw : resolve3(cwd, raw) : void 0;
+  const rel = abs === void 0 ? void 0 : relative5(root, abs).split("\\").join("/");
+  const inTree = rel !== void 0 && rel !== "" && !rel.startsWith("../");
+  if (input.session_id) await markTouched(root, input.session_id, inTree ? rel : void 0);
+  if (rel === void 0) return ALLOW;
   if (!rel.startsWith(`${GANAS_DIR}/`)) return ALLOW;
   const graph = await loadGraph(root);
   const all = validateGraph(graph);
