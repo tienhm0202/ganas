@@ -32,6 +32,7 @@ const EXPECTED_COMMANDS = [
   "verify",
   "trace",
   "commit",
+  "note",
   "handoff",
   "prune",
   "ledger",

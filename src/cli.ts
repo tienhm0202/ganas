@@ -29,6 +29,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   verify: () => import("./commands/verify.js"),
   trace: () => import("./commands/trace.js"),
   commit: () => import("./commands/commit.js"),
+  note: () => import("./commands/note.js"),
   handoff: () => import("./commands/handoff.js"),
   prune: () => import("./commands/prune.js"),
   ledger: () => import("./commands/ledger.js"),
@@ -52,6 +53,7 @@ Lệnh:
   verify [target...]   Chạy bằng chứng: probe và eval, ghi sổ cái (--scope lọc theo phạm vi)
   trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng (--scope)
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng
+  note "..."           Ghi chú thô của phiên vào .ganas/runs/notes/ (chưa kiểm, không phải fact)
   handoff --session id Ghi bản ghi tiếp nối của phiên, dẫn xuất từ transcript
   prune                Dọn ephemeral cũ, archive task done (mặc định dry-run)
   ledger --check       Kiểm hash-chain của sổ cái xác minh (dùng trong hook pre-commit)

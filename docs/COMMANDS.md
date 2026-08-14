@@ -475,6 +475,47 @@ ganas commit T-014 --dry-run          # xem sẽ stage gì, chưa đụng index
 ganas commit T-014 --no-close         # commit nhưng tự đánh dấu done sau
 ```
 
+### `ganas note "..."`
+
+Ghi một ghi chú thô, tức thời — thứ đáng lẽ chảy vào một file `NOTES.md` tự
+chế nào đó. Lý do lệnh này tồn tại: ganas cưỡng chế rất chặt bên trong
+`.ganas/` (claim bắt buộc anchor, hook chặn ghi, sổ cái hash-chain), và đúng
+sự cưỡng chế đó đẩy văn xuôi sang một kênh không ai gác — agent bị chặn vì
+thiếu anchor không đi tìm bằng chứng, nó viết một đoạn văn xuôi vào chỗ miễn
+phí, rồi phiên sau đọc và tin. `ganas note` không rào chặt hơn — nó làm cho
+đường đúng (gõ một dòng, lệnh tự đóng dấu phần còn lại) RẺ hơn đường sai (mở
+file ra gõ tay).
+
+Chỉ cần gõ nội dung. Lệnh tự đóng dấu session id (từ `--session`, hoặc nhãn
+`manual` khi gọi tay), task đang bind (`taskForSession`), sha ngắn của commit
+hiện tại (bỏ qua nếu không phải git repo), thời điểm ISO, và
+`touched_paths` của phiên (file phiên này thật sự đã đụng — một cái neo gần
+đúng, không bắt người viết khai gì). Ghi **nối thêm** vào
+`.ganas/runs/notes/<session>.md`, không ghi đè — mỗi lần gọi là một mẩu mới,
+mẩu cũ không mất.
+
+**Note KHÔNG BAO GIỜ là fact.** Không có anchor thì không phải tri thức đã
+kiểm — `loadGraph` không đọc `runs/` nên note không thể lẫn vào graph dưới bất
+kỳ hình thức nào. Muốn nâng cấp một điều trong note thành tri thức thì đi
+đường `claim → verify → fact` sẵn có, không có lối tắt nào ở đây. `ganas
+prune` dọn được note cũ giống hệt handoff cũ (cùng thư mục `runs/`, khác
+subdirectory `notes/` để không bị handoff ghi đè mất).
+
+**Đối số định vị:** nội dung ghi chú — mọi token không phải cờ được nối lại
+bằng dấu cách; nên quote nếu có nhiều từ.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--session <id>` | Gắn note với đúng một phiên. Không truyền thì dùng nhãn `manual`. |
+
+**Mã thoát:** `1` (`GanasError`) nếu thiếu nội dung; `0` khi ghi thành công.
+
+**Ví dụ:**
+```
+ganas note "chưa rõ vì sao webhook retry 3 lần"
+ganas note --session sess-42 "đã thử tắt cache, không đổi kết quả"
+```
+
 ### `ganas handoff --session <id>`
 
 Ghi bản ghi tiếp nối của phiên vào `.ganas/runs/` — dẫn xuất **cơ học** từ

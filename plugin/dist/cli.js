@@ -12985,31 +12985,31 @@ function tokensOf(text) {
 }
 function lintProbe(input) {
   const findings = [];
-  const run16 = input.run.trim();
+  const run17 = input.run.trim();
   for (const [pattern, what] of DANGEROUS) {
-    if (pattern.test(run16)) {
+    if (pattern.test(run17)) {
       findings.push({
         code: "dangerous",
         severity: "error",
-        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run16}\``,
+        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run17}\``,
         hint: `ganas s\u1EBD KH\xD4NG ch\u1EA1y l\u1EC7nh n\xE0y. Probe ch\u1EC9 \u0111\u01B0\u1EE3c \u0111\u1ECDc v\xE0 ki\u1EC3m tra, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1ED5i tr\u1EA1ng th\xE1i h\u1EC7 th\u1ED1ng.`
       });
       return findings;
     }
   }
-  const simple = run16.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
+  const simple = run17.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
   if (ALWAYS_TRUE.some((re) => re.test(simple))) {
     findings.push({
       code: "tautological",
       severity: "error",
-      message: `probe \`${run16}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
+      message: `probe \`${run17}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
       hint: `Probe ph\u1EA3i c\xF3 kh\u1EA3 n\u0103ng FAIL khi ph\xE1t bi\u1EC3u sai. Vi\u1EBFt l\u1EC7nh th\u1EADt s\u1EF1 ch\u1EA1m v\xE0o th\u1EE9 \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh (vd \`test -f <\u0111\u01B0\u1EDDng-d\u1EABn>\`, \`grep -q '<chu\u1ED7i>' <file>\`, \`npm test -- <t\xEAn-test>\`).`
     });
     return findings;
   }
   const haystack = [input.statement ?? "", ...input.context ?? []].join(" ");
   if (haystack.trim()) {
-    const probeTokens = [...tokensOf(run16)].filter((t) => !SHELL_NOISE.has(t));
+    const probeTokens = [...tokensOf(run17)].filter((t) => !SHELL_NOISE.has(t));
     const claimTokens = tokensOf(haystack);
     const shared = probeTokens.some(
       (t) => [...claimTokens].some((c) => c === t || c.includes(t) || t.includes(c))
@@ -13018,7 +13018,7 @@ function lintProbe(input) {
       findings.push({
         code: "unrelated",
         severity: "warning",
-        message: `probe \`${run16}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
+        message: `probe \`${run17}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
         hint: `Ki\u1EC3m l\u1EA1i xem probe c\xF3 th\u1EADt s\u1EF1 ki\u1EC3m \u0111\xFAng \u0111i\u1EC1u \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh kh\xF4ng.`
       });
     }
@@ -14153,11 +14153,11 @@ var init_shell = __esm({
 });
 
 // src/verify/mutate.ts
-function runnerPathSpan(run16) {
-  const m = RUNNER.exec(run16);
+function runnerPathSpan(run17) {
+  const m = RUNNER.exec(run17);
   if (!m) return null;
   const after = m.index + m[0].length;
-  const spans = tokenSpans(run16.slice(after)).map((s) => ({ ...s, start: s.start + after }));
+  const spans = tokenSpans(run17.slice(after)).map((s) => ({ ...s, start: s.start + after }));
   let skipNext = false;
   for (const span of spans) {
     if (span.text.startsWith("-")) {
@@ -14172,53 +14172,53 @@ function runnerPathSpan(run16) {
   }
   return null;
 }
-function mutateProbe(run16) {
-  const fileTest = FILE_TEST.exec(run16);
+function mutateProbe(run17) {
+  const fileTest = FILE_TEST.exec(run17);
   if (fileTest) {
     const [full, head, flag2, quote3, path] = fileTest;
     const replaced = `${head}${flag2} ${quote3}${path}${MUTANT_SUFFIX}${quote3}`;
     return {
-      run: run16.replace(full, replaced),
+      run: run17.replace(full, replaced),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const grep = GREP.exec(run16);
+  const grep = GREP.exec(run17);
   if (grep) {
     const [full, cmd, flags, quote3, pattern] = grep;
     return {
-      run: run16.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
+      run: run17.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const grepBare = GREP_BARE.exec(run16);
+  const grepBare = GREP_BARE.exec(run17);
   if (grepBare) {
     const [full, cmd, flags, pattern] = grepBare;
     return {
-      run: run16.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
+      run: run17.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const runnerPath = runnerPathSpan(run16);
+  const runnerPath = runnerPathSpan(run17);
   if (runnerPath) {
     const path = stripOperators(runnerPath.text);
     const replaced = runnerPath.text.replace(path, `${path}${MUTANT_SUFFIX}`);
     return {
-      run: run16.slice(0, runnerPath.start) + replaced + run16.slice(runnerPath.start + runnerPath.text.length),
+      run: run17.slice(0, runnerPath.start) + replaced + run17.slice(runnerPath.start + runnerPath.text.length),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const quoted = QUOTED.exec(run16);
+  const quoted = QUOTED.exec(run17);
   if (quoted) {
     const [full, quote3, body] = quoted;
     return {
-      run: run16.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
+      run: run17.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i chu\u1ED7i \`${body}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
   return null;
 }
-async function proveCanFail(run16, expect, opts) {
-  const mutation = mutateProbe(run16);
+async function proveCanFail(run17, expect, opts) {
+  const mutation = mutateProbe(run17);
   if (!mutation) {
     return {
       status: "unproven",
@@ -14235,7 +14235,7 @@ async function proveCanFail(run16, expect, opts) {
       status: "cannot_fail",
       what: mutation.what,
       message: `b\u1EA3n b\xF3p m\xE9o (${mutation.what}) V\u1EAAN PASS \u2014 probe n\xE0y kh\xF4ng ki\u1EC3m th\u1EE9 n\xF3 n\xF3i l\xE0 \u0111ang ki\u1EC3m.
-    b\u1EA3n g\u1ED1c:    ${run16}
+    b\u1EA3n g\u1ED1c:    ${run17}
     b\xF3p m\xE9o:    ${mutation.run}
     C\u1EA3 hai c\xF9ng pass ngh\u0129a l\xE0 k\u1EBFt qu\u1EA3 pass kh\xF4ng mang th\xF4ng tin g\xEC.`
     };
@@ -14345,10 +14345,10 @@ async function runTarget(target, opts) {
     return { target, result: "unprovable", reason: "ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh thu\u1ED9c `ganas trace`" };
   }
   const v = target.verification;
-  const run16 = target.kind === "eval" ? v.run : target.definition.run;
+  const run17 = target.kind === "eval" ? v.run : target.definition.run;
   const skipIf = v?.skip_if ?? target.definition.skip_if;
   if (target.kind === "probe") {
-    const findings = lintProbe({ run: run16, statement: target.statement, context: target.context });
+    const findings = lintProbe({ run: run17, statement: target.statement, context: target.context });
     if (hasBlockingFinding(findings)) {
       const blocking = findings.filter((f) => f.severity === "error");
       return {
@@ -14371,23 +14371,23 @@ async function runTarget(target, opts) {
     outcome2.entry = await record(target, outcome2, opts);
     return outcome2;
   }
-  const outcome = target.kind === "eval" ? await runEval(target, run16, opts) : await runProbe(target, run16, opts);
+  const outcome = target.kind === "eval" ? await runEval(target, run17, opts) : await runProbe(target, run17, opts);
   outcome.entry = await record(target, outcome, opts);
   if (target.fact && (outcome.result === "pass" || outcome.result === "fail")) {
     await writeBackFact(target.fact, outcome, root);
   }
   return outcome;
 }
-async function runProbe(target, run16, opts) {
+async function runProbe(target, run17, opts) {
   const def = target.definition;
   const expect = def.expect ?? "exit_zero";
-  const result = await runShell(run16, { cwd: opts.root, timeoutMs: def.timeout_ms });
+  const result = await runShell(run17, { cwd: opts.root, timeoutMs: def.timeout_ms });
   const verdict = judge(result, expect);
   if (!verdict.pass) {
     return { target, result: "fail", reason: verdict.reason };
   }
   if (opts.skipMutation) return { target, result: "pass" };
-  const proof = await proveCanFail(run16, expect, { cwd: opts.root });
+  const proof = await proveCanFail(run17, expect, { cwd: opts.root });
   if (proof.status === "cannot_fail") {
     return {
       target,
@@ -14403,12 +14403,12 @@ async function runProbe(target, run16, opts) {
     reason: proof.status === "unproven" ? proof.message : void 0
   };
 }
-async function runEval(target, run16, opts) {
+async function runEval(target, run17, opts) {
   const v = target.verification;
   const dir = await mkdtemp(join6(tmpdir(), "ganas-eval-"));
   const outFile = join6(dir, "result.json");
   try {
-    const result = await runShell(run16, {
+    const result = await runShell(run17, {
       cwd: opts.root,
       timeoutMs: v.timeout_ms ?? 6e5,
       env: { GANAS_EVAL_OUT: outFile }
@@ -14676,11 +14676,14 @@ __export(state_exports, {
   baselineFor: () => baselineFor,
   bindSession: () => bindSession,
   clearTouched: () => clearTouched,
+  dispatchNudgedFor: () => dispatchNudgedFor,
+  markDispatchNudged: () => markDispatchNudged,
   markTouched: () => markTouched,
   readState: () => readState,
   releaseSession: () => releaseSession,
   sessionRecord: () => sessionRecord,
   setBaseline: () => setBaseline,
+  subagentTouchedFor: () => subagentTouchedFor,
   taskForSession: () => taskForSession,
   touchedPathsFor: () => touchedPathsFor,
   updateState: () => updateState,
@@ -14745,6 +14748,24 @@ async function touchedPathsFor(root, sessionId, taskId) {
   if (!rec || rec.task !== taskId) return [];
   return rec.touched_paths ?? [];
 }
+async function subagentTouchedFor(root, sessionId, taskId) {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return rec.subagent_touched === true;
+}
+async function dispatchNudgedFor(root, sessionId, taskId) {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return rec.dispatch_nudged === true;
+}
+async function markDispatchNudged(root, sessionId) {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (rec) rec.dispatch_nudged = true;
+  });
+}
 async function taskForSession(root, sessionId) {
   const state = await readState(root);
   if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
@@ -14754,7 +14775,7 @@ async function sessionRecord(root, sessionId) {
   const state = await readState(root);
   return state.sessions[sessionId] ?? null;
 }
-async function markTouched(root, sessionId, relPath) {
+async function markTouched(root, sessionId, relPath, fromSubagent) {
   const state = await readState(root);
   const rec = state.sessions[sessionId];
   if (!rec) return;
@@ -14769,6 +14790,10 @@ async function markTouched(root, sessionId, relPath) {
       list.push(relPath);
       dirty = true;
     }
+  }
+  if (fromSubagent && !rec.subagent_touched) {
+    rec.subagent_touched = true;
+    dirty = true;
   }
   if (!dirty) return;
   await writeState(root, state);
@@ -14794,6 +14819,7 @@ __export(boundary_exports, {
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
   formatBoundaryWarning: () => formatBoundaryWarning,
+  formatDispatchWarning: () => formatDispatchWarning,
   matchPatterns: () => matchPatterns,
   outsideBoundary: () => outsideBoundary,
   ownsGanasFile: () => ownsGanasFile,
@@ -14881,6 +14907,15 @@ function formatBoundaryWarning(taskId, boundary, touched, outside) {
 `;
   }
   return "";
+}
+function formatDispatchWarning(taskId, tier, subagentTouched) {
+  if (tier !== "scribe" && tier !== "verifier") return "";
+  if (subagentTouched) return "";
+  return `
+\u26A0 ${taskId} khai tier \`${tier}\` nh\u01B0ng c\u1EA3 phi\xEAn kh\xF4ng c\xF3 l\u01B0\u1EE3t s\u1EEDa n\xE0o t\u1EEB sub-agent \u2014
+  c\xF3 v\u1EBB phi\xEAn ch\xEDnh (model m\u1EA1nh nh\u1EA5t) \u0111\xE3 t\u1EF1 l\xE0m vi\u1EC7c c\u01A1 h\u1ECDc/ki\u1EC3m ch\u1EE9ng thay v\xEC giao vi\u1EC7c.
+  Xem m\u1EE5c "Giao vi\u1EC7c" trong brief \u0111\u1EC3 giao \u0111\xFAng cho sub-agent.
+`;
 }
 function ownsGanasFile(task, relPath) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
@@ -15844,10 +15879,10 @@ async function checkEdge(graph, edge, root) {
   if (issues.length > 0) {
     return { edge, result: "fail", issues, reason: issues.map((i) => i.reason).join("; ") };
   }
-  const run16 = edge.verification.run;
-  if (!run16) return { edge, result: "pass", issues: [] };
+  const run17 = edge.verification.run;
+  if (!run17) return { edge, result: "pass", issues: [] };
   const findings = lintProbe({
-    run: run16,
+    run: run17,
     statement: `${from.id} \u2192 ${to.id}`,
     context: [
       ...from.contract.outputs.map((p) => p.name),
@@ -15863,7 +15898,7 @@ async function checkEdge(graph, edge, root) {
       reason: blocking.map((f) => f.message).join("; ")
     };
   }
-  const result = await runShell(run16, { cwd: root, timeoutMs: 6e4 });
+  const result = await runShell(run17, { cwd: root, timeoutMs: 6e4 });
   const verdict = judge(result, "exit_zero");
   if (!verdict.pass) {
     return { edge, result: "fail", issues: [], reason: verdict.reason };
@@ -17237,6 +17272,10 @@ ${formatGate(result)}
   const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
   if (boundaryWarning) process.stdout.write(`${boundaryWarning}
 `);
+  const subagentTouched = await subagentTouchedFor(root, sessionId, taskId);
+  const dispatchWarning = formatDispatchWarning(taskId, task.value.model, subagentTouched);
+  if (dispatchWarning) process.stdout.write(`${dispatchWarning}
+`);
   if (result.ok) {
     process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng \u0111\u1EC1u \u0111\u1EA1t.
 `);
@@ -17801,10 +17840,178 @@ var init_commit2 = __esm({
   }
 });
 
-// src/handoff.ts
+// src/prune.ts
 import { existsSync as existsSync11 } from "node:fs";
-import { mkdir as mkdir6, readFile as readFile12, writeFile as writeFile6 } from "node:fs/promises";
-import { dirname as dirname6 } from "node:path";
+import { mkdir as mkdir6, readdir as readdir5, rename as rename2, rm as rm4, stat as stat2 } from "node:fs/promises";
+import { basename as basename2, dirname as dirname6, join as join12, relative as relative4 } from "node:path";
+function notePath(root, sessionId) {
+  return join12(ganasPath(root, DIRS.runs), NOTES_DIRNAME, `${sessionId}.md`);
+}
+async function planPrune(root, graph, opts) {
+  const now = opts.now ?? Date.now();
+  const cutoff = now - opts.olderThanDays * DAY_MS;
+  const state = await readState(root);
+  const runsDir = ganasPath(root, DIRS.runs);
+  const notesDir = join12(runsDir, NOTES_DIRNAME);
+  const staleRuns = [
+    ...await collectStaleIn(runsDir, state, cutoff, now),
+    ...await collectStaleIn(notesDir, state, cutoff, now)
+  ];
+  const deadSessions = [];
+  for (const [sessionId, rec] of Object.entries(state.sessions)) {
+    const startedAt = Date.parse(rec.started_at);
+    if (Number.isNaN(startedAt) || startedAt > cutoff) continue;
+    deadSessions.push({ sessionId, ageDays: Math.floor((now - startedAt) / DAY_MS) });
+  }
+  const blockedByTargets = /* @__PURE__ */ new Set();
+  for (const t of graph.tasks.values()) {
+    for (const dep of t.value.blocked_by) blockedByTargets.add(dep);
+  }
+  const doneTasks = [];
+  const archivingTaskIds = /* @__PURE__ */ new Set();
+  for (const t of graph.tasks.values()) {
+    if (t.value.status !== "done") continue;
+    if (!t.value.done_at) continue;
+    if (Date.parse(t.value.done_at) > cutoff) continue;
+    if (blockedByTargets.has(t.value.id)) continue;
+    doneTasks.push({ id: t.value.id, file: t.file });
+    archivingTaskIds.add(t.value.id);
+  }
+  return { staleRuns, deadSessions, doneTasks };
+}
+async function collectStaleIn(dir, state, cutoff, now) {
+  const out = [];
+  if (!existsSync11(dir)) return out;
+  for (const entry of await readdir5(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const sessionId = entry.name.slice(0, -3);
+    if (state.sessions[sessionId]) continue;
+    const file = join12(dir, entry.name);
+    const mtimeMs = (await stat2(file)).mtimeMs;
+    if (mtimeMs > cutoff) continue;
+    out.push({ sessionId, file, ageDays: Math.floor((now - mtimeMs) / DAY_MS) });
+  }
+  return out;
+}
+function quote2(p) {
+  return `'${p.replace(/'/g, `'\\''`)}'`;
+}
+async function archive(root, relFile, archiveDirName) {
+  const src = join12(root, relFile);
+  const dstRel = join12(dirname6(relFile), archiveDirName, basename2(relFile));
+  const dst = join12(root, dstRel);
+  await mkdir6(dirname6(dst), { recursive: true });
+  if (existsSync11(join12(root, ".git"))) {
+    const result = await runShell(
+      `git mv -- ${quote2(relative4(root, src))} ${quote2(relative4(root, dst))}`,
+      { cwd: root, timeoutMs: 15e3 }
+    );
+    if (result.code === 0) return dstRel;
+  }
+  await rename2(src, dst);
+  return dstRel;
+}
+async function applyPrune(root, plan) {
+  for (const r of plan.staleRuns) {
+    await rm4(r.file, { force: true });
+  }
+  if (plan.deadSessions.length > 0) {
+    const state = await readState(root);
+    for (const d of plan.deadSessions) delete state.sessions[d.sessionId];
+    await writeState(root, state);
+  }
+  for (const t of plan.doneTasks) await archive(root, t.file, "done");
+}
+var NOTES_DIRNAME, DAY_MS;
+var init_prune = __esm({
+  "src/prune.ts"() {
+    "use strict";
+    init_paths();
+    init_state();
+    init_exec();
+    NOTES_DIRNAME = "notes";
+    DAY_MS = 864e5;
+  }
+});
+
+// src/commands/note.ts
+var note_exports = {};
+__export(note_exports, {
+  run: () => run12
+});
+import { existsSync as existsSync12 } from "node:fs";
+import { appendFile as appendFile3, mkdir as mkdir7, writeFile as writeFile6 } from "node:fs/promises";
+import { dirname as dirname7 } from "node:path";
+async function gitSha(root) {
+  const result = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5e3 });
+  return result.code === 0 ? result.stdout.trim() : void 0;
+}
+function renderHead(sessionId) {
+  return `# Ghi ch\xE9p th\xF4 c\u1EE7a phi\xEAn \`${sessionId}\` \u2014 CH\u01AFA KI\u1EC2M, KH\xD4NG PH\u1EA2I tri th\u1EE9c d\u1EF1 \xE1n
+
+M\u1ED7i m\u1EE5c d\u01B0\u1EDBi \u0111\xE2y l\xE0 m\u1ED9t ghi ch\xFA r\u1EDDi, kh\xF4ng c\xF3 anchor, kh\xF4ng \u0111i qua verify.
+KH\xD4NG \u0111\u01B0\u1EE3c coi l\xE0 fact hay tr\xEDch d\u1EABn nh\u01B0 tri th\u1EE9c \u0111\xE3 ki\u1EC3m ch\u1EE9ng. Mu\u1ED1n n\xE2ng c\u1EA5p
+m\u1ED9t \u0111i\u1EC1u \u1EDF \u0111\xE2y th\xE0nh tri th\u1EE9c th\xEC \u0111i \u0111\u01B0\u1EDDng claim \u2192 verify \u2192 fact.
+`;
+}
+function renderEntry(opts) {
+  const lines = [
+    "",
+    "---",
+    "",
+    `## ${opts.at}`,
+    "",
+    `- task: \`${opts.taskId ?? "(kh\xF4ng r\xF5)"}\``
+  ];
+  if (opts.sha) lines.push(`- sha: \`${opts.sha}\``);
+  lines.push(
+    `- file \u0111\xE3 \u0111\u1EE5ng: ${opts.touchedPaths.length ? opts.touchedPaths.map((p) => `\`${p}\``).join(", ") : "(ch\u01B0a \u0111\u1EE5ng file n\xE0o)"}`,
+    "",
+    opts.content
+  );
+  return lines.join("\n") + "\n";
+}
+async function run12(argv) {
+  const content = argv.positional.join(" ").trim();
+  if (!content) {
+    throw new GanasError(`c\u1EA7n n\u1ED9i dung ghi ch\xFA \u2014 vd: ganas note "ch\u01B0a r\xF5 v\xEC sao webhook retry 3 l\u1EA7n"`);
+  }
+  const root = requireGanasRoot(option(argv, "root") ?? process.cwd());
+  const sessionId = option(argv, "session") ?? DEFAULT_SESSION_LABEL;
+  const taskId = await taskForSession(root, sessionId);
+  const touchedPaths = taskId ? await touchedPathsFor(root, sessionId, taskId) : [];
+  const sha = await gitSha(root);
+  const at2 = (/* @__PURE__ */ new Date()).toISOString();
+  const path = notePath(root, sessionId);
+  await mkdir7(dirname7(path), { recursive: true });
+  const entry = renderEntry({ at: at2, taskId, sha, touchedPaths, content });
+  if (existsSync12(path)) {
+    await appendFile3(path, entry, "utf8");
+  } else {
+    await writeFile6(path, renderHead(sessionId) + entry, "utf8");
+  }
+  process.stdout.write(`\u0110\xE3 ghi note v\xE0o ${path}
+`);
+  return 0;
+}
+var DEFAULT_SESSION_LABEL;
+var init_note = __esm({
+  "src/commands/note.ts"() {
+    "use strict";
+    init_paths();
+    init_prune();
+    init_state();
+    init_args();
+    init_errors();
+    init_exec();
+    DEFAULT_SESSION_LABEL = "manual";
+  }
+});
+
+// src/handoff.ts
+import { existsSync as existsSync13 } from "node:fs";
+import { mkdir as mkdir8, readFile as readFile12, writeFile as writeFile7 } from "node:fs/promises";
+import { dirname as dirname8 } from "node:path";
 function textOf(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -17929,7 +18136,7 @@ function runsPath(root, sessionId) {
 }
 async function generateHandoff(root, graph, task, gate, opts) {
   let transcript = null;
-  if (opts.transcriptPath && existsSync11(opts.transcriptPath)) {
+  if (opts.transcriptPath && existsSync13(opts.transcriptPath)) {
     try {
       transcript = parseTranscript(await readFile12(opts.transcriptPath, "utf8"));
     } catch {
@@ -17938,8 +18145,8 @@ async function generateHandoff(root, graph, task, gate, opts) {
   }
   const content = renderHandoff({ sessionId: opts.sessionId, task, gate, graph, transcript });
   const path = runsPath(root, opts.sessionId);
-  await mkdir6(dirname6(path), { recursive: true });
-  await writeFile6(path, content, "utf8");
+  await mkdir8(dirname8(path), { recursive: true });
+  await writeFile7(path, content, "utf8");
   return { path, content };
 }
 var WRITE_TOOL_NAMES, SYNTHETIC_PREFIXES;
@@ -17956,9 +18163,9 @@ var init_handoff = __esm({
 // src/commands/handoff.ts
 var handoff_exports = {};
 __export(handoff_exports, {
-  run: () => run12
+  run: () => run13
 });
-async function run12(argv) {
+async function run13(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
   if (!sessionId) {
@@ -17996,93 +18203,10 @@ var init_handoff2 = __esm({
   }
 });
 
-// src/prune.ts
-import { existsSync as existsSync12 } from "node:fs";
-import { mkdir as mkdir7, readdir as readdir5, rename as rename2, rm as rm4, stat as stat2 } from "node:fs/promises";
-import { basename as basename2, dirname as dirname7, join as join12, relative as relative4 } from "node:path";
-async function planPrune(root, graph, opts) {
-  const now = opts.now ?? Date.now();
-  const cutoff = now - opts.olderThanDays * DAY_MS;
-  const state = await readState(root);
-  const staleRuns = [];
-  const runsDir = ganasPath(root, DIRS.runs);
-  if (existsSync12(runsDir)) {
-    for (const entry of await readdir5(runsDir, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-      const sessionId = entry.name.slice(0, -3);
-      if (state.sessions[sessionId]) continue;
-      const file = join12(runsDir, entry.name);
-      const mtimeMs = (await stat2(file)).mtimeMs;
-      if (mtimeMs > cutoff) continue;
-      staleRuns.push({ sessionId, file, ageDays: Math.floor((now - mtimeMs) / DAY_MS) });
-    }
-  }
-  const deadSessions = [];
-  for (const [sessionId, rec] of Object.entries(state.sessions)) {
-    const startedAt = Date.parse(rec.started_at);
-    if (Number.isNaN(startedAt) || startedAt > cutoff) continue;
-    deadSessions.push({ sessionId, ageDays: Math.floor((now - startedAt) / DAY_MS) });
-  }
-  const blockedByTargets = /* @__PURE__ */ new Set();
-  for (const t of graph.tasks.values()) {
-    for (const dep of t.value.blocked_by) blockedByTargets.add(dep);
-  }
-  const doneTasks = [];
-  const archivingTaskIds = /* @__PURE__ */ new Set();
-  for (const t of graph.tasks.values()) {
-    if (t.value.status !== "done") continue;
-    if (!t.value.done_at) continue;
-    if (Date.parse(t.value.done_at) > cutoff) continue;
-    if (blockedByTargets.has(t.value.id)) continue;
-    doneTasks.push({ id: t.value.id, file: t.file });
-    archivingTaskIds.add(t.value.id);
-  }
-  return { staleRuns, deadSessions, doneTasks };
-}
-function quote2(p) {
-  return `'${p.replace(/'/g, `'\\''`)}'`;
-}
-async function archive(root, relFile, archiveDirName) {
-  const src = join12(root, relFile);
-  const dstRel = join12(dirname7(relFile), archiveDirName, basename2(relFile));
-  const dst = join12(root, dstRel);
-  await mkdir7(dirname7(dst), { recursive: true });
-  if (existsSync12(join12(root, ".git"))) {
-    const result = await runShell(
-      `git mv -- ${quote2(relative4(root, src))} ${quote2(relative4(root, dst))}`,
-      { cwd: root, timeoutMs: 15e3 }
-    );
-    if (result.code === 0) return dstRel;
-  }
-  await rename2(src, dst);
-  return dstRel;
-}
-async function applyPrune(root, plan) {
-  for (const r of plan.staleRuns) {
-    await rm4(r.file, { force: true });
-  }
-  if (plan.deadSessions.length > 0) {
-    const state = await readState(root);
-    for (const d of plan.deadSessions) delete state.sessions[d.sessionId];
-    await writeState(root, state);
-  }
-  for (const t of plan.doneTasks) await archive(root, t.file, "done");
-}
-var DAY_MS;
-var init_prune = __esm({
-  "src/prune.ts"() {
-    "use strict";
-    init_paths();
-    init_state();
-    init_exec();
-    DAY_MS = 864e5;
-  }
-});
-
 // src/commands/prune.ts
 var prune_exports = {};
 __export(prune_exports, {
-  run: () => run13
+  run: () => run14
 });
 function summarize(plan) {
   const lines = [];
@@ -18102,7 +18226,7 @@ function summarize(plan) {
   }
   return lines.join("\n");
 }
-async function run13(argv) {
+async function run14(argv) {
   const { root, graph } = await openProject(argv);
   const olderThanRaw = option(argv, "older-than");
   const olderThanDays = olderThanRaw === void 0 ? DEFAULT_OLDER_THAN_DAYS : Number(olderThanRaw);
@@ -18153,9 +18277,9 @@ var init_prune2 = __esm({
 // src/commands/ledger.ts
 var ledger_exports = {};
 __export(ledger_exports, {
-  run: () => run14
+  run: () => run15
 });
-async function run14(argv) {
+async function run15(argv) {
   const root = requireGanasRoot(process.cwd());
   const entries = await readLedger(root);
   const corrupt = ledgerCorruption(root);
@@ -18300,6 +18424,16 @@ function denyPreTool(reason) {
     }
   };
 }
+async function pendingDispatchNudge(root, sessionId, fromSubagent) {
+  const rec = await sessionRecord(root, sessionId);
+  if (!rec) return void 0;
+  if (await dispatchNudgedFor(root, sessionId, rec.task)) return void 0;
+  if (fromSubagent) return void 0;
+  const graph = await loadGraph(root);
+  const tier = graph.tasks.get(rec.task)?.value.model;
+  if (tier !== "scribe" && tier !== "verifier") return void 0;
+  return DISPATCH_NUDGE_REASON;
+}
 async function preToolUse(input) {
   const cwd = input.cwd ?? process.cwd();
   const root = findGanasRoot(cwd);
@@ -18326,6 +18460,9 @@ async function preToolUse(input) {
   return ALLOW;
 }
 async function postToolUse(input) {
+  if (input.tool_name === "ExitPlanMode") {
+    return { systemMessage: PLAN_APPROVED_REASON };
+  }
   if (!input.tool_name || !WRITE_TOOLS.has(input.tool_name)) return ALLOW;
   const cwd = input.cwd ?? process.cwd();
   const root = findGanasRoot(cwd);
@@ -18334,20 +18471,36 @@ async function postToolUse(input) {
   const abs = typeof raw === "string" ? isAbsolute(raw) ? raw : resolve3(cwd, raw) : void 0;
   const rel = abs === void 0 ? void 0 : relative5(root, abs).split("\\").join("/");
   const inTree = rel !== void 0 && rel !== "" && !rel.startsWith("../");
-  if (input.session_id) await markTouched(root, input.session_id, inTree ? rel : void 0);
-  if (rel === void 0) return ALLOW;
-  if (!rel.startsWith(`${GANAS_DIR}/`)) return ALLOW;
+  const sessionId = input.session_id;
+  const fromSubagent = input.agent_id !== void 0;
+  if (sessionId) await markTouched(root, sessionId, inTree ? rel : void 0, fromSubagent);
+  const nudgeText = sessionId ? await pendingDispatchNudge(root, sessionId, fromSubagent) : void 0;
+  const deliverNudge = async () => {
+    if (nudgeText === void 0 || sessionId === void 0) return ALLOW;
+    await markDispatchNudged(root, sessionId);
+    return { systemMessage: nudgeText };
+  };
+  if (rel === void 0) return deliverNudge();
+  if (!rel.startsWith(`${GANAS_DIR}/`)) return deliverNudge();
   const graph = await loadGraph(root);
   const all = validateGraph(graph);
   const mine = all.filter((d) => d.severity === "error" && d.file === rel);
-  if (mine.length === 0) return ALLOW;
+  if (mine.length === 0) return deliverNudge();
   const rule = mine.some(isAnchorIssue) ? "knowledge_anchor" : "schema";
   const mode = enforcementFor(graph.config, rule);
+  const nudgeTail = nudgeText === void 0 ? "" : `
+
+---
+
+${nudgeText}`;
+  if (nudgeText !== void 0 && sessionId !== void 0) {
+    await markDispatchNudged(root, sessionId);
+  }
   const body = `Ghi v\xE0o \`${rel}\` ch\u01B0a h\u1EE3p l\u1EC7:
 
 ${formatDiagnostics(mine)}
 
-` + (rule === "knowledge_anchor" ? `Kho tri th\u1EE9c ch\u1EC9 nh\u1EADn ph\xE1t bi\u1EC3u c\xF3 b\u1EB1ng ch\u1EE9ng. Th\xEAm anchor (\`file:line\`, \`commit:sha\`, ho\u1EB7c URL k\xE8m \`fetched_at\`), ho\u1EB7c b\u1ECF h\u1EB3n ph\xE1t bi\u1EC3u \u0111\xF3 ra v\xE0 ghi v\xE0o \`open_questions\` c\u1EE7a task.` : `S\u1EEDa l\u1EA1i cho \u0111\xFAng schema r\u1ED3i ghi l\u1EA1i. Xem \`.claude/rules/ganas-knowledge.md\`.`);
+` + (rule === "knowledge_anchor" ? `Kho tri th\u1EE9c ch\u1EC9 nh\u1EADn ph\xE1t bi\u1EC3u c\xF3 b\u1EB1ng ch\u1EE9ng. Th\xEAm anchor (\`file:line\`, \`commit:sha\`, ho\u1EB7c URL k\xE8m \`fetched_at\`), ho\u1EB7c b\u1ECF h\u1EB3n ph\xE1t bi\u1EC3u \u0111\xF3 ra v\xE0 ghi v\xE0o \`open_questions\` c\u1EE7a task.` : `S\u1EEDa l\u1EA1i cho \u0111\xFAng schema r\u1ED3i ghi l\u1EA1i. Xem \`.claude/rules/ganas-knowledge.md\`.`) + nudgeTail;
   return mode === "enforce" ? { decision: "block", reason: body } : { systemMessage: `ganas (ch\u1EBF \u0111\u1ED9 warn \u2014 ch\u01B0a ch\u1EB7n):
 ${body}` };
 }
@@ -18423,7 +18576,7 @@ async function sessionEnd(input) {
   await releaseSession(root, input.session_id);
   return ALLOW;
 }
-var WRITE_TOOLS, SHELL_WRITE_HINTS, LEDGER_REASON, CONFIG_REASON, SKILL_DIR, SKILL_WRITE_REASON;
+var WRITE_TOOLS, SHELL_WRITE_HINTS, LEDGER_REASON, CONFIG_REASON, SKILL_DIR, SKILL_WRITE_REASON, PLAN_APPROVED_REASON, DISPATCH_NUDGE_REASON;
 var init_handlers = __esm({
   "src/hooks/handlers.ts"() {
     "use strict";
@@ -18452,15 +18605,23 @@ M\u1EE9c c\u01B0\u1EE1ng ch\u1EBF l\xE0 quy\u1EBFt \u0111\u1ECBnh c\u1EE7a NG\u0
     SKILL_WRITE_REASON = `Sub-agent kh\xF4ng \u0111\u01B0\u1EE3c s\u1EEDa skill trong \`${SKILL_DIR}\` \u2014 ch\u1EC9 phi\xEAn ch\xEDnh m\u1EDBi \u0111\u01B0\u1EE3c. Skill \u0111\u1ECBnh h\xECnh C\xC1CH l\xE0m vi\u1EC7c; \u0111\u1EC3 sub-agent t\u1EF1 \u0111\u1ED5i n\xF3 gi\u1EEFa l\xFAc ch\u1EA1y l\xE0 m\u1EA5t ki\u1EC3m so\xE1t, phi\xEAn ch\xEDnh kh\xF4ng bi\u1EBFt n\xF3 \u0111\xE3 \u0111\u1ED5i g\xEC.
 
 Nh\u1EDD phi\xEAn ch\xEDnh s\u1EEDa h\u1ED9 n\u1EBFu skill c\u1EA7n c\u1EADp nh\u1EADt.`;
+    PLAN_APPROVED_REASON = `Plan v\u1EEBa \u0111\u01B0\u1EE3c duy\u1EC7t \u0111ang n\u1EB1m trong context \u2014 v\xE0 s\u1EBD M\u1EA4T khi context b\u1ECB compact. Ch\u1EBB ngay th\xE0nh Task, \u0111\u1EEBng \u0111\u1EC3 sau.
+
+D\xF9ng skill \`plan-to-tasks\`: n\xF3 \u0111\xE3 d\u1EA1y \u0111\u1EE7 c\xE1c b\u01B0\u1EDBc, kh\xF4ng c\u1EA7n \u0111\u1ECDc l\u1EA1i plan t\u1EEB \u0111\xE2u c\u1EA3. C\u1EA5p ID th\u1EADt ngay b\u1EB1ng \`ganas id task --count N\` \u2014 \u0111\u1EEBng d\xF9ng nh\xE3n t\u1EA1m ki\u1EC3u T1, T4a.`;
+    DISPATCH_NUDGE_REASON = `Task \u0111ang l\xE0m khai tier r\u1EBB h\u01A1n \`main\` (\`scribe\`/\`verifier\`) \u2014 vi\u1EC7c c\u01A1 h\u1ECDc ho\u1EB7c ki\u1EC3m ch\u1EE9ng, kh\xF4ng c\u1EA7n model m\u1EA1nh nh\u1EA5t. Nh\u01B0ng phi\xEAn ch\xEDnh \u0111ang t\u1EF1 s\u1EEDa file thay v\xEC giao vi\u1EC7c.
+
+Vi\u1EC7c c\u01A1 h\u1ECDc l\xE0m b\u1EB1ng model m\u1EA1nh nh\u1EA5t ch\xEDnh l\xE0 ch\u1ED7 over-engineering sinh ra. Brief \u0111\xE3 n\u1EA1p c\xF3 s\u1EB5n h\u01B0\u1EDBng d\u1EABn giao sub-agent \u1EDF m\u1EE5c "Giao vi\u1EC7c" (k\xE8m alias model) \u2014 d\xF9ng n\xF3.
+
+(Ch\u1EC9 nh\u1EAFc m\u1ED9t l\u1EA7n trong phi\xEAn n\xE0y \u2014 kh\xF4ng l\u1EB7p l\u1EA1i \u1EDF nh\u1EEFng l\u01B0\u1EE3t s\u1EEDa ti\u1EBFp theo.)`;
   }
 });
 
 // src/commands/hook.ts
 var hook_exports = {};
 __export(hook_exports, {
-  run: () => run15
+  run: () => run16
 });
-async function run15(argv) {
+async function run16(argv) {
   const event = argv.positional[0];
   const handler = event ? HANDLERS[event] : void 0;
   if (!handler) {
@@ -18515,6 +18676,7 @@ var COMMANDS = {
   verify: () => Promise.resolve().then(() => (init_verify(), verify_exports)),
   trace: () => Promise.resolve().then(() => (init_trace2(), trace_exports)),
   commit: () => Promise.resolve().then(() => (init_commit2(), commit_exports)),
+  note: () => Promise.resolve().then(() => (init_note(), note_exports)),
   handoff: () => Promise.resolve().then(() => (init_handoff2(), handoff_exports)),
   prune: () => Promise.resolve().then(() => (init_prune2(), prune_exports)),
   ledger: () => Promise.resolve().then(() => (init_ledger2(), ledger_exports)),
@@ -18537,6 +18699,7 @@ L\u1EC7nh:
   verify [target...]   Ch\u1EA1y b\u1EB1ng ch\u1EE9ng: probe v\xE0 eval, ghi s\u1ED5 c\xE1i (--scope l\u1ECDc theo ph\u1EA1m vi)
   trace                Ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh (contract), in s\u01A1 \u0111\u1ED3 kh\u1ED1i, b\xE1o n\u1EE3 ki\u1EC3m ch\u1EE9ng (--scope)
   commit [task]        Commit task \u0111\xE3 \u0111\u1EA1t gate \u2014 message d\u1EF1ng t\u1EEB d\u1EEF li\u1EC7u \u0111\xE3 ki\u1EC3m ch\u1EE9ng
+  note "..."           Ghi ch\xFA th\xF4 c\u1EE7a phi\xEAn v\xE0o .ganas/runs/notes/ (ch\u01B0a ki\u1EC3m, kh\xF4ng ph\u1EA3i fact)
   handoff --session id Ghi b\u1EA3n ghi ti\u1EBFp n\u1ED1i c\u1EE7a phi\xEAn, d\u1EABn xu\u1EA5t t\u1EEB transcript
   prune                D\u1ECDn ephemeral c\u0169, archive task done (m\u1EB7c \u0111\u1ECBnh dry-run)
   ledger --check       Ki\u1EC3m hash-chain c\u1EE7a s\u1ED5 c\xE1i x\xE1c minh (d\xF9ng trong hook pre-commit)

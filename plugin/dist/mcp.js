@@ -24146,11 +24146,14 @@ __export(state_exports, {
   baselineFor: () => baselineFor,
   bindSession: () => bindSession,
   clearTouched: () => clearTouched,
+  dispatchNudgedFor: () => dispatchNudgedFor,
+  markDispatchNudged: () => markDispatchNudged,
   markTouched: () => markTouched,
   readState: () => readState,
   releaseSession: () => releaseSession,
   sessionRecord: () => sessionRecord,
   setBaseline: () => setBaseline,
+  subagentTouchedFor: () => subagentTouchedFor,
   taskForSession: () => taskForSession,
   touchedPathsFor: () => touchedPathsFor,
   updateState: () => updateState,
@@ -24215,6 +24218,24 @@ async function touchedPathsFor(root, sessionId, taskId) {
   if (!rec || rec.task !== taskId) return [];
   return rec.touched_paths ?? [];
 }
+async function subagentTouchedFor(root, sessionId, taskId) {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return rec.subagent_touched === true;
+}
+async function dispatchNudgedFor(root, sessionId, taskId) {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return rec.dispatch_nudged === true;
+}
+async function markDispatchNudged(root, sessionId) {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (rec) rec.dispatch_nudged = true;
+  });
+}
 async function taskForSession(root, sessionId) {
   const state = await readState(root);
   if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
@@ -24224,7 +24245,7 @@ async function sessionRecord(root, sessionId) {
   const state = await readState(root);
   return state.sessions[sessionId] ?? null;
 }
-async function markTouched(root, sessionId, relPath) {
+async function markTouched(root, sessionId, relPath, fromSubagent) {
   const state = await readState(root);
   const rec = state.sessions[sessionId];
   if (!rec) return;
@@ -24239,6 +24260,10 @@ async function markTouched(root, sessionId, relPath) {
       list.push(relPath);
       dirty = true;
     }
+  }
+  if (fromSubagent && !rec.subagent_touched) {
+    rec.subagent_touched = true;
+    dirty = true;
   }
   if (!dirty) return;
   await writeState(root, state);
@@ -24682,6 +24707,7 @@ __export(boundary_exports, {
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
   formatBoundaryWarning: () => formatBoundaryWarning,
+  formatDispatchWarning: () => formatDispatchWarning,
   matchPatterns: () => matchPatterns,
   outsideBoundary: () => outsideBoundary,
   ownsGanasFile: () => ownsGanasFile,
@@ -24769,6 +24795,15 @@ function formatBoundaryWarning(taskId, boundary, touched, outside) {
 `;
   }
   return "";
+}
+function formatDispatchWarning(taskId, tier, subagentTouched) {
+  if (tier !== "scribe" && tier !== "verifier") return "";
+  if (subagentTouched) return "";
+  return `
+\u26A0 ${taskId} khai tier \`${tier}\` nh\u01B0ng c\u1EA3 phi\xEAn kh\xF4ng c\xF3 l\u01B0\u1EE3t s\u1EEDa n\xE0o t\u1EEB sub-agent \u2014
+  c\xF3 v\u1EBB phi\xEAn ch\xEDnh (model m\u1EA1nh nh\u1EA5t) \u0111\xE3 t\u1EF1 l\xE0m vi\u1EC7c c\u01A1 h\u1ECDc/ki\u1EC3m ch\u1EE9ng thay v\xEC giao vi\u1EC7c.
+  Xem m\u1EE5c "Giao vi\u1EC7c" trong brief \u0111\u1EC3 giao \u0111\xFAng cho sub-agent.
+`;
 }
 function ownsGanasFile(task, relPath) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
@@ -38246,6 +38281,10 @@ ${formatGate(result)}
   }
   const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
   if (boundaryWarning) process.stdout.write(`${boundaryWarning}
+`);
+  const subagentTouched = await subagentTouchedFor(root, sessionId, taskId);
+  const dispatchWarning = formatDispatchWarning(taskId, task.value.model, subagentTouched);
+  if (dispatchWarning) process.stdout.write(`${dispatchWarning}
 `);
   if (result.ok) {
     process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng \u0111\u1EC1u \u0111\u1EA1t.
