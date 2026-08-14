@@ -70,6 +70,18 @@ function bullet(lines: string[]): string {
 }
 
 /**
+ * Design nào khai `supersedes` chứa `designId`? Model không có cạnh ngược
+ * `superseded_by` — phải quét toàn bộ `graph.designs` mỗi lần hỏi. Trả về
+ * `undefined` nếu không design nào thay thế nó (dữ liệu thiếu, không phải lỗi).
+ */
+function findSupersededBy(graph: Graph, designId: string): string | undefined {
+  for (const sourced of graph.designs.values()) {
+    if (sourced.value.supersedes.includes(designId)) return sourced.value.id;
+  }
+  return undefined;
+}
+
+/**
  * Mục "Giao việc": biến `task.model` (một tier) thành hành động cụ thể của
  * harness đang dùng (`config.harness`).
  *
@@ -265,10 +277,29 @@ export function renderBrief(input: BriefInput): string {
   /* --- Design ---------------------------------------------------------- */
 
   if (design) {
-    parts.push(
-      `## Design đang hiện thực\n\n` +
-        `### ${design.value.id} — ${design.value.title}\n\n${design.value.summary}`,
-    );
+    const d = design.value;
+    // `status` không được nhìn tới trước N3: một task khai `implements: D-003`
+    // trong khi D-003 đã bị thay thế hoặc lưu kho thì phiên làm việc hiện thực
+    // một hướng đã chết mà không hề biết — brief nạp ở SessionStart, đúng lúc
+    // còn kịp đổi hướng, im lặng bỏ qua chính lúc này là phí cơ hội duy nhất.
+    let warning = "";
+    if (d.status === "superseded") {
+      const supersededBy = findSupersededBy(graph, d.id);
+      warning =
+        `\n\n> ⚠ **Design này đã bị thay thế** — hiện thực nó là hiện thực một hướng đã bị bỏ, ` +
+        (supersededBy
+          ? `thay bởi \`${supersededBy}\`. Đọc \`${supersededBy}\` trước khi viết dòng nào, ` +
+            `đừng làm theo cái đã chết.`
+          : `nhưng không tra được design nào khai đã thay nó (không có cạnh ngược ` +
+            `\`superseded_by\` trong model). Hỏi người phụ trách trước khi tiếp tục.`);
+    } else if (d.status === "archived") {
+      warning =
+        `\n\n> ⚠ **Design này đã lưu kho (archived)** — không còn là hướng đang dùng, ` +
+        `dù chưa bị design nào khác thay thế thẳng. Task khai \`implements\` một design ` +
+        `đã lưu kho thì nhiều khả năng bản thân task cũng lỗi thời — xác nhận lại trước ` +
+        `khi làm, đừng mặc định nó còn đúng.`;
+    }
+    parts.push(`## Design đang hiện thực\n\n### ${d.id} — ${d.title}\n\n${d.summary}${warning}`);
   }
 
   /* --- Quyết định đã chốt ------------------------------------------------ *

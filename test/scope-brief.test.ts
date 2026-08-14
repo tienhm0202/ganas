@@ -528,6 +528,73 @@ test("⭐ brief in `notes` của phạm vi — bối cảnh là chỗ đáng ghi
   }
 });
 
+/* --- Design: status superseded/archived phải cảnh báo -------------------- */
+
+/** Dựng dự án với D-001 mang `status` tuỳ ý, kèm design phụ tuỳ chọn. */
+async function withDesignStatus(
+  status: string,
+  extraDesigns: Record<string, string> = {},
+): Promise<string> {
+  return makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design().replace("status: active", `status: ${status}`),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ...extraDesigns,
+  });
+}
+
+test("⭐ design đang hiện thực đã bị supersede → brief cảnh báo rõ ràng", async () => {
+  const root = await withDesignStatus("superseded");
+  try {
+    const brief = await briefOf(root);
+    const section = brief.slice(brief.indexOf("## Design đang hiện thực"));
+    assert.match(section, /đã bị thay thế/, "phải nói rõ design đã bị thay thế");
+    assert.match(
+      section,
+      /hiện thực một hướng đã bị bỏ/,
+      "phải nói VÌ SAO đáng lo, không chỉ nêu trạng thái",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("design đang hiện thực còn active → KHÔNG có cảnh báo (chống báo nhầm)", async () => {
+  const root = await withDesignStatus("active");
+  try {
+    const brief = await briefOf(root);
+    assert.doesNotMatch(brief, /đã bị thay thế/);
+    assert.doesNotMatch(brief, /đã lưu kho/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("design bị thay thế bởi design khác → cảnh báo nêu đúng tên design mới", async () => {
+  const root = await withDesignStatus("superseded", {
+    ".ganas/designs/D-009.yaml": design("D-009", ["G-001"], "supersedes:\n  - D-001\n"),
+  });
+  try {
+    const brief = await briefOf(root);
+    assert.match(brief, /thay bởi `D-009`/, "phải tra ngược và nêu tên design đã thay thế");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("design superseded mà không design nào khai thay thế → vẫn cảnh báo, không ném, không bịa tên", async () => {
+  const root = await withDesignStatus("superseded");
+  try {
+    const brief = await briefOf(root);
+    assert.match(brief, /đã bị thay thế/, "vẫn phải cảnh báo dù không tra được ai thay thế");
+    assert.doesNotMatch(brief, /thay bởi `/, "không được bịa tên design thay thế khi không tra được");
+  } finally {
+    await cleanup(root);
+  }
+});
+
 test("phạm vi không có notes thì brief không đổi", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
