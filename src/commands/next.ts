@@ -5,6 +5,7 @@ import { blockedTasks, rankedCandidates } from "../graph/select.js";
 import type { Graph } from "../graph/types.js";
 import type { Task } from "../model/index.js";
 import { renderBrief } from "../render/brief.js";
+import { renderGroupedByScope } from "../render/group.js";
 import { bindSession, setBaseline, updateState } from "../state.js";
 import { type Argv, enabled, flag, option } from "../util/args.js";
 import { openProject, volatileStatus } from "./_common.js";
@@ -47,12 +48,15 @@ export async function run(argv: Argv): Promise<number> {
       return 0;
     }
 
-    process.stdout.write(`Mọi task còn lại đều đang bị chặn:\n\n`);
-    for (const c of blocked) {
-      process.stdout.write(
-        `  ${c.task.value.id} — ${c.task.value.title}\n    chờ: ${c.blockers.join(", ")}\n`,
-      );
-    }
+    process.stdout.write(
+      `Mọi task còn lại đều đang bị chặn:\n\n` +
+        renderGroupedByScope(
+          graph,
+          blocked,
+          (c) => c.task.value,
+          (c) => `${c.task.value.id} — ${c.task.value.title}\n  chờ: ${c.blockers.join(", ")}`,
+        ),
+    );
     return 0;
   }
 
@@ -71,7 +75,12 @@ export async function run(argv: Argv): Promise<number> {
     }
     process.stdout.write(
       `${ranked.length} task còn làm được, nhưng tất cả đang bị phiên khác giữ:\n\n` +
-        ranked.map((c) => `  ${c.task.value.id} — ${c.task.value.title}\n`).join("") +
+        renderGroupedByScope(
+          graph,
+          ranked,
+          (c) => c.task.value,
+          (c) => `${c.task.value.id} — ${c.task.value.title}`,
+        ) +
         `\nThử lại sau, hoặc chờ phiên đang giữ giải phóng.\n`,
     );
     return 0;

@@ -12,6 +12,7 @@ import {
   formatAnchor,
   type Task,
 } from "../model/index.js";
+import { renderGroupedByScope } from "./group.js";
 
 export interface BriefInput {
   graph: Graph;
@@ -139,22 +140,27 @@ function parallelBlock(graph: Graph, t: Task): string {
   const others = parallelCandidates(graph, t);
   if (others.length === 0) return "";
 
-  const items = others.map((o) => {
-    const task = o.value;
-    const tier = task.model ? `tier \`${task.model}\`` : `⚠ chưa gán model`;
-    const alias = task.model ? agentModelAlias(graph.config.models[task.model]) : undefined;
-    return (
-      `\`${task.id}\` — ${task.title}\n  ${tier}${alias ? ` → \`model: "${alias}"\`` : ""} · ` +
-      `khối ${task.touches.map((m) => `\`${m}\``).join(", ")}`
-    );
-  });
+  const grouped = renderGroupedByScope(
+    graph,
+    others,
+    (o) => o.value,
+    (o) => {
+      const task = o.value;
+      const tier = task.model ? `tier \`${task.model}\`` : `⚠ chưa gán model`;
+      const alias = task.model ? agentModelAlias(graph.config.models[task.model]) : undefined;
+      return (
+        `\`${task.id}\` — ${task.title}\n  ${tier}${alias ? ` → \`model: "${alias}"\`` : ""} · ` +
+        `khối ${task.touches.map((m) => `\`${m}\``).join(", ")}`
+      );
+    },
+  );
 
   return (
     `**Giao được song song ngay bây giờ** — các task dưới đây không chặn nhau và ` +
     `KHÔNG đụng cùng vùng code với task này. Mở mỗi cái một sub-agent riêng, cùng lúc, ` +
     `mỗi sub-agent tự chạy \`ganas brief <id>\` trước khi sửa gì:\n\n` +
-    bullet(items) +
-    `\n\nChấm từng cái bằng \`ganas gate <id>\` sau khi sub-agent tương ứng xong. ` +
+    grouped +
+    `\nChấm từng cái bằng \`ganas gate <id>\` sau khi sub-agent tương ứng xong. ` +
     `**Chỉ những task có tên ở đây** — task khác chạm cùng vùng code, giao song song thì ` +
     `sửa đổi của agent này bị agent kia đè mà không ai thấy.\n\n`
   );

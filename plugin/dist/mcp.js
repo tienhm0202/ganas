@@ -38322,6 +38322,40 @@ async function claimNextTask(graph, root, sessionId, opts = {}) {
 import { existsSync as existsSync8 } from "node:fs";
 import { join as join9 } from "node:path";
 init_model();
+
+// src/render/group.ts
+function renderGroupedByScope(graph, items, taskOf, renderTask) {
+  const byScope = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    const t = taskOf(item);
+    let byDesign = byScope.get(t.scope);
+    if (!byDesign) {
+      byDesign = /* @__PURE__ */ new Map();
+      byScope.set(t.scope, byDesign);
+    }
+    let group = byDesign.get(t.implements);
+    if (!group) {
+      group = [];
+      byDesign.set(t.implements, group);
+    }
+    group.push(item);
+  }
+  const lines = [];
+  for (const [scopeId, byDesign] of byScope) {
+    const scope = graph.scopes.get(scopeId)?.value;
+    lines.push(scope ? `${scopeId} \u2014 ${scope.title}` : scopeId);
+    for (const [designId, group] of byDesign) {
+      const design = graph.designs.get(designId)?.value;
+      lines.push(`  ${design ? `${designId} \u2014 ${design.title}` : designId}`);
+      for (const item of group) {
+        for (const line of renderTask(item).split("\n")) lines.push(`    ${line}`);
+      }
+    }
+  }
+  return lines.length > 0 ? lines.join("\n") + "\n" : "";
+}
+
+// src/render/brief.ts
 var RULE_REMINDER = `## Lu\u1EADt ghi tri th\u1EE9c
 
 Ghi v\xE0o \`.ganas/\` th\xEC ph\u1EA3i k\xE8m b\u1EB1ng ch\u1EE9ng: anchor \`file:line\`, \`commit:sha\`,
@@ -38392,17 +38426,21 @@ Hai l\xFD do, kh\xF4ng ph\u1EA3i m\u1ED9t: context phi\xEAn ch\xEDnh kh\xF4ng b\
 function parallelBlock(graph, t) {
   const others = parallelCandidates(graph, t);
   if (others.length === 0) return "";
-  const items = others.map((o) => {
-    const task = o.value;
-    const tier = task.model ? `tier \`${task.model}\`` : `\u26A0 ch\u01B0a g\xE1n model`;
-    const alias = task.model ? agentModelAlias(graph.config.models[task.model]) : void 0;
-    return `\`${task.id}\` \u2014 ${task.title}
+  const grouped = renderGroupedByScope(
+    graph,
+    others,
+    (o) => o.value,
+    (o) => {
+      const task = o.value;
+      const tier = task.model ? `tier \`${task.model}\`` : `\u26A0 ch\u01B0a g\xE1n model`;
+      const alias = task.model ? agentModelAlias(graph.config.models[task.model]) : void 0;
+      return `\`${task.id}\` \u2014 ${task.title}
   ${tier}${alias ? ` \u2192 \`model: "${alias}"\`` : ""} \xB7 kh\u1ED1i ${task.touches.map((m) => `\`${m}\``).join(", ")}`;
-  });
+    }
+  );
   return `**Giao \u0111\u01B0\u1EE3c song song ngay b\xE2y gi\u1EDD** \u2014 c\xE1c task d\u01B0\u1EDBi \u0111\xE2y kh\xF4ng ch\u1EB7n nhau v\xE0 KH\xD4NG \u0111\u1EE5ng c\xF9ng v\xF9ng code v\u1EDBi task n\xE0y. M\u1EDF m\u1ED7i c\xE1i m\u1ED9t sub-agent ri\xEAng, c\xF9ng l\xFAc, m\u1ED7i sub-agent t\u1EF1 ch\u1EA1y \`ganas brief <id>\` tr\u01B0\u1EDBc khi s\u1EEDa g\xEC:
 
-` + bullet(items) + `
-
+` + grouped + `
 Ch\u1EA5m t\u1EEBng c\xE1i b\u1EB1ng \`ganas gate <id>\` sau khi sub-agent t\u01B0\u01A1ng \u1EE9ng xong. **Ch\u1EC9 nh\u1EEFng task c\xF3 t\xEAn \u1EDF \u0111\xE2y** \u2014 task kh\xE1c ch\u1EA1m c\xF9ng v\xF9ng code, giao song song th\xEC s\u1EEDa \u0111\u1ED5i c\u1EE7a agent n\xE0y b\u1ECB agent kia \u0111\xE8 m\xE0 kh\xF4ng ai th\u1EA5y.
 
 `;
@@ -38743,16 +38781,17 @@ r\u1ED3i ch\u1EA1y: ganas validate
       );
       return 0;
     }
-    process.stdout.write(`M\u1ECDi task c\xF2n l\u1EA1i \u0111\u1EC1u \u0111ang b\u1ECB ch\u1EB7n:
+    process.stdout.write(
+      `M\u1ECDi task c\xF2n l\u1EA1i \u0111\u1EC1u \u0111ang b\u1ECB ch\u1EB7n:
 
-`);
-    for (const c of blocked) {
-      process.stdout.write(
-        `  ${c.task.value.id} \u2014 ${c.task.value.title}
-    ch\u1EDD: ${c.blockers.join(", ")}
-`
-      );
-    }
+` + renderGroupedByScope(
+        graph,
+        blocked,
+        (c) => c.task.value,
+        (c) => `${c.task.value.id} \u2014 ${c.task.value.title}
+  ch\u1EDD: ${c.blockers.join(", ")}`
+      )
+    );
     return 0;
   }
   const sessionId = option(argv, "session");
@@ -38767,8 +38806,12 @@ r\u1ED3i ch\u1EA1y: ganas validate
     process.stdout.write(
       `${ranked.length} task c\xF2n l\xE0m \u0111\u01B0\u1EE3c, nh\u01B0ng t\u1EA5t c\u1EA3 \u0111ang b\u1ECB phi\xEAn kh\xE1c gi\u1EEF:
 
-` + ranked.map((c) => `  ${c.task.value.id} \u2014 ${c.task.value.title}
-`).join("") + `
+` + renderGroupedByScope(
+        graph,
+        ranked,
+        (c) => c.task.value,
+        (c) => `${c.task.value.id} \u2014 ${c.task.value.title}`
+      ) + `
 Th\u1EED l\u1EA1i sau, ho\u1EB7c ch\u1EDD phi\xEAn \u0111ang gi\u1EEF gi\u1EA3i ph\xF3ng.
 `
     );
