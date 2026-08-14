@@ -1,6 +1,6 @@
-import { formatBoundaryWarning, outsideBoundary, taskBoundary } from "../boundary.js";
+import { formatBoundaryWarning, formatDispatchWarning, outsideBoundary, taskBoundary } from "../boundary.js";
 import { alreadyGreen, evaluateGate, formatGate } from "../gate.js";
-import { baselineFor, taskForSession, touchedPathsFor } from "../state.js";
+import { baselineFor, subagentTouchedFor, taskForSession, touchedPathsFor } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { openProject } from "./_common.js";
@@ -58,6 +58,10 @@ export async function run(argv: Argv): Promise<number> {
   // trống, cho khớp khoảng cách của khối XANH SẴN ngay trên.
   const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
   if (boundaryWarning) process.stdout.write(`${boundaryWarning}\n`);
+
+  const subagentTouched = await subagentTouchedFor(root, sessionId, taskId);
+  const dispatchWarning = formatDispatchWarning(taskId, task.value.model, subagentTouched);
+  if (dispatchWarning) process.stdout.write(`${dispatchWarning}\n`);
 
   if (result.ok) {
     process.stdout.write(`✓ Mọi tiêu chí chấm tự động đều đạt.\n`);

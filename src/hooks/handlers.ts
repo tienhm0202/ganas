@@ -14,6 +14,8 @@ import { renderBrief } from "../render/brief.js";
 import {
   bindSession,
   clearTouched,
+  dispatchNudgedFor,
+  markDispatchNudged,
   markTouched,
   releaseSession,
   sessionRecord,
@@ -156,6 +158,52 @@ const SKILL_WRITE_REASON =
   `phiên chính không biết nó đã đổi gì.\n\n` +
   `Nhờ phiên chính sửa hộ nếu skill cần cập nhật.`;
 
+const PLAN_APPROVED_REASON =
+  `Plan vừa được duyệt đang nằm trong context — và sẽ MẤT khi context bị compact. ` +
+  `Chẻ ngay thành Task, đừng để sau.\n\n` +
+  `Dùng skill \`plan-to-tasks\`: nó đã dạy đủ các bước, không cần đọc lại plan từ đâu cả. ` +
+  `Cấp ID thật ngay bằng \`ganas id task --count N\` — đừng dùng nhãn tạm kiểu T1, T4a.`;
+
+const DISPATCH_NUDGE_REASON =
+  `Task đang làm khai tier rẻ hơn \`main\` (\`scribe\`/\`verifier\`) — việc cơ học hoặc kiểm ` +
+  `chứng, không cần model mạnh nhất. Nhưng phiên chính đang tự sửa file thay vì giao việc.\n\n` +
+  `Việc cơ học làm bằng model mạnh nhất chính là chỗ over-engineering sinh ra. Brief đã nạp ` +
+  `có sẵn hướng dẫn giao sub-agent ở mục "Giao việc" (kèm alias model) — dùng nó.\n\n` +
+  `(Chỉ nhắc một lần trong phiên này — không lặp lại ở những lượt sửa tiếp theo.)`;
+
+/**
+ * Nhắc MỘT LẦN khi phiên chính (không phải sub-agent) tự sửa file cho task khai
+ * tier `scribe`/`verifier` — đúng lúc còn kịp đổi hành vi: đây là lượt sửa file
+ * ĐẦU TIÊN mà phiên chính phớt lờ hướng dẫn giao việc trong brief. Nổ ở
+ * `ganas gate` thì đã muộn (việc làm xong rồi); nổ ở mọi lượt Write/Edit thì
+ * thành lải nhải.
+ *
+ * Thứ tự kiểm cố ý theo cái RẺ trước, cái ĐẮT sau: cờ đã-nhắc (đọc state) →
+ * nguồn gốc lượt sửa (đã có sẵn trong input) → CUỐI CÙNG mới `loadGraph`. Nhờ
+ * vậy `loadGraph` chạy NHIỀU NHẤT một lần cho mỗi phiên, không phải mỗi lần
+ * Write/Edit.
+ *
+ * Không chặn — chỉ `systemMessage`. Task tier `main`, hoặc task không khai
+ * `model` (đã có luật `spine/task-missing-model` lo), đều im lặng.
+ */
+async function pendingDispatchNudge(
+  root: string,
+  sessionId: string,
+  fromSubagent: boolean,
+): Promise<string | undefined> {
+  const rec = await sessionRecord(root, sessionId);
+  if (!rec) return undefined;
+
+  if (await dispatchNudgedFor(root, sessionId, rec.task)) return undefined;
+  if (fromSubagent) return undefined;
+
+  const graph = await loadGraph(root);
+  const tier = graph.tasks.get(rec.task)?.value.model;
+  if (tier !== "scribe" && tier !== "verifier") return undefined;
+
+  return DISPATCH_NUDGE_REASON;
+}
+
 /**
  * Chặn **trước khi** ghi, không phải sau.
  *
@@ -217,6 +265,14 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
  * ------------------------------------------------------------------------- */
 
 export async function postToolUse(input: HookInput): Promise<HookOutput> {
+  // Đây là NHẮC, không phải cổng: không `decision: "block"` (chặn ExitPlanMode
+  // là nhốt người dùng ngoài chính kế hoạch họ vừa duyệt), không đọc `tool_input`
+  // (harness không tả field nào của ExitPlanMode), không markTouched (duyệt plan
+  // không phải lượt sửa code — xem doc comment `touched_at` trong state.ts).
+  if (input.tool_name === "ExitPlanMode") {
+    return { systemMessage: PLAN_APPROVED_REASON };
+  }
+
   if (!input.tool_name || !WRITE_TOOLS.has(input.tool_name)) return ALLOW;
 
   const cwd = input.cwd ?? process.cwd();
@@ -231,13 +287,27 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
   // của task — ranh giới là pathspec tương đối gốc repo. Ghi vào chỉ tạo nhiễu.
   const inTree = rel !== undefined && rel !== "" && !rel.startsWith("../");
 
+  const sessionId = input.session_id;
+  const fromSubagent = input.agent_id !== undefined;
+
   // Trước cả bộ lọc `.ganas/` bên dưới: ghi code cũng là làm việc, và đó chính
   // là thứ Stop hook cần biết để phân biệt lượt sửa với lượt hỏi đáp. Vẫn phải
   // gọi kể cả khi không có đường dẫn — NotebookEdit gửi `notebook_path`.
-  if (input.session_id) await markTouched(root, input.session_id, inTree ? rel : undefined);
+  if (sessionId) await markTouched(root, sessionId, inTree ? rel : undefined, fromSubagent);
 
-  if (rel === undefined) return ALLOW;
-  if (!rel.startsWith(`${GANAS_DIR}/`)) return ALLOW; // chỉ gác kho tri thức
+  const nudgeText = sessionId ? await pendingDispatchNudge(root, sessionId, fromSubagent) : undefined;
+
+  // Hạ cờ CHỈ khi lời nhắc thật sự được trả ra. Đặt cờ ngay lúc tính toán là
+  // cách "nhắc một lần" âm thầm biến thành "nhắc không lần nào": nhánh xác thực
+  // `.ganas/` bên dưới trả thông điệp của nó và lời nhắc bị nuốt mất.
+  const deliverNudge = async (): Promise<HookOutput> => {
+    if (nudgeText === undefined || sessionId === undefined) return ALLOW;
+    await markDispatchNudged(root, sessionId);
+    return { systemMessage: nudgeText };
+  };
+
+  if (rel === undefined) return deliverNudge();
+  if (!rel.startsWith(`${GANAS_DIR}/`)) return deliverNudge(); // chỉ gác kho tri thức
 
   const graph = await loadGraph(root);
   const all = validateGraph(graph);
@@ -245,10 +315,18 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
   // Chỉ báo lỗi của CHÍNH file vừa ghi. Nếu bắt Claude chịu trách nhiệm cho mọi
   // lỗi sẵn có trong repo thì nó sẽ không bao giờ ghi xong được file nào.
   const mine = all.filter((d) => d.severity === "error" && d.file === rel);
-  if (mine.length === 0) return ALLOW;
+  if (mine.length === 0) return deliverNudge();
 
   const rule: EnforcementRule = mine.some(isAnchorIssue) ? "knowledge_anchor" : "schema";
   const mode = enforcementFor(graph.config, rule);
+
+  // Lời nhắc giao việc đi KÈM chứ không bị thay thế: hai chuyện khác nhau, và
+  // `HookOutput` chỉ có một chỗ để nói. Bỏ một cái là mất hẳn — nó chỉ nhắc
+  // một lần trong cả phiên.
+  const nudgeTail = nudgeText === undefined ? "" : `\n\n---\n\n${nudgeText}`;
+  if (nudgeText !== undefined && sessionId !== undefined) {
+    await markDispatchNudged(root, sessionId);
+  }
 
   const body =
     `Ghi vào \`${rel}\` chưa hợp lệ:\n\n${formatDiagnostics(mine)}\n\n` +
@@ -256,7 +334,8 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
       ? `Kho tri thức chỉ nhận phát biểu có bằng chứng. Thêm anchor (\`file:line\`, ` +
         `\`commit:sha\`, hoặc URL kèm \`fetched_at\`), hoặc bỏ hẳn phát biểu đó ra ` +
         `và ghi vào \`open_questions\` của task.`
-      : `Sửa lại cho đúng schema rồi ghi lại. Xem \`.claude/rules/ganas-knowledge.md\`.`);
+      : `Sửa lại cho đúng schema rồi ghi lại. Xem \`.claude/rules/ganas-knowledge.md\`.`) +
+    nudgeTail;
 
   return mode === "enforce"
     ? { decision: "block", reason: body }

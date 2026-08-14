@@ -8,7 +8,7 @@ import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
 import * as handlers from "../src/hooks/handlers.js";
 import { renderBrief } from "../src/render/brief.js";
-import { markTouched, readState, TOUCHED_PATHS_CAP, touchedPathsFor } from "../src/state.js";
+import { bindSession, markTouched, readState, TOUCHED_PATHS_CAP, touchedPathsFor } from "../src/state.js";
 import { moduleTargets, runTarget } from "../src/verify/run.js";
 import { cleanup, design, goal, makeProject, moduleYaml, scope, task } from "./helpers.js";
 
@@ -167,6 +167,175 @@ test("lỗi sẵn có ở file KHÁC không làm Claude bị chặn khi ghi file
       {},
       "bắt chịu trách nhiệm cho lỗi có sẵn trong repo thì không ghi xong được file nào",
     );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- PostToolUse: ExitPlanMode --------------------------------------------- */
+
+test("ExitPlanMode nhắc chẻ task bằng plan-to-tasks, không chặn", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "ExitPlanMode",
+    });
+    assert.match(out.systemMessage!, /plan-to-tasks/);
+    assert.equal(out.decision, undefined, "đây là nhắc, không phải cổng chặn");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ ExitPlanMode KHÔNG được tính là đã sửa code — không touched_at, không touched_paths", async () => {
+  const root = await project();
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "ExitPlanMode",
+    });
+    const rec = (await readState(root)).sessions["s1"];
+    assert.equal(rec?.touched_at, undefined, "duyệt plan không phải lượt sửa code");
+    assert.equal(rec?.touched_paths, undefined, "duyệt plan không góp đường dẫn nào");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("tool khác không liên quan vẫn đi qua bình thường, không bị nhánh ExitPlanMode nuốt", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Read",
+      tool_input: { file_path: "src/index.ts" },
+    });
+    assert.deepEqual(out, {});
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- PostToolUse: nhắc giao việc (dispatch nudge) -------------------------- */
+
+test("⭐ postToolUse nhắc giao việc khi task tier scribe và phiên chính tự sửa file", async () => {
+  const root = await project({
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "model: scribe\n" }),
+  });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    const out = await touch(root);
+    assert.match(out.systemMessage!, /giao việc/i);
+    assert.match(out.systemMessage!, /sub-agent/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ lời nhắc giao việc KHÔNG bị nuốt khi lượt đầu ghi vào .ganas/ có lỗi", async () => {
+  // Ca hiếm nhưng thật: lượt sửa ĐẦU TIÊN của phiên vừa là lượt đáng nhắc, vừa
+  // là file `.ganas/` sai schema. `HookOutput` chỉ có một chỗ để nói, nên nếu
+  // đặt cờ đã-nhắc ngay lúc TÍNH thay vì lúc TRẢ RA, lời nhắc biến mất vĩnh
+  // viễn — "nhắc một lần" âm thầm thành "nhắc không lần nào".
+  const root = await project({
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "model: scribe\n" }),
+    ".ganas/claims/a.yaml": BAD_CLAIM,
+  });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    const out = await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Write",
+      tool_input: { file_path: ".ganas/claims/a.yaml" },
+    });
+    const said = out.reason ?? out.systemMessage ?? "";
+    assert.match(said, /anchors/, "vẫn phải báo lỗi anchor như cũ");
+    assert.match(said, /giao việc/i, "và lời nhắc giao việc phải đi KÈM, không bị thay thế");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ nhắc giao việc chỉ một lần — hai lượt sửa kế tiếp không lặp lại", async () => {
+  const root = await project({
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "model: scribe\n" }),
+  });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    const first = await touch(root);
+    assert.ok(first.systemMessage, "lượt đầu phải nhắc");
+    const second = await touch(root);
+    assert.equal(second.systemMessage, undefined, "lượt hai không được nhắc lại — đã nhắc rồi");
+    const third = await touch(root);
+    assert.equal(third.systemMessage, undefined, "lượt ba cũng vậy — nhắc hai lần là lải nhải");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("lượt sửa từ sub-agent (kèm agent_id) không bị nhắc giao việc", async () => {
+  const root = await project({
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "model: scribe\n" }),
+  });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    const out = await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      agent_id: "a1",
+      agent_type: "general-purpose",
+      tool_name: "Write",
+      tool_input: { file_path: "src/index.ts" },
+    });
+    assert.equal(out.systemMessage, undefined, "sub-agent sửa đúng là điều nên xảy ra, không phải lỗi để nhắc");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("task tier main không bị nhắc giao việc — giao cho phiên chính là đúng", async () => {
+  const root = await project({
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "model: main\n" }),
+  });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    const out = await touch(root);
+    assert.equal(out.systemMessage, undefined);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("task không khai model thì không bị nhắc giao việc — đã có spine/task-missing-model lo", async () => {
+  const root = await project(); // task mặc định của project() không khai model
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    const out = await touch(root);
+    assert.equal(out.systemMessage, undefined);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("bindSession sang task khác thì cờ đã-nhắc reset — nhắc lại được", async () => {
+  const root = await project({
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "model: scribe\n" }),
+    ".ganas/tasks/T-002.yaml": task("T-002", { extra: "model: scribe\n" }),
+  });
+  try {
+    await bindSession(root, "s1", "T-001");
+    const first = await touch(root);
+    assert.ok(first.systemMessage, "lượt đầu ở T-001 phải nhắc");
+
+    await bindSession(root, "s1", "T-002");
+    const second = await touch(root);
+    assert.ok(second.systemMessage, "đổi task thì cờ reset — bindSession thay cả bản ghi");
   } finally {
     await cleanup(root);
   }

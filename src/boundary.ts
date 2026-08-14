@@ -204,6 +204,31 @@ export function formatBoundaryWarning(
   return "";
 }
 
+/**
+ * Cảnh báo tóm tắt: task khai tier `scribe`/`verifier` mà CẢ phiên không có
+ * lượt sửa nào từ sub-agent — bổ sung cho lần nhắc sớm ở `postToolUse`
+ * (`checkDispatchNudge` trong hooks/handlers.ts), KHÔNG thay thế nó. Lần nhắc
+ * sớm nổ đúng lúc còn kịp đổi hành vi (lượt sửa đầu tiên); đây là bản tóm tắt
+ * lúc sắp tuyên bố xong, cho người đọc thấy lại kết luận.
+ *
+ * Cùng khuôn `formatBoundaryWarning`: hàm thuần, trả `""` khi không có gì cần
+ * nói, chuỗi khác rỗng bắt đầu và kết thúc bằng `\n`.
+ */
+export function formatDispatchWarning(
+  taskId: string,
+  tier: Task["model"],
+  subagentTouched: boolean,
+): string {
+  if (tier !== "scribe" && tier !== "verifier") return "";
+  if (subagentTouched) return "";
+
+  return (
+    `\n⚠ ${taskId} khai tier \`${tier}\` nhưng cả phiên không có lượt sửa nào từ sub-agent —\n` +
+    `  có vẻ phiên chính (model mạnh nhất) đã tự làm việc cơ học/kiểm chứng thay vì giao việc.\n` +
+    `  Xem mục "Giao việc" trong brief để giao đúng cho sub-agent.\n`
+  );
+}
+
 const YAML_EXT = /\.ya?ml$/;
 
 /**

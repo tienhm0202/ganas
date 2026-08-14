@@ -51,6 +51,33 @@ export interface SessionRecord {
    */
   touched_paths?: string[];
   /**
+   * Phiên này đã có lượt sửa nào đến từ sub-agent chưa, kể từ khi bind vào task
+   * hiện tại.
+   *
+   * Phục vụ dòng tổng kết ở `ganas gate` (`formatDispatchWarning` trong
+   * boundary.ts): "task khai tier rẻ mà cả phiên không hề giao việc". Khác
+   * `touched_paths` ở chỗ đây là MỘT cờ tổng, không phải danh sách — câu hỏi nó
+   * trả lời ("có giao việc lần nào không") không cần biết giao ở đâu, chỉ cần
+   * biết có giao hay không.
+   *
+   * Vòng đời giống `touched_paths`: `bindSession` thay cả bản ghi nên đổi task
+   * tự reset cờ này, `clearTouched` không đụng tới (nó thuộc về CẢ task, không
+   * phải một lượt).
+   */
+  subagent_touched?: boolean;
+  /**
+   * Phiên này đã được nhắc — MỘT LẦN — về việc giao task tier `scribe`/`verifier`
+   * cho sub-agent chưa, ở lượt sửa file đầu tiên mà phiên chính tự làm.
+   *
+   * Nhắc quá một lần là lải nhải; nhắc trễ (chỉ ở lúc chạy `ganas gate`) là
+   * muộn — việc đã làm xong bằng model đắt rồi. Cờ này giữ đúng "một lần, đúng
+   * lúc": xem `checkDispatchNudge` trong hooks/handlers.ts.
+   *
+   * Vòng đời giống `touched_paths`: `bindSession` thay cả bản ghi nên đổi task
+   * tự reset cờ này.
+   */
+  dispatch_nudged?: boolean;
+  /**
    * Kết quả chấm `exit_contract` NGAY LÚC nhận task, theo `criterionKey`.
    *
    * Tiêu chí đã `true` ở đây mà lúc commit vẫn `true` thì nó không gác gì —
@@ -167,6 +194,44 @@ export async function touchedPathsFor(
   return rec.touched_paths ?? [];
 }
 
+/**
+ * Phiên này đã từng có lượt sửa nào đến từ sub-agent chưa, CHỈ khi còn bind
+ * vào đúng task đó — cùng lý do không rơi về `current_task` với `touchedPathsFor`.
+ */
+export async function subagentTouchedFor(
+  root: string,
+  sessionId: string | undefined,
+  taskId: string,
+): Promise<boolean> {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return rec.subagent_touched === true;
+}
+
+/**
+ * Đã nhắc phiên này về việc giao task tier `scribe`/`verifier` cho sub-agent
+ * chưa. Chỉ đọc — đặt cờ bằng `markDispatchNudged`.
+ */
+export async function dispatchNudgedFor(
+  root: string,
+  sessionId: string | undefined,
+  taskId: string,
+): Promise<boolean> {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return rec.dispatch_nudged === true;
+}
+
+/** Đặt cờ đã-nhắc — gọi đúng một lần, ngay sau khi trả `systemMessage` nhắc giao việc. */
+export async function markDispatchNudged(root: string, sessionId: string): Promise<void> {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (rec) rec.dispatch_nudged = true;
+  });
+}
+
 /** Task của một phiên; rơi về current_task khi không có session id. */
 export async function taskForSession(root: string, sessionId?: string): Promise<string | null> {
   const state = await readState(root);
@@ -198,11 +263,16 @@ export async function sessionRecord(
  * NotebookEdit gửi `notebook_path`, còn Bash thì chỉ có chuỗi lệnh thô. Những
  * lượt đó vẫn PHẢI dựng được `touched_at` — thiếu nó thì Stop hook hết phân
  * biệt được lượt sửa với lượt hỏi đáp.
+ *
+ * `fromSubagent` cũng tuỳ chọn, cùng lý do: `preToolUse` gọi hàm này cho lượt
+ * sửa qua Bash mà không biết nguồn gốc. Có giá trị `true` thì góp vào
+ * `subagent_touched` — xem doc của field đó trong `SessionRecord`.
  */
 export async function markTouched(
   root: string,
   sessionId: string,
   relPath?: string,
+  fromSubagent?: boolean,
 ): Promise<void> {
   const state = await readState(root);
   const rec = state.sessions[sessionId];
@@ -223,6 +293,11 @@ export async function markTouched(
       list.push(relPath);
       dirty = true;
     }
+  }
+
+  if (fromSubagent && !rec.subagent_touched) {
+    rec.subagent_touched = true;
+    dirty = true;
   }
 
   if (!dirty) return;
