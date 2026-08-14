@@ -31,6 +31,7 @@ const EXPECTED_COMMANDS = [
   "gate",
   "verify",
   "trace",
+  "debt",
   "commit",
   "note",
   "handoff",

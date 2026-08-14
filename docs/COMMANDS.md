@@ -427,6 +427,67 @@ ganas trace --dry-run --no-diagram
 ganas trace --json | jq '.debt'
 ```
 
+### `ganas debt [--all]`
+
+Bảng xếp hạng nợ, gộp hai nguồn: `validateGraph` (spine/scope/tri thức —
+liên kết treo, thiếu verification, chu trình, sổ cái hỏng, ...) và
+`computeDebt` của sơ đồ khối (cạnh chưa kiểm, hợp đồng trượt, khối chưa có
+bằng chứng). Hai nguồn này mỗi bên nói một thứ nợ rời nhau, không cái nào
+nói "làm cái nào trước" — `ganas debt` chấm điểm cả hai theo cùng một thang
+rồi sắp chung một bảng (`src/debt.ts`).
+
+**Thang điểm.** Mỗi mã nợ có hai trục, cùng thang **1 / 3 / 5**:
+
+- **weight** (quan trọng đến đâu nếu bỏ qua) — 5 = mất dữ liệu/hỏng nền
+  (vd sổ cái xác minh đứt chain), 3 = sinh kết luận sai (vd task "done" mà
+  không ai verify khối nó chạm), 1 = chỉ là thông tin (vd một claim đã bị
+  bác bỏ, giữ lại làm lời nhắc).
+- **ease** (dễ sửa đến đâu) — 5 = sửa một dòng YAML (trỏ lại đúng id), 3 =
+  phải chạy lệnh hoặc viết probe, 1 = phải thiết kế lại (vd một chu trình
+  phụ thuộc, chỉ gỡ được bằng cách vẽ lại sơ đồ).
+
+**total = weight + ease**, bảng sắp giảm dần theo `total` — số cao đứng đầu
+nghĩa là "quan trọng VÀ dễ sửa", tức làm ngay có lãi nhất. Tổng cao nhất có
+thể đạt là `10` (5 + 5); một dòng tổng thấp (vd `2`) không có nghĩa là
+"không quan trọng" — có thể là quan trọng thấp NHƯNG cũng khó sửa (hai trục
+cộng dồn, không nói riêng trục nào). Cần tách hai trục thì xem `--json`
+(mỗi hàng có `score.weight`/`score.ease` riêng).
+
+Mã lạ (luật mới thêm mà chưa chấm điểm trong `SCORES`/`NAMESPACE_DEFAULTS`
+của `src/debt.ts`) làm `scoreOf` **ném lỗi** — cố tình, để guard test
+(`test/debt.test.ts`) bắt được ngay lúc thêm luật, không âm thầm rơi khỏi
+bảng xếp hạng.
+
+**Phạm vi.** Mặc định lọc theo `scope` của task đang làm (tra như `commit`:
+`--session`, rồi `current_task`) — cùng nguyên tắc `postToolUse` đã áp dụng
+ở nơi khác trong ganas: chỉ báo nợ của phạm vi đang động vào, không đổ cả nợ
+tồn kho của dự án lên đầu một task đang làm việc khác. Không xác định được
+task đang làm thì lệnh **từ chối chạy** thay vì âm thầm trả bảng rỗng
+(trông như "sạch nợ") — báo lỗi và gợi ý `--all` hoặc gắn task trước.
+
+**Cắt bớt có ghi chú.** In tối đa 20 dòng đầu (đã sắp theo `total` nên luôn
+là phần đáng làm nhất); vượt ngưỡng thì có một dòng nói rõ đã bỏ bao nhiêu
+và trỏ sang `--json` để lấy đủ. Không có chuyện cắt im lặng.
+
+Không có đối số định vị.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--all` | Bỏ lọc phạm vi, in nợ của toàn bộ dự án. |
+| `--session <id>` | Tra task đang gắn với phiên để suy ra phạm vi (bỏ qua khi có `--all`). |
+| `--json` | Xuất `{ scope, all, total, shown, outside, rows }` — `rows` KHÔNG bị cắt bớt. |
+
+**Mã thoát:** luôn `0` — đây là báo cáo, không phải cổng (khác `ganas
+trace`, vốn trả `1` khi còn nợ). Lỗi (`1`, `GanasError`) nếu không xác định
+được task đang làm mà thiếu `--all`.
+
+**Ví dụ:**
+```
+ganas debt                    # nợ trong phạm vi task đang làm
+ganas debt --all              # toàn dự án
+ganas debt --json | jq '.rows[0]'
+```
+
 ### `ganas commit [task]`
 
 Commit task đã đạt điều kiện hoàn thành: kiểm hash-chain của sổ cái, chấm

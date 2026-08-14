@@ -23,6 +23,7 @@ import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
 import { verifyChain } from "../verify/ledger.js";
 import { openProject } from "./_common.js";
+import { commitDebtSummary } from "./debt.js";
 
 /** Bọc pathspec cho `git add`: đủ để chống một dấu nháy đơn trong path lạ. */
 function quote(p: string): string {
@@ -265,7 +266,8 @@ export async function run(argv: Argv): Promise<number> {
             `\nCommit chúng cùng task sở hữu chúng.\n`
           : "") +
         baselineWarning +
-        outsideWarning,
+        outsideWarning +
+        commitDebtSummary(graph, task.scope),
     );
     return 0;
   } finally {
