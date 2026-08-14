@@ -4,6 +4,31 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## v0.3.0 — 2026-08-14
+
+- **Cảnh báo file sửa ngoài ranh giới code của task** — `postToolUse` giờ ghi
+  mọi đường dẫn phiên đã sửa vào `state.sessions[id].touched_paths`
+  (`.ganas/state.json`, trần 200 đường dẫn khác nhau). `ganas gate` đối chiếu
+  danh sách đó với `taskBoundary()` (`src/boundary.ts`) — CHÍNH ranh giới mà
+  `ganas commit` đem đi `git add`, dùng chung một hàm — qua `outsideBoundary()`
+  để tìm file lệch ra ngoài. File `.ganas/` không bao giờ bị báo (đã có
+  `ownsGanasFile` lo); ranh giới rỗng (task không khai `touches` và
+  `exit_contract` không nhắc đường dẫn nào) thì không kết luận gì, in một cảnh
+  báo khác. `ganas gate` in khối `⚠`, `ganas gate --json` thêm field
+  `outside_boundary`, và `ganas commit` in cùng cảnh báo ở cả ba đường ra
+  (dry-run, commit thành công, và "không có gì để commit"). **Chỉ cảnh báo,
+  không bao giờ chặn, không đổi mã thoát của lệnh nào.**
+
+  Hai giới hạn đã biết:
+  - Sửa file qua Bash (`sed -i`, `>`) chỉ dựng cờ `touched_at` chứ KHÔNG góp
+    đường dẫn vào `touched_paths` — ganas cố ý không parse chuỗi lệnh shell để
+    đoán file (sai nhiều hơn đúng). Những đợt sửa qua Bash vô hình với kiểm
+    này.
+  - `.ganas/state.json` là file local, không commit. Clone mới, máy thứ hai,
+    hay phiên mở trước khi có tính năng này đều không có lịch sử
+    `touched_paths` — kiểm này im lặng. Vắng cảnh báo không phải bằng chứng đã
+    ở trong ranh giới.
+
 ## v0.2.2 — 2026-08-09
 
 Năm mục nhẹ còn lại của cùng đợt báo cáo đã vá ở `v0.2.1`. Cả năm đều được kiểm

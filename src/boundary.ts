@@ -1,6 +1,7 @@
 import { DIRS, GANAS_DIR } from "./graph/paths.js";
 import type { Graph } from "./graph/types.js";
 import type { Task } from "./model/index.js";
+import { TOUCHED_PATHS_CAP } from "./state.js";
 import { matchesAny } from "./util/glob.js";
 import { looksLikePath, stripOperators, tokenizeShell } from "./util/shell.js";
 import { LEDGER_FILE } from "./verify/ledger.js";
@@ -158,6 +159,49 @@ export function outsideBoundary(
   }
 
   return [...out].sort();
+}
+
+/**
+ * In cảnh báo "file ngoài ranh giới code" thành chữ.
+ *
+ * `gate` và `commit` đều cần đưa `outsideBoundary` ra cho người đọc, và cả hai
+ * phải nói CÙNG một khối chữ — tách hàm này ra một chỗ để hai nơi không lỡ
+ * nói lệch nhau khi một bên sửa còn bên kia quên.
+ *
+ * Chuỗi trả về bắt đầu và kết thúc bằng `\n`, cùng quy ước với
+ * `reportBaseline` ở `src/commands/commit.ts` — để nối thẳng vào chuỗi báo
+ * cáo khác mà không phải tự thêm dòng trống ở nơi gọi.
+ */
+export function formatBoundaryWarning(
+  taskId: string,
+  boundary: readonly string[],
+  touched: readonly string[],
+  outside: readonly string[],
+): string {
+  if (outside.length > 0) {
+    let out =
+      `\n⚠ ${outside.length} file phiên này đã sửa nằm NGOÀI ranh giới code của ${taskId}:\n` +
+      outside.map((p) => `    ${p}`).join("\n") +
+      `\n  Ranh giới của ${taskId}: ${boundary.join(", ")}\n` +
+      "  (từ `touches` + đường dẫn mà `exit_contract` chạy)\n" +
+      "  `ganas commit` KHÔNG stage những file này — chúng ở lại working tree,\n" +
+      "  không nằm trong commit nào và không ai nghiệm thu.\n" +
+      "  Hoặc khai thêm khối vào `touches`, hoặc tách phần lạc ra task riêng.\n";
+    if (touched.length >= TOUCHED_PATHS_CAP) {
+      out += `  (đã ghi tối đa ${TOUCHED_PATHS_CAP} đường dẫn — có thể còn file khác.)\n`;
+    }
+    return out;
+  }
+
+  if (boundary.length === 0 && touched.length > 0) {
+    return (
+      `\n⚠ ${taskId} chưa khai \`touches\` và \`exit_contract\` không nhắc đường dẫn nào,\n` +
+      `  nên KHÔNG có ranh giới code để đối chiếu — ${touched.length} file đã sửa đi qua mà không\n` +
+      "  ai kiểm được chúng có thuộc task này không.\n"
+    );
+  }
+
+  return "";
 }
 
 const YAML_EXT = /\.ya?ml$/;

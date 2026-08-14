@@ -105,6 +105,33 @@ ghi phiên mỗi khi có ghi file (`preToolUse` làm việc tương tự cho `se
 qua Bash), còn `handlers.stop` chỉ chấm khi thấy cờ đó rồi hạ nó xuống. Một đợt
 sửa được chấm đúng một lần; hỏi bao nhiêu câu sau đó cũng không đánh thức gate.
 
+Cùng lúc đó, `postToolUse` còn góp đường dẫn Write/Edit vào
+`state.sessions[id].touched_paths` (trần 200 đường dẫn khác nhau). Khác
+`touched_at` — cờ của MỘT lượt, bị `handlers.stop` hạ sau mỗi lần chấm —
+`touched_paths` sống suốt thời gian phiên còn bind vào task đó; `clearTouched`
+cố ý không đụng tới nó, vì câu hỏi nó phục vụ ("phiên có sửa ra ngoài ranh giới
+code của task không") hỏi về toàn bộ việc đã làm, không phải lượt cuối.
+
+`ganas gate` đối chiếu `touched_paths` đó với `taskBoundary()`
+(`src/boundary.ts`) — đúng ranh giới mà `ganas commit` đem đi `git add`, dùng
+chung một hàm — qua `outsideBoundary()`. File nằm ngoài bị in thành khối `⚠`
+(`gate --json` thêm field `outside_boundary`); `ganas commit` in cùng cảnh báo
+ở cả ba đường ra (dry-run, commit thành công, và "không có gì để commit").
+Ranh giới rỗng (task không khai `touches` và `exit_contract` không nhắc đường
+dẫn nào) thì không kết luận gì, in một cảnh báo khác. **Chỉ cảnh báo, không
+bao giờ chặn, không đổi mã thoát của lệnh nào.**
+
+Hai giới hạn đã biết, ghi thẳng để không ai tưởng kiểm này bắt được mọi thứ:
+
+- Sửa file qua Bash (`sed -i`, `>`) chỉ dựng `touched_at` chứ KHÔNG góp đường
+  dẫn vào `touched_paths` — ganas cố ý không parse chuỗi lệnh shell để đoán
+  file (sai nhiều hơn đúng, cùng lý do Bash không còn bị chặn ghi sổ cái ở
+  luồng 5). Những đợt sửa qua Bash vô hình với kiểm này.
+- `.ganas/state.json` là file local, không commit. Clone mới, máy thứ hai, hay
+  phiên mở trước khi có tính năng này đều không có lịch sử `touched_paths` —
+  kiểm này im lặng. **Vắng cảnh báo không phải bằng chứng đã ở trong ranh
+  giới.**
+
 **Điểm đứt đã biết, ghi ở đây để không ai tưởng nó liền:** `generateHandoff()`
 ghi `.ganas/runs/<session>.md`, nhưng **không code nào đọc lại file đó**.
 `sessionStart` dựng brief thuần từ graph. Thứ duy nhất thật sự đi qua ranh giới

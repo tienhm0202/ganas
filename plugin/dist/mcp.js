@@ -24139,6 +24139,125 @@ var init_paths = __esm({
   }
 });
 
+// src/state.ts
+var state_exports = {};
+__export(state_exports, {
+  TOUCHED_PATHS_CAP: () => TOUCHED_PATHS_CAP,
+  baselineFor: () => baselineFor,
+  bindSession: () => bindSession,
+  clearTouched: () => clearTouched,
+  markTouched: () => markTouched,
+  readState: () => readState,
+  releaseSession: () => releaseSession,
+  sessionRecord: () => sessionRecord,
+  setBaseline: () => setBaseline,
+  taskForSession: () => taskForSession,
+  touchedPathsFor: () => touchedPathsFor,
+  updateState: () => updateState,
+  writeState: () => writeState
+});
+import { existsSync as existsSync2 } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname as dirname2 } from "node:path";
+async function readState(root) {
+  const file = ganasPath(root, STATE_FILE);
+  if (!existsSync2(file)) return { ...EMPTY };
+  try {
+    const parsed = JSON.parse(await readFile(file, "utf8"));
+    return {
+      version: 1,
+      current_task: parsed.current_task ?? null,
+      sessions: parsed.sessions ?? {}
+    };
+  } catch {
+    return { ...EMPTY };
+  }
+}
+async function writeState(root, state) {
+  const file = ganasPath(root, STATE_FILE);
+  await mkdir(dirname2(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  await writeFile(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  await rename(tmp, file);
+}
+async function updateState(root, mutate) {
+  const state = await readState(root);
+  mutate(state);
+  await writeState(root, state);
+  return state;
+}
+async function bindSession(root, sessionId, taskId) {
+  await updateState(root, (s) => {
+    s.sessions[sessionId] = { task: taskId, started_at: (/* @__PURE__ */ new Date()).toISOString() };
+    s.current_task = taskId;
+  });
+}
+async function releaseSession(root, sessionId) {
+  await updateState(root, (s) => {
+    delete s.sessions[sessionId];
+  });
+}
+async function setBaseline(root, sessionId, baseline) {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (rec) rec.baseline = baseline;
+  });
+}
+async function baselineFor(root, sessionId, taskId) {
+  if (!sessionId) return void 0;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return void 0;
+  return rec.baseline;
+}
+async function touchedPathsFor(root, sessionId, taskId) {
+  if (!sessionId) return [];
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return [];
+  return rec.touched_paths ?? [];
+}
+async function taskForSession(root, sessionId) {
+  const state = await readState(root);
+  if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
+  return state.current_task;
+}
+async function sessionRecord(root, sessionId) {
+  const state = await readState(root);
+  return state.sessions[sessionId] ?? null;
+}
+async function markTouched(root, sessionId, relPath) {
+  const state = await readState(root);
+  const rec = state.sessions[sessionId];
+  if (!rec) return;
+  let dirty = false;
+  if (!rec.touched_at) {
+    rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
+    dirty = true;
+  }
+  if (relPath) {
+    const list = rec.touched_paths ??= [];
+    if (!list.includes(relPath) && list.length < TOUCHED_PATHS_CAP) {
+      list.push(relPath);
+      dirty = true;
+    }
+  }
+  if (!dirty) return;
+  await writeState(root, state);
+}
+async function clearTouched(root, sessionId) {
+  await updateState(root, (s) => {
+    delete s.sessions[sessionId]?.touched_at;
+  });
+}
+var EMPTY, TOUCHED_PATHS_CAP;
+var init_state = __esm({
+  "src/state.ts"() {
+    "use strict";
+    init_paths();
+    EMPTY = { version: 1, current_task: null, sessions: {} };
+    TOUCHED_PATHS_CAP = 200;
+  }
+});
+
 // src/util/exec.ts
 var exec_exports = {};
 __export(exec_exports, {
@@ -24414,10 +24533,10 @@ var init_shell = __esm({
 
 // src/verify/ledger.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync2 } from "node:fs";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { existsSync as existsSync3 } from "node:fs";
+import { appendFile, mkdir as mkdir2, readFile as readFile2 } from "node:fs/promises";
 import { hostname as hostname2 } from "node:os";
-import { dirname as dirname2 } from "node:path";
+import { dirname as dirname3 } from "node:path";
 function sha256(input) {
   return createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16);
 }
@@ -24443,7 +24562,7 @@ function canonical(value) {
 }
 async function fileHash(path) {
   try {
-    return sha256(await readFile(path, "utf8"));
+    return sha256(await readFile2(path, "utf8"));
   } catch {
     return "";
   }
@@ -24470,7 +24589,7 @@ function runningHashOf(entries) {
 }
 async function appendEntry(root, entry) {
   const file = ledgerPath(root);
-  await mkdir(dirname2(file), { recursive: true });
+  await mkdir2(dirname3(file), { recursive: true });
   const existing = await readLedger(root);
   const lastSeq = existing.length > 0 ? existing[existing.length - 1].seq ?? 0 : 0;
   const chained = {
@@ -24500,8 +24619,8 @@ function ledgerCorruption(root) {
 async function readLedger(root) {
   const file = ledgerPath(root);
   corruptLines.set(root, 0);
-  if (!existsSync2(file)) return [];
-  const raw = await readFile(file, "utf8");
+  if (!existsSync3(file)) return [];
+  const raw = await readFile2(file, "utf8");
   const out = [];
   let bad = 0;
   for (const line of raw.split("\n")) {
@@ -24562,6 +24681,7 @@ var boundary_exports = {};
 __export(boundary_exports, {
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
+  formatBoundaryWarning: () => formatBoundaryWarning,
   matchPatterns: () => matchPatterns,
   outsideBoundary: () => outsideBoundary,
   ownsGanasFile: () => ownsGanasFile,
@@ -24624,6 +24744,32 @@ function outsideBoundary(task, graph, touched) {
   }
   return [...out].sort();
 }
+function formatBoundaryWarning(taskId, boundary, touched, outside) {
+  if (outside.length > 0) {
+    let out = `
+\u26A0 ${outside.length} file phi\xEAn n\xE0y \u0111\xE3 s\u1EEDa n\u1EB1m NGO\xC0I ranh gi\u1EDBi code c\u1EE7a ${taskId}:
+` + outside.map((p) => `    ${p}`).join("\n") + `
+  Ranh gi\u1EDBi c\u1EE7a ${taskId}: ${boundary.join(", ")}
+  (t\u1EEB \`touches\` + \u0111\u01B0\u1EDDng d\u1EABn m\xE0 \`exit_contract\` ch\u1EA1y)
+  \`ganas commit\` KH\xD4NG stage nh\u1EEFng file n\xE0y \u2014 ch\xFAng \u1EDF l\u1EA1i working tree,
+  kh\xF4ng n\u1EB1m trong commit n\xE0o v\xE0 kh\xF4ng ai nghi\u1EC7m thu.
+  Ho\u1EB7c khai th\xEAm kh\u1ED1i v\xE0o \`touches\`, ho\u1EB7c t\xE1ch ph\u1EA7n l\u1EA1c ra task ri\xEAng.
+`;
+    if (touched.length >= TOUCHED_PATHS_CAP) {
+      out += `  (\u0111\xE3 ghi t\u1ED1i \u0111a ${TOUCHED_PATHS_CAP} \u0111\u01B0\u1EDDng d\u1EABn \u2014 c\xF3 th\u1EC3 c\xF2n file kh\xE1c.)
+`;
+    }
+    return out;
+  }
+  if (boundary.length === 0 && touched.length > 0) {
+    return `
+\u26A0 ${taskId} ch\u01B0a khai \`touches\` v\xE0 \`exit_contract\` kh\xF4ng nh\u1EAFc \u0111\u01B0\u1EDDng d\u1EABn n\xE0o,
+  n\xEAn KH\xD4NG c\xF3 ranh gi\u1EDBi code \u0111\u1EC3 \u0111\u1ED1i chi\u1EBFu \u2014 ${touched.length} file \u0111\xE3 s\u1EEDa \u0111i qua m\xE0 kh\xF4ng
+  ai ki\u1EC3m \u0111\u01B0\u1EE3c ch\xFAng c\xF3 thu\u1ED9c task n\xE0y kh\xF4ng.
+`;
+  }
+  return "";
+}
 function ownsGanasFile(task, relPath) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
   const prefix = `${GANAS_DIR}/`;
@@ -24638,130 +24784,12 @@ var init_boundary = __esm({
   "src/boundary.ts"() {
     "use strict";
     init_paths();
+    init_state();
     init_glob();
     init_shell();
     init_ledger();
     GLOB_CHARS = /[*?[\]{}]/;
     YAML_EXT = /\.ya?ml$/;
-  }
-});
-
-// src/state.ts
-var state_exports = {};
-__export(state_exports, {
-  TOUCHED_PATHS_CAP: () => TOUCHED_PATHS_CAP,
-  baselineFor: () => baselineFor,
-  bindSession: () => bindSession,
-  clearTouched: () => clearTouched,
-  markTouched: () => markTouched,
-  readState: () => readState,
-  releaseSession: () => releaseSession,
-  sessionRecord: () => sessionRecord,
-  setBaseline: () => setBaseline,
-  taskForSession: () => taskForSession,
-  touchedPathsFor: () => touchedPathsFor,
-  updateState: () => updateState,
-  writeState: () => writeState
-});
-import { existsSync as existsSync4 } from "node:fs";
-import { mkdir as mkdir2, readFile as readFile3, rename, writeFile } from "node:fs/promises";
-import { dirname as dirname3 } from "node:path";
-async function readState(root) {
-  const file = ganasPath(root, STATE_FILE);
-  if (!existsSync4(file)) return { ...EMPTY };
-  try {
-    const parsed = JSON.parse(await readFile3(file, "utf8"));
-    return {
-      version: 1,
-      current_task: parsed.current_task ?? null,
-      sessions: parsed.sessions ?? {}
-    };
-  } catch {
-    return { ...EMPTY };
-  }
-}
-async function writeState(root, state) {
-  const file = ganasPath(root, STATE_FILE);
-  await mkdir2(dirname3(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
-  await rename(tmp, file);
-}
-async function updateState(root, mutate) {
-  const state = await readState(root);
-  mutate(state);
-  await writeState(root, state);
-  return state;
-}
-async function bindSession(root, sessionId, taskId) {
-  await updateState(root, (s) => {
-    s.sessions[sessionId] = { task: taskId, started_at: (/* @__PURE__ */ new Date()).toISOString() };
-    s.current_task = taskId;
-  });
-}
-async function releaseSession(root, sessionId) {
-  await updateState(root, (s) => {
-    delete s.sessions[sessionId];
-  });
-}
-async function setBaseline(root, sessionId, baseline) {
-  await updateState(root, (s) => {
-    const rec = s.sessions[sessionId];
-    if (rec) rec.baseline = baseline;
-  });
-}
-async function baselineFor(root, sessionId, taskId) {
-  if (!sessionId) return void 0;
-  const rec = (await readState(root)).sessions[sessionId];
-  if (!rec || rec.task !== taskId) return void 0;
-  return rec.baseline;
-}
-async function touchedPathsFor(root, sessionId, taskId) {
-  if (!sessionId) return [];
-  const rec = (await readState(root)).sessions[sessionId];
-  if (!rec || rec.task !== taskId) return [];
-  return rec.touched_paths ?? [];
-}
-async function taskForSession(root, sessionId) {
-  const state = await readState(root);
-  if (sessionId && state.sessions[sessionId]) return state.sessions[sessionId].task;
-  return state.current_task;
-}
-async function sessionRecord(root, sessionId) {
-  const state = await readState(root);
-  return state.sessions[sessionId] ?? null;
-}
-async function markTouched(root, sessionId, relPath) {
-  const state = await readState(root);
-  const rec = state.sessions[sessionId];
-  if (!rec) return;
-  let dirty = false;
-  if (!rec.touched_at) {
-    rec.touched_at = (/* @__PURE__ */ new Date()).toISOString();
-    dirty = true;
-  }
-  if (relPath) {
-    const list = rec.touched_paths ??= [];
-    if (!list.includes(relPath) && list.length < TOUCHED_PATHS_CAP) {
-      list.push(relPath);
-      dirty = true;
-    }
-  }
-  if (!dirty) return;
-  await writeState(root, state);
-}
-async function clearTouched(root, sessionId) {
-  await updateState(root, (s) => {
-    delete s.sessions[sessionId]?.touched_at;
-  });
-}
-var EMPTY, TOUCHED_PATHS_CAP;
-var init_state = __esm({
-  "src/state.ts"() {
-    "use strict";
-    init_paths();
-    EMPTY = { version: 1, current_task: null, sessions: {} };
-    TOUCHED_PATHS_CAP = 200;
   }
 });
 
@@ -36796,8 +36824,8 @@ function buildCommitMessage(graph, task, gate) {
 // src/gate.ts
 init_paths();
 init_exec();
-import { existsSync as existsSync3 } from "node:fs";
-import { readFile as readFile2 } from "node:fs/promises";
+import { existsSync as existsSync4 } from "node:fs";
+import { readFile as readFile3 } from "node:fs/promises";
 import { join as join3 } from "node:path";
 function criterionKey(c) {
   switch (c.kind) {
@@ -36846,11 +36874,11 @@ async function checkCriterion(criterion, ctx) {
     }
     case "artifact": {
       const file = join3(ctx.root, criterion.path);
-      if (!existsSync3(file)) {
+      if (!existsSync4(file)) {
         return { criterion, label, status: "fail", reason: `file ch\u01B0a t\u1ED3n t\u1EA1i` };
       }
       if (criterion.must_contain) {
-        const content = await readFile2(file, "utf8").catch(() => "");
+        const content = await readFile3(file, "utf8").catch(() => "");
         if (!content.includes(criterion.must_contain)) {
           return {
             criterion,
@@ -36873,7 +36901,7 @@ async function checkCriterion(criterion, ctx) {
         };
       }
       const file = ganasPath(ctx.root, DIRS.runs, `${ctx.sessionId}.md`);
-      return existsSync3(file) ? { criterion, label, status: "pass" } : {
+      return existsSync4(file) ? { criterion, label, status: "pass" } : {
         criterion,
         label,
         status: "fail",
@@ -37122,6 +37150,13 @@ ${formatGate(gateResult)}
   const baselineWarning = reportBaseline(gateResult, baseline);
   const allGanas = flag(argv, "all-ganas");
   const codePaths = taskBoundary(task, graph);
+  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const outsideWarning = formatBoundaryWarning(
+    taskId,
+    codePaths,
+    touched,
+    outsideBoundary(task, graph, touched)
+  );
   const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
   if (flag(argv, "dry-run")) {
     const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
@@ -37137,7 +37172,7 @@ S\u1EBD stage:
 \u0110\u1EC3 l\u1EA1i (kh\xF4ng thu\u1ED9c ${taskId}):
 ` + foreign2.map((p) => `  \xB7 ${p}`).join("\n") : "") + (willClose ? `
 
-S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + `
+S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + outsideWarning + `
 
 --- commit message ---
 ${message2}`
@@ -37163,7 +37198,7 @@ ${message2}`
 ${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId}:
 ` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
 Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBFu mu\u1ED1n g\u1ED9p.
-` : "")
+` : "") + outsideWarning
     );
     return 0;
   }
@@ -37195,7 +37230,7 @@ ${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xE
 ${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
 ` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
 Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
-` : "") + baselineWarning
+` : "") + baselineWarning + outsideWarning
     );
     return 0;
   } finally {
@@ -38163,6 +38198,7 @@ V\xF2ng ti\u1EBFp theo b\u1EAFt \u0111\u1EA7u b\u1EB1ng m\u1ED9t task m\u1EDBi \
 }
 
 // src/commands/gate.ts
+init_boundary();
 init_state();
 init_errors2();
 async function run3(argv) {
@@ -38174,6 +38210,9 @@ async function run3(argv) {
   if (!task) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
   const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
+  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const boundary = taskBoundary(task.value, graph);
+  const outside = outsideBoundary(task.value, graph, touched);
   if (flag(argv, "json")) {
     process.stdout.write(
       JSON.stringify(
@@ -38182,7 +38221,8 @@ async function run3(argv) {
           ok: result.ok,
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
           pending_human: result.pendingHuman.map((p) => p.label),
-          already_green_at_start: green.map((g) => g.label)
+          already_green_at_start: green.map((g) => g.label),
+          outside_boundary: outside
         },
         null,
         2
@@ -38204,6 +38244,9 @@ ${formatGate(result)}
 `
     );
   }
+  const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
+  if (boundaryWarning) process.stdout.write(`${boundaryWarning}
+`);
   if (result.ok) {
     process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng \u0111\u1EC1u \u0111\u1EA1t.
 `);
@@ -39666,7 +39709,7 @@ var TOOLS = [
 function createServer() {
   const server = new McpServer({
     name: "ganas",
-    version: true ? "0.2.2" : "0.0.0"
+    version: true ? "0.3.0" : "0.0.0"
   });
   for (const tool of TOOLS) {
     server.registerTool(

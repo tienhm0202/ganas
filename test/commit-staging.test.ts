@@ -8,6 +8,7 @@ import { contractPathRefs, contractPaths, ownsGanasFile } from "../src/boundary.
 import { run as ganasCommit } from "../src/commands/commit.js";
 import { parsePorcelainZ } from "../src/commands/commit.js";
 import { criterionKey } from "../src/gate.js";
+import * as handlers from "../src/hooks/handlers.js";
 import { zTask } from "../src/model/index.js";
 import { runShell } from "../src/util/exec.js";
 import { tokenizeShell } from "../src/util/shell.js";
@@ -429,6 +430,53 @@ test("baseline không có (phiên khác) thì im lặng, không đoán bừa", a
     }
 
     assert.doesNotMatch(out.join(""), /XANH SẴN/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- Ranh giới code: file phiên sửa nhưng ngoài `touches` ------------------ */
+
+test("⭐ --dry-run cảnh báo file phiên đã sửa nằm NGOÀI ranh giới code", async () => {
+  const root = await gitProject({ ...BASE, ".ganas/tasks/T-001.yaml": T_ZNSTRACK });
+  try {
+    // Gate của T-001 đòi file này tồn tại, dù dry-run không chấm gate trước đó.
+    await mkdir(join(root, "tests", "e2e"), { recursive: true });
+    await writeFile(join(root, "tests", "e2e", "domain.test.ts"), "// test\n", "utf8");
+
+    // Bind phiên s1 vào T-001 (ranh giới: src/a/** + tests/e2e/domain.test.ts).
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    // Phiên ghi một file lạc ngoài ranh giới đó.
+    await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Write",
+      tool_input: { file_path: "scripts/lac.sh" },
+    });
+
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string) => {
+      out.push(String(chunk));
+      return true;
+    });
+    try {
+      assert.equal(
+        await ganasCommit({
+          positional: [],
+          options: { root, session: "s1" },
+          flags: { "dry-run": true },
+          passthrough: [],
+        }),
+        0,
+      );
+    } finally {
+      process.stdout.write = write;
+    }
+
+    const text = out.join("");
+    assert.match(text, /NGOÀI ranh giới code/, `phải cảnh báo file lạc. Đã in:\n${text}`);
+    assert.match(text, /scripts\/lac\.sh/);
   } finally {
     await cleanup(root);
   }

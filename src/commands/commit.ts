@@ -5,13 +5,19 @@ import { join } from "node:path";
 
 import { parseDocument } from "yaml";
 
-import { contractPathRefs, ownsGanasFile, taskBoundary } from "../boundary.js";
+import {
+  contractPathRefs,
+  formatBoundaryWarning,
+  outsideBoundary,
+  ownsGanasFile,
+  taskBoundary,
+} from "../boundary.js";
 import { buildCommitMessage } from "../commit.js";
 import { alreadyGreen, evaluateGate, formatGate, type GateResult } from "../gate.js";
 import { GANAS_DIR } from "../graph/paths.js";
 import type { Sourced } from "../graph/types.js";
 import type { Task } from "../model/index.js";
-import { baselineFor, taskForSession } from "../state.js";
+import { baselineFor, taskForSession, touchedPathsFor } from "../state.js";
 import { type Argv, enabled, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
@@ -158,6 +164,16 @@ export async function run(argv: Argv): Promise<number> {
   const allGanas = flag(argv, "all-ganas");
   const codePaths = taskBoundary(task, graph);
 
+  // Cảnh báo đối chiếu ĐÚNG cái ranh giới sắp đem đi `git add` — dùng lại
+  // `codePaths` chứ không tính lại, để không có đường nào cho hai thứ lệch nhau.
+  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const outsideWarning = formatBoundaryWarning(
+    taskId,
+    codePaths,
+    touched,
+    outsideBoundary(task, graph, touched),
+  );
+
   // Đóng task TRƯỚC khi stage, để thay đổi đó nằm trong chính commit này chứ
   // không lơ lửng trong working tree sau đó.
   const willClose =
@@ -178,6 +194,7 @@ export async function run(argv: Argv): Promise<number> {
           : "") +
         (willClose ? `\n\nSẽ đánh dấu ${taskId}: status: done + done_at.` : "") +
         baselineWarning +
+        outsideWarning +
         `\n\n--- commit message ---\n${message}`,
     );
     return 0;
@@ -208,7 +225,8 @@ export async function run(argv: Argv): Promise<number> {
           ? `\n${GANAS_DIR}/ có ${foreign.length} file đang đổi nhưng KHÔNG thuộc ${taskId}:\n` +
             foreign.map((p) => `  · ${p}`).join("\n") +
             `\nCommit chúng cùng task sở hữu, hoặc \`git add\` tay nếu muốn gộp.\n`
-          : ""),
+          : "") +
+        outsideWarning,
     );
     return 0;
   }
@@ -246,7 +264,8 @@ export async function run(argv: Argv): Promise<number> {
             foreign.map((p) => `  · ${p}`).join("\n") +
             `\nCommit chúng cùng task sở hữu chúng.\n`
           : "") +
-        baselineWarning,
+        baselineWarning +
+        outsideWarning,
     );
     return 0;
   } finally {

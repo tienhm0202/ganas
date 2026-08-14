@@ -627,3 +627,124 @@ test("touchedPathsFor chỉ trả khi phiên còn bind đúng task đó", async 
     await cleanup(root);
   }
 });
+
+/* --- gate: cảnh báo ranh giới code ----------------------------------------- */
+
+/** Task có `touches: [M-a]` — ranh giới code là `src/a/**`. */
+const TASK_WITH_BOUNDARY = `id: T-001
+title: "t"
+serves: [G-001]
+implements: D-001
+scope: P-thu
+status: todo
+touches:
+  - M-a
+exit_contract:
+  - kind: command
+    run: "true"
+`;
+
+test("⭐ gate cảnh báo file NGOÀI ranh giới code nhưng không đổi mã thoát", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Write",
+      tool_input: { file_path: "scripts/lac.sh" },
+    });
+
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string) => {
+      out.push(String(chunk));
+      return true;
+    });
+    let code: number;
+    try {
+      const gate = await import("../src/commands/gate.js");
+      code = await gate.run({
+        positional: ["T-001"],
+        options: { root, session: "s1" },
+        flags: {},
+        passthrough: [],
+      });
+    } finally {
+      process.stdout.write = write;
+    }
+
+    const text = out.join("");
+    assert.match(text, /NGOÀI ranh giới code/);
+    assert.match(text, /scripts\/lac\.sh/);
+    assert.equal(code, 0, "cảnh báo ranh giới không được đổi mã thoát");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("gate im lặng khi file đã sửa nằm TRONG ranh giới code", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Write",
+      tool_input: { file_path: "src/a/x.ts" },
+    });
+
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string) => {
+      out.push(String(chunk));
+      return true;
+    });
+    try {
+      const gate = await import("../src/commands/gate.js");
+      await gate.run({
+        positional: ["T-001"],
+        options: { root, session: "s1" },
+        flags: {},
+        passthrough: [],
+      });
+    } finally {
+      process.stdout.write = write;
+    }
+
+    assert.doesNotMatch(out.join(""), /NGOÀI ranh giới code/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("gate không có phiên thì không đoán bừa về ranh giới", async () => {
+  const root = await project({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
+  try {
+    await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await handlers.postToolUse({
+      cwd: root,
+      session_id: "s1",
+      tool_name: "Write",
+      tool_input: { file_path: "scripts/lac.sh" },
+    });
+
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string) => {
+      out.push(String(chunk));
+      return true;
+    });
+    try {
+      const gate = await import("../src/commands/gate.js");
+      // Không truyền `session` ⇒ touchedPathsFor trả [] ⇒ không có gì để đối chiếu.
+      await gate.run({ positional: ["T-001"], options: { root }, flags: {}, passthrough: [] });
+    } finally {
+      process.stdout.write = write;
+    }
+
+    assert.doesNotMatch(out.join(""), /NGOÀI ranh giới code/);
+  } finally {
+    await cleanup(root);
+  }
+});

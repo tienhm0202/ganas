@@ -3,9 +3,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
-import { matchPatterns, outsideBoundary, taskBoundary } from "../src/boundary.js";
+import { formatBoundaryWarning, matchPatterns, outsideBoundary, taskBoundary } from "../src/boundary.js";
 import { loadGraph } from "../src/graph/load.js";
 import { zTask } from "../src/model/index.js";
+import { TOUCHED_PATHS_CAP } from "../src/state.js";
 import { runShell } from "../src/util/exec.js";
 import { matchesAny } from "../src/util/glob.js";
 import { cleanup, design, goal, makeProject } from "./helpers.js";
@@ -233,4 +234,51 @@ test("⭐ matchPatterns khớp đúng ngữ nghĩa pathspec của git", async ()
   } finally {
     await cleanup(root);
   }
+});
+
+/* --- formatBoundaryWarning ------------------------------------------------ */
+
+test("formatBoundaryWarning: outside và touched đều rỗng → trả về chuỗi rỗng", () => {
+  assert.equal(formatBoundaryWarning("T-042", ["src/gate/**"], [], []), "");
+});
+
+test("formatBoundaryWarning: có outside → chứa mọi đường dẫn, taskId, từng pattern boundary, đúng nhãn NGOÀI ranh giới code", () => {
+  const boundary = ["src/gate/**", "test/gate.test.ts"];
+  const outside = ["docs/README.md", "scripts/tmp.mjs", "src/util/unrelated.ts"];
+  const msg = formatBoundaryWarning("T-042", boundary, outside, outside);
+
+  assert.match(msg, /NGOÀI ranh giới code/);
+  assert.match(msg, /T-042/);
+  for (const p of outside) assert.match(msg, new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const p of boundary) assert.match(msg, new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("formatBoundaryWarning: touched chạm mức trần TOUCHED_PATHS_CAP → cảnh báo thêm dòng tối đa", () => {
+  const touched = Array.from({ length: TOUCHED_PATHS_CAP }, (_, i) => `f${i}.ts`);
+  const msg = formatBoundaryWarning("T-042", ["src/a/**"], touched, ["ngoai.ts"]);
+  assert.match(msg, /tối đa/);
+});
+
+test("formatBoundaryWarning: touched dưới ngưỡng → không có dòng tối đa", () => {
+  const msg = formatBoundaryWarning("T-042", ["src/a/**"], ["a.ts", "b.ts"], ["ngoai.ts"]);
+  assert.doesNotMatch(msg, /tối đa/);
+});
+
+test("formatBoundaryWarning: boundary rỗng, touched không rỗng, outside rỗng → nhãn KHÔNG có ranh giới code", () => {
+  const msg = formatBoundaryWarning("T-042", [], ["a.ts", "b.ts", "c.ts"], []);
+  assert.match(msg, /KHÔNG có ranh giới code/);
+});
+
+test("formatBoundaryWarning: boundary rỗng và touched rỗng → chuỗi rỗng", () => {
+  assert.equal(formatBoundaryWarning("T-042", [], [], []), "");
+});
+
+test("formatBoundaryWarning: chuỗi trả về bắt đầu và kết thúc bằng \\n", () => {
+  const outMsg = formatBoundaryWarning("T-042", ["src/a/**"], ["a.ts"], ["ngoai.ts"]);
+  assert.ok(outMsg.startsWith("\n"));
+  assert.ok(outMsg.endsWith("\n"));
+
+  const noBoundaryMsg = formatBoundaryWarning("T-042", [], ["a.ts", "b.ts"], []);
+  assert.ok(noBoundaryMsg.startsWith("\n"));
+  assert.ok(noBoundaryMsg.endsWith("\n"));
 });

@@ -14669,95 +14669,6 @@ var init_freshness = __esm({
   }
 });
 
-// src/boundary.ts
-var boundary_exports = {};
-__export(boundary_exports, {
-  contractPathRefs: () => contractPathRefs,
-  contractPaths: () => contractPaths,
-  matchPatterns: () => matchPatterns,
-  outsideBoundary: () => outsideBoundary,
-  ownsGanasFile: () => ownsGanasFile,
-  taskBoundary: () => taskBoundary
-});
-function contractPathRefs(task) {
-  const refs = [];
-  const seen = /* @__PURE__ */ new Set();
-  const add = (raw, from) => {
-    const path = raw.replace(/^\.\//, "");
-    if (!path || seen.has(path)) return;
-    seen.add(path);
-    refs.push({ path, from });
-  };
-  for (const c of task.exit_contract) {
-    if (c.kind === "command") {
-      for (const token of tokenizeShell(c.run)) {
-        const cleaned = stripOperators(token);
-        if (looksLikePath(cleaned)) add(cleaned, `l\u1EC7nh \`${c.run}\``);
-      }
-    } else if (c.kind === "artifact") {
-      add(c.path, `file \`${c.path}\``);
-    }
-  }
-  return refs;
-}
-function contractPaths(task) {
-  return contractPathRefs(task).map((r) => r.path);
-}
-function taskBoundary(task, graph) {
-  const patterns = /* @__PURE__ */ new Set();
-  for (const moduleId of task.touches) {
-    const mod = graph.modules.get(moduleId)?.value;
-    for (const p of mod?.paths ?? []) patterns.add(p);
-  }
-  for (const p of contractPaths(task)) patterns.add(p);
-  return [...patterns];
-}
-function matchPatterns(boundary) {
-  const out = /* @__PURE__ */ new Set();
-  for (const raw of boundary) {
-    const p = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
-    if (!p) continue;
-    out.add(p);
-    if (!GLOB_CHARS.test(p)) out.add(`${p}/**`);
-  }
-  return [...out];
-}
-function outsideBoundary(task, graph, touched) {
-  const boundary = taskBoundary(task, graph);
-  if (boundary.length === 0) return [];
-  const patterns = matchPatterns(boundary);
-  const out = /* @__PURE__ */ new Set();
-  for (const raw of touched) {
-    const p = raw.split("\\").join("/").replace(/^\.\//, "");
-    if (!p) continue;
-    if (p === GANAS_DIR || p.startsWith(`${GANAS_DIR}/`)) continue;
-    if (matchesAny(p, patterns)) continue;
-    out.add(p);
-  }
-  return [...out].sort();
-}
-function ownsGanasFile(task, relPath) {
-  const p = relPath.split("\\").join("/").replace(/^\.\//, "");
-  const prefix = `${GANAS_DIR}/`;
-  if (!p.startsWith(prefix)) return false;
-  const inner = p.slice(prefix.length);
-  if (inner === LEDGER_FILE) return true;
-  const stem = inner.replace(YAML_EXT, "");
-  return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
-}
-var GLOB_CHARS, YAML_EXT;
-var init_boundary = __esm({
-  "src/boundary.ts"() {
-    "use strict";
-    init_paths();
-    init_glob();
-    init_shell();
-    init_ledger();
-    GLOB_CHARS = /[*?[\]{}]/;
-    YAML_EXT = /\.ya?ml$/;
-  }
-});
-
 // src/state.ts
 var state_exports = {};
 __export(state_exports, {
@@ -14874,6 +14785,123 @@ var init_state = __esm({
     init_paths();
     EMPTY = { version: 1, current_task: null, sessions: {} };
     TOUCHED_PATHS_CAP = 200;
+  }
+});
+
+// src/boundary.ts
+var boundary_exports = {};
+__export(boundary_exports, {
+  contractPathRefs: () => contractPathRefs,
+  contractPaths: () => contractPaths,
+  formatBoundaryWarning: () => formatBoundaryWarning,
+  matchPatterns: () => matchPatterns,
+  outsideBoundary: () => outsideBoundary,
+  ownsGanasFile: () => ownsGanasFile,
+  taskBoundary: () => taskBoundary
+});
+function contractPathRefs(task) {
+  const refs = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (raw, from) => {
+    const path = raw.replace(/^\.\//, "");
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    refs.push({ path, from });
+  };
+  for (const c of task.exit_contract) {
+    if (c.kind === "command") {
+      for (const token of tokenizeShell(c.run)) {
+        const cleaned = stripOperators(token);
+        if (looksLikePath(cleaned)) add(cleaned, `l\u1EC7nh \`${c.run}\``);
+      }
+    } else if (c.kind === "artifact") {
+      add(c.path, `file \`${c.path}\``);
+    }
+  }
+  return refs;
+}
+function contractPaths(task) {
+  return contractPathRefs(task).map((r) => r.path);
+}
+function taskBoundary(task, graph) {
+  const patterns = /* @__PURE__ */ new Set();
+  for (const moduleId of task.touches) {
+    const mod = graph.modules.get(moduleId)?.value;
+    for (const p of mod?.paths ?? []) patterns.add(p);
+  }
+  for (const p of contractPaths(task)) patterns.add(p);
+  return [...patterns];
+}
+function matchPatterns(boundary) {
+  const out = /* @__PURE__ */ new Set();
+  for (const raw of boundary) {
+    const p = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
+    if (!p) continue;
+    out.add(p);
+    if (!GLOB_CHARS.test(p)) out.add(`${p}/**`);
+  }
+  return [...out];
+}
+function outsideBoundary(task, graph, touched) {
+  const boundary = taskBoundary(task, graph);
+  if (boundary.length === 0) return [];
+  const patterns = matchPatterns(boundary);
+  const out = /* @__PURE__ */ new Set();
+  for (const raw of touched) {
+    const p = raw.split("\\").join("/").replace(/^\.\//, "");
+    if (!p) continue;
+    if (p === GANAS_DIR || p.startsWith(`${GANAS_DIR}/`)) continue;
+    if (matchesAny(p, patterns)) continue;
+    out.add(p);
+  }
+  return [...out].sort();
+}
+function formatBoundaryWarning(taskId, boundary, touched, outside) {
+  if (outside.length > 0) {
+    let out = `
+\u26A0 ${outside.length} file phi\xEAn n\xE0y \u0111\xE3 s\u1EEDa n\u1EB1m NGO\xC0I ranh gi\u1EDBi code c\u1EE7a ${taskId}:
+` + outside.map((p) => `    ${p}`).join("\n") + `
+  Ranh gi\u1EDBi c\u1EE7a ${taskId}: ${boundary.join(", ")}
+  (t\u1EEB \`touches\` + \u0111\u01B0\u1EDDng d\u1EABn m\xE0 \`exit_contract\` ch\u1EA1y)
+  \`ganas commit\` KH\xD4NG stage nh\u1EEFng file n\xE0y \u2014 ch\xFAng \u1EDF l\u1EA1i working tree,
+  kh\xF4ng n\u1EB1m trong commit n\xE0o v\xE0 kh\xF4ng ai nghi\u1EC7m thu.
+  Ho\u1EB7c khai th\xEAm kh\u1ED1i v\xE0o \`touches\`, ho\u1EB7c t\xE1ch ph\u1EA7n l\u1EA1c ra task ri\xEAng.
+`;
+    if (touched.length >= TOUCHED_PATHS_CAP) {
+      out += `  (\u0111\xE3 ghi t\u1ED1i \u0111a ${TOUCHED_PATHS_CAP} \u0111\u01B0\u1EDDng d\u1EABn \u2014 c\xF3 th\u1EC3 c\xF2n file kh\xE1c.)
+`;
+    }
+    return out;
+  }
+  if (boundary.length === 0 && touched.length > 0) {
+    return `
+\u26A0 ${taskId} ch\u01B0a khai \`touches\` v\xE0 \`exit_contract\` kh\xF4ng nh\u1EAFc \u0111\u01B0\u1EDDng d\u1EABn n\xE0o,
+  n\xEAn KH\xD4NG c\xF3 ranh gi\u1EDBi code \u0111\u1EC3 \u0111\u1ED1i chi\u1EBFu \u2014 ${touched.length} file \u0111\xE3 s\u1EEDa \u0111i qua m\xE0 kh\xF4ng
+  ai ki\u1EC3m \u0111\u01B0\u1EE3c ch\xFAng c\xF3 thu\u1ED9c task n\xE0y kh\xF4ng.
+`;
+  }
+  return "";
+}
+function ownsGanasFile(task, relPath) {
+  const p = relPath.split("\\").join("/").replace(/^\.\//, "");
+  const prefix = `${GANAS_DIR}/`;
+  if (!p.startsWith(prefix)) return false;
+  const inner = p.slice(prefix.length);
+  if (inner === LEDGER_FILE) return true;
+  const stem = inner.replace(YAML_EXT, "");
+  return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
+}
+var GLOB_CHARS, YAML_EXT;
+var init_boundary = __esm({
+  "src/boundary.ts"() {
+    "use strict";
+    init_paths();
+    init_state();
+    init_glob();
+    init_shell();
+    init_ledger();
+    GLOB_CHARS = /[*?[\]{}]/;
+    YAML_EXT = /\.ya?ml$/;
   }
 });
 
@@ -17008,6 +17036,9 @@ async function run7(argv) {
   if (!task) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
   const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
+  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const boundary = taskBoundary(task.value, graph);
+  const outside = outsideBoundary(task.value, graph, touched);
   if (flag(argv, "json")) {
     process.stdout.write(
       JSON.stringify(
@@ -17016,7 +17047,8 @@ async function run7(argv) {
           ok: result.ok,
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
           pending_human: result.pendingHuman.map((p) => p.label),
-          already_green_at_start: green.map((g) => g.label)
+          already_green_at_start: green.map((g) => g.label),
+          outside_boundary: outside
         },
         null,
         2
@@ -17038,6 +17070,9 @@ ${formatGate(result)}
 `
     );
   }
+  const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
+  if (boundaryWarning) process.stdout.write(`${boundaryWarning}
+`);
   if (result.ok) {
     process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng \u0111\u1EC1u \u0111\u1EA1t.
 `);
@@ -17057,6 +17092,7 @@ C\xF2n ${result.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\x
 var init_gate2 = __esm({
   "src/commands/gate.ts"() {
     "use strict";
+    init_boundary();
     init_gate();
     init_state();
     init_args();
@@ -17474,6 +17510,13 @@ ${formatGate(gateResult)}
   const baselineWarning = reportBaseline(gateResult, baseline);
   const allGanas = flag(argv, "all-ganas");
   const codePaths = taskBoundary(task, graph);
+  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const outsideWarning = formatBoundaryWarning(
+    taskId,
+    codePaths,
+    touched,
+    outsideBoundary(task, graph, touched)
+  );
   const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
   if (flag(argv, "dry-run")) {
     const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
@@ -17489,7 +17532,7 @@ S\u1EBD stage:
 \u0110\u1EC3 l\u1EA1i (kh\xF4ng thu\u1ED9c ${taskId}):
 ` + foreign2.map((p) => `  \xB7 ${p}`).join("\n") : "") + (willClose ? `
 
-S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + `
+S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + outsideWarning + `
 
 --- commit message ---
 ${message2}`
@@ -17515,7 +17558,7 @@ ${message2}`
 ${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId}:
 ` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
 Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBFu mu\u1ED1n g\u1ED9p.
-` : "")
+` : "") + outsideWarning
     );
     return 0;
   }
@@ -17547,7 +17590,7 @@ ${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xE
 ${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
 ` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
 Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
-` : "") + baselineWarning
+` : "") + baselineWarning + outsideWarning
     );
     return 0;
   } finally {
@@ -18344,7 +18387,7 @@ async function main() {
   const raw = process.argv.slice(2);
   const argv = parseArgs(raw);
   if (argv.flags["version"] || argv.flags["v"]) {
-    process.stdout.write(`${"0.2.2"}
+    process.stdout.write(`${"0.3.0"}
 `);
     return 0;
   }

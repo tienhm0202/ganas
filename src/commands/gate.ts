@@ -1,5 +1,6 @@
+import { formatBoundaryWarning, outsideBoundary, taskBoundary } from "../boundary.js";
 import { alreadyGreen, evaluateGate, formatGate } from "../gate.js";
-import { baselineFor, taskForSession } from "../state.js";
+import { baselineFor, taskForSession, touchedPathsFor } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { openProject } from "./_common.js";
@@ -19,6 +20,10 @@ export async function run(argv: Argv): Promise<number> {
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
   const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
 
+  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const boundary = taskBoundary(task.value, graph);
+  const outside = outsideBoundary(task.value, graph, touched);
+
   if (flag(argv, "json")) {
     process.stdout.write(
       JSON.stringify(
@@ -28,6 +33,7 @@ export async function run(argv: Argv): Promise<number> {
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
           pending_human: result.pendingHuman.map((p) => p.label),
           already_green_at_start: green.map((g) => g.label),
+          outside_boundary: outside,
         },
         null,
         2,
@@ -46,6 +52,12 @@ export async function run(argv: Argv): Promise<number> {
         `  Một gate tự xanh trước khi sửa là gate không tồn tại.\n\n`,
     );
   }
+
+  // Hàm trả chuỗi kết thúc bằng một `\n` (quy ước của `reportBaseline`, nơi nó
+  // được NỐI vào chuỗi khác). Ở đây nó đứng riêng một khối nên cần thêm dòng
+  // trống, cho khớp khoảng cách của khối XANH SẴN ngay trên.
+  const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
+  if (boundaryWarning) process.stdout.write(`${boundaryWarning}\n`);
 
   if (result.ok) {
     process.stdout.write(`✓ Mọi tiêu chí chấm tự động đều đạt.\n`);
