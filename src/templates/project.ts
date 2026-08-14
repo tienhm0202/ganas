@@ -48,10 +48,6 @@ models:
   main: claude-opus-5
   verifier: claude-sonnet-5
   scribe: claude-haiku-4-5
-
-embedder:
-  provider: local
-  model: multilingual-e5-small
 `;
 }
 

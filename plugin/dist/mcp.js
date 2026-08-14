@@ -25317,10 +25317,11 @@ async function runEval(target, run8, opts) {
     await rm(dir, { recursive: true, force: true });
   }
 }
-async function depsHash(context, root) {
+async function depsHash(context, root, allProjectFiles) {
   const globs = context.filter((c) => c.includes("*") || c.includes("/"));
   if (globs.length === 0) return void 0;
-  const files = (await listProjectFiles(root)).filter((p) => matchesAny(p, globs)).sort();
+  const all = allProjectFiles ?? await listProjectFiles(root);
+  const files = all.filter((p) => matchesAny(p, globs)).sort();
   const parts = [];
   for (const rel of files) parts.push(`${rel}:${await fileHash(join4(root, rel))}`);
   return sha256(parts.join("\n"));
@@ -25505,7 +25506,7 @@ async function computeFreshness(graph, opts = {}) {
     }
     const decision = decide({
       entry,
-      depsNow: await depsHash(target.context, graph.root),
+      depsNow: await depsHash(target.context, graph.root, files),
       currentDef: defHash(target.definition, target.statement),
       current: await currentFingerprint(target, graph.root),
       ttlDays: target.ttlDays,
@@ -25748,10 +25749,6 @@ var init_config = __esm({
         main: external_exports.string().default("claude-opus-5"),
         verifier: external_exports.string().default("claude-sonnet-5"),
         scribe: external_exports.string().default("claude-haiku-4-5")
-      }).default({}),
-      embedder: external_exports.object({
-        provider: external_exports.enum(["local", "voyage", "openai", "none"]).default("local"),
-        model: external_exports.string().default("multilingual-e5-small")
       }).default({}),
       session_start: external_exports.object({
         /**
@@ -38584,7 +38581,11 @@ ${design.value.summary}`
     const d = sourced2.value;
     if (d.scope === void 0 || d.scope === t.scope) decisionIds.add(d.id);
   }
-  const decisions = [...decisionIds].sort((a, b) => a.localeCompare(b)).map((id) => graph.decisions.get(id)?.value).filter((d) => Boolean(d)).map((d) => {
+  const superseded = /* @__PURE__ */ new Set();
+  for (const sourced2 of graph.decisions.values()) {
+    for (const oldId of sourced2.value.supersedes) superseded.add(oldId);
+  }
+  const decisions = [...decisionIds].filter((id) => !superseded.has(id)).sort((a, b) => a.localeCompare(b)).map((id) => graph.decisions.get(id)?.value).filter((d) => Boolean(d)).map((d) => {
     const detail = [];
     if (d.context) detail.push(`  v\xEC: ${d.context}`);
     if (d.consequence) detail.push(`  \u0111\xE1nh \u0111\u1ED5i: ${d.consequence}`);
@@ -38746,9 +38747,12 @@ ${bullet([...skillSet].map((s) => `\`/${s}\``))}`
       case "manual":
         manual.push(c.check);
         break;
-      case "verification":
-        auto.push(`b\u1EB1ng ch\u1EE9ng \`${c.target}\``);
+      case "verification": {
+        const info = freshness.get(c.target);
+        const state = info ? `${info.freshness} \u2014 ${info.reason}` : void 0;
+        auto.push(`b\u1EB1ng ch\u1EE9ng \`${c.target}\`` + (state ? ` \u2014 ${state}` : ""));
         break;
+      }
       default:
         c;
     }

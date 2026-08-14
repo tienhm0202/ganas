@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import { loadGraph } from "../src/graph/load.js";
 import { LATEST_SCHEMA_VERSION, zConfig } from "../src/model/index.js";
+import { configYaml } from "../src/templates/project.js";
 import { GanasError } from "../src/util/errors.js";
 import { cleanup, makeProject } from "./helpers.js";
 
@@ -59,6 +60,19 @@ test("⭐ version tương lai báo 'nâng cấp ganas', không phải 'config kh
       },
     );
   });
+});
+
+test("⭐ config cũ còn dòng embedder: (field đã bỏ khỏi template) vẫn parse được — zConfig không strict", () => {
+  const result = zConfig.safeParse({
+    project: "x",
+    embedder: { provider: "voyage", model: "voyage-3" },
+  });
+  assert.equal(result.success, true, "trường lạ từ config.yaml cũ không được làm gãy parse");
+});
+
+test("⭐ config.yaml mới sinh ra (ganas init) không còn field embedder chết", () => {
+  const yaml = configYaml({ project: "x" });
+  assert.doesNotMatch(yaml, /embedder/, "template không được ghi field không ai đọc");
 });
 
 test("lỗi config khác version vẫn giữ thông điệp cũ", async () => {

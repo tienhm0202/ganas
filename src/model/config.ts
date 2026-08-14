@@ -107,13 +107,6 @@ export const zConfig = z.object({
     } satisfies Record<ModelTier, z.ZodDefault<z.ZodString>>)
     .default({}),
 
-  embedder: z
-    .object({
-      provider: z.enum(["local", "voyage", "openai", "none"]).default("local"),
-      model: z.string().default("multilingual-e5-small"),
-    })
-    .default({}),
-
   session_start: z
     .object({
       /**
