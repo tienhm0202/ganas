@@ -14674,6 +14674,8 @@ var boundary_exports = {};
 __export(boundary_exports, {
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
+  matchPatterns: () => matchPatterns,
+  outsideBoundary: () => outsideBoundary,
   ownsGanasFile: () => ownsGanasFile,
   taskBoundary: () => taskBoundary
 });
@@ -14710,6 +14712,30 @@ function taskBoundary(task, graph) {
   for (const p of contractPaths(task)) patterns.add(p);
   return [...patterns];
 }
+function matchPatterns(boundary) {
+  const out = /* @__PURE__ */ new Set();
+  for (const raw of boundary) {
+    const p = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
+    if (!p) continue;
+    out.add(p);
+    if (!GLOB_CHARS.test(p)) out.add(`${p}/**`);
+  }
+  return [...out];
+}
+function outsideBoundary(task, graph, touched) {
+  const boundary = taskBoundary(task, graph);
+  if (boundary.length === 0) return [];
+  const patterns = matchPatterns(boundary);
+  const out = /* @__PURE__ */ new Set();
+  for (const raw of touched) {
+    const p = raw.split("\\").join("/").replace(/^\.\//, "");
+    if (!p) continue;
+    if (p === GANAS_DIR || p.startsWith(`${GANAS_DIR}/`)) continue;
+    if (matchesAny(p, patterns)) continue;
+    out.add(p);
+  }
+  return [...out].sort();
+}
 function ownsGanasFile(task, relPath) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
   const prefix = `${GANAS_DIR}/`;
@@ -14719,13 +14745,15 @@ function ownsGanasFile(task, relPath) {
   const stem = inner.replace(YAML_EXT, "");
   return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
 }
-var YAML_EXT;
+var GLOB_CHARS, YAML_EXT;
 var init_boundary = __esm({
   "src/boundary.ts"() {
     "use strict";
     init_paths();
+    init_glob();
     init_shell();
     init_ledger();
+    GLOB_CHARS = /[*?[\]{}]/;
     YAML_EXT = /\.ya?ml$/;
   }
 });

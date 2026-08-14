@@ -24139,55 +24139,6 @@ var init_paths = __esm({
   }
 });
 
-// src/util/shell.ts
-function tokenizeShell(command) {
-  const tokens = [];
-  let cur = "";
-  let started = false;
-  let quote2 = null;
-  for (const ch of command) {
-    if (quote2) {
-      if (ch === quote2) quote2 = null;
-      else cur += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote2 = ch;
-      started = true;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (started) tokens.push(cur);
-      cur = "";
-      started = false;
-      continue;
-    }
-    cur += ch;
-    started = true;
-  }
-  if (started) tokens.push(cur);
-  return tokens;
-}
-function stripOperators(token) {
-  return token.replace(/^[0-9]*[<>|&;()]+/, "").replace(/[;|&)]+$/, "");
-}
-function looksLikePath(token) {
-  if (!token || token.startsWith("-")) return false;
-  return token.includes("/") || /\.[A-Za-z0-9]+$/.test(token);
-}
-function tokenSpans(command) {
-  const spans = [];
-  const re = /\S+/g;
-  let m;
-  while ((m = re.exec(command)) !== null) spans.push({ text: m[0], start: m.index });
-  return spans;
-}
-var init_shell = __esm({
-  "src/util/shell.ts"() {
-    "use strict";
-  }
-});
-
 // src/util/exec.ts
 var exec_exports = {};
 __export(exec_exports, {
@@ -24272,6 +24223,192 @@ var init_exec = __esm({
     "use strict";
     DEFAULT_TIMEOUT_MS = 12e4;
     MAX_BUFFER = 4 * 1024 * 1024;
+  }
+});
+
+// src/util/glob.ts
+import { readdir } from "node:fs/promises";
+import { join as join2, relative, sep } from "node:path";
+function expandBraces(pattern) {
+  const open2 = pattern.indexOf("{");
+  if (open2 === -1) return [pattern];
+  let depth = 0;
+  let close = -1;
+  for (let i = open2; i < pattern.length; i++) {
+    if (pattern[i] === "{") depth++;
+    else if (pattern[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close === -1) return [pattern];
+  const prefix = pattern.slice(0, open2);
+  const suffix = pattern.slice(close + 1);
+  const body = pattern.slice(open2 + 1, close);
+  const parts = [];
+  let current = "";
+  let nest = 0;
+  for (const ch of body) {
+    if (ch === "{") nest++;
+    else if (ch === "}") nest--;
+    if (ch === "," && nest === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.flatMap((p) => expandBraces(prefix + p + suffix));
+}
+function segmentToRegex(segment) {
+  let out = "";
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === "*") {
+      out += "[^/]*";
+    } else if (ch === "?") {
+      out += "[^/]";
+    } else if (ch === "[") {
+      const close = segment.indexOf("]", i + 1);
+      if (close === -1) {
+        out += "\\[";
+      } else {
+        const body = segment.slice(i + 1, close);
+        out += `[${body.startsWith("!") ? "^" + body.slice(1) : body}]`;
+        i = close;
+      }
+    } else {
+      out += ch.replace(/[.+^${}()|\\]/g, "\\$&");
+    }
+  }
+  return out;
+}
+function patternToRegex(pattern) {
+  const segments = pattern.split("/");
+  const parts = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (seg === "**") {
+      parts.push(i === segments.length - 1 ? "(?:.*)?" : "(?:.*/)?");
+      continue;
+    }
+    parts.push(segmentToRegex(seg));
+    if (i < segments.length - 1 && segments[i + 1] !== "**") parts.push("/");
+  }
+  return new RegExp(`^${parts.join("")}$`);
+}
+function matchesAny(path, patterns) {
+  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  for (const pattern of patterns) {
+    let regexes = cache.get(pattern);
+    if (!regexes) {
+      regexes = expandBraces(pattern).map(patternToRegex);
+      cache.set(pattern, regexes);
+    }
+    if (regexes.some((re) => re.test(normalized))) return true;
+  }
+  return false;
+}
+async function listProjectFiles(root) {
+  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
+    cwd: root,
+    timeoutMs: 2e4
+  });
+  if (git.code === 0 && git.stdout.length > 0) {
+    return git.stdout.split("\0").filter(Boolean);
+  }
+  return walk(root, root, []);
+}
+async function walk(root, dir, acc) {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return acc;
+  }
+  for (const entry of entries) {
+    const full = join2(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      await walk(root, full, acc);
+    } else if (entry.isFile()) {
+      acc.push(relative(root, full).split(sep).join("/"));
+    }
+  }
+  return acc;
+}
+var cache, SKIP_DIRS;
+var init_glob = __esm({
+  "src/util/glob.ts"() {
+    "use strict";
+    init_exec();
+    cache = /* @__PURE__ */ new Map();
+    SKIP_DIRS = /* @__PURE__ */ new Set([
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      "out",
+      "target",
+      "vendor",
+      ".next",
+      ".venv",
+      "__pycache__",
+      ".ganas"
+    ]);
+  }
+});
+
+// src/util/shell.ts
+function tokenizeShell(command) {
+  const tokens = [];
+  let cur = "";
+  let started = false;
+  let quote2 = null;
+  for (const ch of command) {
+    if (quote2) {
+      if (ch === quote2) quote2 = null;
+      else cur += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote2 = ch;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (started) tokens.push(cur);
+      cur = "";
+      started = false;
+      continue;
+    }
+    cur += ch;
+    started = true;
+  }
+  if (started) tokens.push(cur);
+  return tokens;
+}
+function stripOperators(token) {
+  return token.replace(/^[0-9]*[<>|&;()]+/, "").replace(/[;|&)]+$/, "");
+}
+function looksLikePath(token) {
+  if (!token || token.startsWith("-")) return false;
+  return token.includes("/") || /\.[A-Za-z0-9]+$/.test(token);
+}
+function tokenSpans(command) {
+  const spans = [];
+  const re = /\S+/g;
+  let m;
+  while ((m = re.exec(command)) !== null) spans.push({ text: m[0], start: m.index });
+  return spans;
+}
+var init_shell = __esm({
+  "src/util/shell.ts"() {
+    "use strict";
   }
 });
 
@@ -24425,6 +24562,8 @@ var boundary_exports = {};
 __export(boundary_exports, {
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
+  matchPatterns: () => matchPatterns,
+  outsideBoundary: () => outsideBoundary,
   ownsGanasFile: () => ownsGanasFile,
   taskBoundary: () => taskBoundary
 });
@@ -24461,6 +24600,30 @@ function taskBoundary(task, graph) {
   for (const p of contractPaths(task)) patterns.add(p);
   return [...patterns];
 }
+function matchPatterns(boundary) {
+  const out = /* @__PURE__ */ new Set();
+  for (const raw of boundary) {
+    const p = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
+    if (!p) continue;
+    out.add(p);
+    if (!GLOB_CHARS.test(p)) out.add(`${p}/**`);
+  }
+  return [...out];
+}
+function outsideBoundary(task, graph, touched) {
+  const boundary = taskBoundary(task, graph);
+  if (boundary.length === 0) return [];
+  const patterns = matchPatterns(boundary);
+  const out = /* @__PURE__ */ new Set();
+  for (const raw of touched) {
+    const p = raw.split("\\").join("/").replace(/^\.\//, "");
+    if (!p) continue;
+    if (p === GANAS_DIR || p.startsWith(`${GANAS_DIR}/`)) continue;
+    if (matchesAny(p, patterns)) continue;
+    out.add(p);
+  }
+  return [...out].sort();
+}
 function ownsGanasFile(task, relPath) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
   const prefix = `${GANAS_DIR}/`;
@@ -24470,13 +24633,15 @@ function ownsGanasFile(task, relPath) {
   const stem = inner.replace(YAML_EXT, "");
   return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
 }
-var YAML_EXT;
+var GLOB_CHARS, YAML_EXT;
 var init_boundary = __esm({
   "src/boundary.ts"() {
     "use strict";
     init_paths();
+    init_glob();
     init_shell();
     init_ledger();
+    GLOB_CHARS = /[*?[\]{}]/;
     YAML_EXT = /\.ya?ml$/;
   }
 });
@@ -24597,143 +24762,6 @@ var init_state = __esm({
     init_paths();
     EMPTY = { version: 1, current_task: null, sessions: {} };
     TOUCHED_PATHS_CAP = 200;
-  }
-});
-
-// src/util/glob.ts
-import { readdir } from "node:fs/promises";
-import { join as join3, relative, sep } from "node:path";
-function expandBraces(pattern) {
-  const open2 = pattern.indexOf("{");
-  if (open2 === -1) return [pattern];
-  let depth = 0;
-  let close = -1;
-  for (let i = open2; i < pattern.length; i++) {
-    if (pattern[i] === "{") depth++;
-    else if (pattern[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        close = i;
-        break;
-      }
-    }
-  }
-  if (close === -1) return [pattern];
-  const prefix = pattern.slice(0, open2);
-  const suffix = pattern.slice(close + 1);
-  const body = pattern.slice(open2 + 1, close);
-  const parts = [];
-  let current = "";
-  let nest = 0;
-  for (const ch of body) {
-    if (ch === "{") nest++;
-    else if (ch === "}") nest--;
-    if (ch === "," && nest === 0) {
-      parts.push(current);
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  parts.push(current);
-  return parts.flatMap((p) => expandBraces(prefix + p + suffix));
-}
-function segmentToRegex(segment) {
-  let out = "";
-  for (let i = 0; i < segment.length; i++) {
-    const ch = segment[i];
-    if (ch === "*") {
-      out += "[^/]*";
-    } else if (ch === "?") {
-      out += "[^/]";
-    } else if (ch === "[") {
-      const close = segment.indexOf("]", i + 1);
-      if (close === -1) {
-        out += "\\[";
-      } else {
-        const body = segment.slice(i + 1, close);
-        out += `[${body.startsWith("!") ? "^" + body.slice(1) : body}]`;
-        i = close;
-      }
-    } else {
-      out += ch.replace(/[.+^${}()|\\]/g, "\\$&");
-    }
-  }
-  return out;
-}
-function patternToRegex(pattern) {
-  const segments = pattern.split("/");
-  const parts = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    if (seg === "**") {
-      parts.push(i === segments.length - 1 ? "(?:.*)?" : "(?:.*/)?");
-      continue;
-    }
-    parts.push(segmentToRegex(seg));
-    if (i < segments.length - 1 && segments[i + 1] !== "**") parts.push("/");
-  }
-  return new RegExp(`^${parts.join("")}$`);
-}
-function matchesAny(path, patterns) {
-  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
-  for (const pattern of patterns) {
-    let regexes = cache.get(pattern);
-    if (!regexes) {
-      regexes = expandBraces(pattern).map(patternToRegex);
-      cache.set(pattern, regexes);
-    }
-    if (regexes.some((re) => re.test(normalized))) return true;
-  }
-  return false;
-}
-async function listProjectFiles(root) {
-  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
-    cwd: root,
-    timeoutMs: 2e4
-  });
-  if (git.code === 0 && git.stdout.length > 0) {
-    return git.stdout.split("\0").filter(Boolean);
-  }
-  return walk(root, root, []);
-}
-async function walk(root, dir, acc) {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return acc;
-  }
-  for (const entry of entries) {
-    const full = join3(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      await walk(root, full, acc);
-    } else if (entry.isFile()) {
-      acc.push(relative(root, full).split(sep).join("/"));
-    }
-  }
-  return acc;
-}
-var cache, SKIP_DIRS;
-var init_glob = __esm({
-  "src/util/glob.ts"() {
-    "use strict";
-    init_exec();
-    cache = /* @__PURE__ */ new Map();
-    SKIP_DIRS = /* @__PURE__ */ new Set([
-      ".git",
-      "node_modules",
-      "dist",
-      "build",
-      "out",
-      "target",
-      "vendor",
-      ".next",
-      ".venv",
-      "__pycache__",
-      ".ganas"
-    ]);
   }
 });
 
@@ -36770,7 +36798,7 @@ init_paths();
 init_exec();
 import { existsSync as existsSync3 } from "node:fs";
 import { readFile as readFile2 } from "node:fs/promises";
-import { join as join2 } from "node:path";
+import { join as join3 } from "node:path";
 function criterionKey(c) {
   switch (c.kind) {
     case "command":
@@ -36817,7 +36845,7 @@ async function checkCriterion(criterion, ctx) {
       return verdict.pass ? { criterion, label, status: "pass" } : { criterion, label, status: "fail", reason: verdict.reason };
     }
     case "artifact": {
-      const file = join2(ctx.root, criterion.path);
+      const file = join3(ctx.root, criterion.path);
       if (!existsSync3(file)) {
         return { criterion, label, status: "fail", reason: `file ch\u01B0a t\u1ED3n t\u1EA1i` };
       }
