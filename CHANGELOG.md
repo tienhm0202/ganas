@@ -4,7 +4,7 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
-## v0.5.0 — 2026-08-14
+## v0.5.0 — 2026-08-18
 
 - **`ganas id` thôi cấp trùng số cho hai phiên song song.** Lệnh này trước đây
   chỉ tính số lớn nhất trong graph rồi +1 và in ra, không giữ chỗ gì cả — hai
