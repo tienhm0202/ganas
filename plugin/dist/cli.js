@@ -19933,7 +19933,9 @@ Mu\u1ED1n S\u1EECA file c\xF3 s\u1EB5n th\xEC d\xF9ng \`Edit\`, kh\xF4ng d\xF9ng
 N\u1EBFu t\u01B0\u1EDFng \u0111ang t\u1EA1o m\u1ED9t th\u1EF1c th\u1EC3 M\u1EDAI: id n\xE0y \u0111\xE3 c\xF3 ch\u1EE7. Ch\u1EA1y \`ganas id <lo\u1EA1i>\` \u0111\u1EC3 l\u1EA5y m\u1ED9t id kh\xE1c, \u0111\u1EEBng t\u1EF1 \u0111o\xE1n s\u1ED1 k\u1EBF ti\u1EBFp.`;
     PLAN_APPROVED_REASON = `Plan v\u1EEBa \u0111\u01B0\u1EE3c duy\u1EC7t \u0111ang n\u1EB1m trong context \u2014 v\xE0 s\u1EBD M\u1EA4T khi context b\u1ECB compact. Ch\u1EBB ngay th\xE0nh Task, \u0111\u1EEBng \u0111\u1EC3 sau.
 
-D\xF9ng skill \`plan-to-tasks\`: n\xF3 \u0111\xE3 d\u1EA1y \u0111\u1EE7 c\xE1c b\u01B0\u1EDBc, kh\xF4ng c\u1EA7n \u0111\u1ECDc l\u1EA1i plan t\u1EEB \u0111\xE2u c\u1EA3. C\u1EA5p ID th\u1EADt ngay b\u1EB1ng \`ganas id task --count N\` \u2014 \u0111\u1EEBng d\xF9ng nh\xE3n t\u1EA1m ki\u1EC3u T1, T4a.`;
+D\xF9ng skill \`plan-to-tasks\`: n\xF3 \u0111\xE3 d\u1EA1y \u0111\u1EE7 c\xE1c b\u01B0\u1EDBc, kh\xF4ng c\u1EA7n \u0111\u1ECDc l\u1EA1i plan t\u1EEB \u0111\xE2u c\u1EA3. C\u1EA5p ID th\u1EADt ngay b\u1EB1ng \`ganas id task --count N\` \u2014 \u0111\u1EEBng d\xF9ng nh\xE3n t\u1EA1m ki\u1EC3u T1, T4a.
+
+Nh\u01B0ng ph\xE1t hi\u1EC7n KH\xD4NG thu\u1ED9c plan n\xE0y \u2014 th\u1EA5y d\u1ECDc \u0111\u01B0\u1EDDng, ch\u01B0a ai duy\u1EC7t \u2014 th\xEC \u0111\u1EEBng nh\xE9t th\xE0nh Task cho \u0111\u1EE7 b\u1ED9: \`serves\`/\`implements\`/\`exit_contract\` b\u1ECBa ra l\xE0 d\u1EEF li\u1EC7u gi\u1EA3. Ghi v\xE0o s\u1ED5 icebox b\u1EB1ng \`ganas icebox add\`. Task l\xE0 \u0111\xE3 quy\u1EBFt L\xC0M; icebox l\xE0 \u0111\xE3 quy\u1EBFt CH\u01AFA l\xE0m, k\xE8m \u0111i\u1EC3m, l\xFD do v\xE0 ng\xE0y xem l\u1EA1i. C\xE1i repo n\xE0y kh\xF4ng cho ph\xE9p t\u1ED3n t\u1EA1i l\xE0 m\u1ED9t vi\u1EC7c ch\u01B0a quy\u1EBFt g\xEC c\u1EA3, n\u1EB1m l\u01A1 l\u1EEDng \u2014 icebox kh\xF4ng ph\u1EA3i th\u1EE9 \u0111\xF3.`;
     DISPATCH_NUDGE_REASON = `Task \u0111ang l\xE0m khai tier r\u1EBB h\u01A1n \`main\` (\`scribe\`/\`verifier\`) \u2014 vi\u1EC7c c\u01A1 h\u1ECDc ho\u1EB7c ki\u1EC3m ch\u1EE9ng, kh\xF4ng c\u1EA7n model m\u1EA1nh nh\u1EA5t. Nh\u01B0ng phi\xEAn ch\xEDnh \u0111ang t\u1EF1 s\u1EEDa file thay v\xEC giao vi\u1EC7c.
 
 Vi\u1EC7c c\u01A1 h\u1ECDc l\xE0m b\u1EB1ng model m\u1EA1nh nh\u1EA5t ch\xEDnh l\xE0 ch\u1ED7 over-engineering sinh ra. Brief \u0111\xE3 n\u1EA1p c\xF3 s\u1EB5n h\u01B0\u1EDBng d\u1EABn giao sub-agent \u1EDF m\u1EE5c "Giao vi\u1EC7c" (k\xE8m alias model) \u2014 d\xF9ng n\xF3.
@@ -20029,6 +20031,7 @@ L\u1EC7nh:
   trace                Ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh (contract), in s\u01A1 \u0111\u1ED3 kh\u1ED1i, b\xE1o n\u1EE3 ki\u1EC3m ch\u1EE9ng (--scope)
   debt [--all]         B\u1EA3ng x\u1EBFp h\u1EA1ng n\u1EE3 theo ph\u1EA1m vi task \u0111ang l\xE0m (--all: to\xE0n d\u1EF1 \xE1n)
   icebox [add|list|review|close|promote]
+                       S\u1ED5 vi\u1EC7c \u0111\xE3 quy\u1EBFt CH\u01AFA l\xE0m: ghi, xem l\u1EA1i khi t\u1EDBi h\u1EA1n, \u0111\xF3ng, th\u0103ng c\u1EA5p
                        Vi\u1EC7c \u0111\xE3 quy\u1EBFt CH\u01AFA l\xE0m \u2014 ghi, xem, xem l\u1EA1i qu\xE1 h\u1EA1n, \u0111\xF3ng, ho\u1EB7c l\xEAn task
   search <chu\u1ED7i>       T\xECm fact li\xEAn quan (BM25) \u2014 ho\u1EB7c --task \u0111\u1EC3 d\xF9ng ch\xEDnh task l\xE0m truy v\u1EA5n
   commit [task]        Commit task \u0111\xE3 \u0111\u1EA1t gate \u2014 message d\u1EF1ng t\u1EEB d\u1EEF li\u1EC7u \u0111\xE3 ki\u1EC3m ch\u1EE9ng

@@ -57,6 +57,7 @@ Lệnh:
   trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng (--scope)
   debt [--all]         Bảng xếp hạng nợ theo phạm vi task đang làm (--all: toàn dự án)
   icebox [add|list|review|close|promote]
+                       Sổ việc đã quyết CHƯA làm: ghi, xem lại khi tới hạn, đóng, thăng cấp
                        Việc đã quyết CHƯA làm — ghi, xem, xem lại quá hạn, đóng, hoặc lên task
   search <chuỗi>       Tìm fact liên quan (BM25) — hoặc --task để dùng chính task làm truy vấn
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng

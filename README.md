@@ -38,6 +38,9 @@ ghi.
   điểm và có lý do hoãn, để nó không mất theo context và cũng không bị nhét
   ép thành Task khi chưa ai duyệt.
 
+Chưa dùng ganas bao giờ? Đọc [docs/START.md](docs/START.md) — năm phút, đủ để
+biết ganas có những gì và tra tiếp ở đâu.
+
 Xem [CHANGELOG.md](CHANGELOG.md) cho danh sách đầy đủ năng lực hiện có.
 
 ## Cài
@@ -72,6 +75,7 @@ Tham chiếu đầy đủ ở [docs/COMMANDS.md](docs/COMMANDS.md).
 
 | File | Đọc khi nào |
 |---|---|
+| [docs/START.md](docs/START.md) | **Bắt đầu ở đây** — ganas làm được gì, cưỡng chế cái gì, và câu hỏi của bạn nằm ở file nào |
 | [docs/INSTALL.md](docs/INSTALL.md) | Cài đặt — Claude Code, Zed, Cursor, Windsurf, hoặc bun/npm add không qua plugin system |
 | [docs/CONCEPTS.md](docs/CONCEPTS.md) | Mô hình dữ liệu đầy đủ — spine, evidence, freshness |
 | [docs/COMMANDS.md](docs/COMMANDS.md) | Tham chiếu CLI đầy đủ, từng cờ và mã thoát |
