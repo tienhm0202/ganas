@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { loadGraph } from "../src/graph/load.js";
 import { freshnessOf, zDecision, zFact } from "../src/model/index.js";
-import { check, goal, task, validSpine } from "./helpers.js";
+import { check, cleanup, goal, makeProject, task, validSpine } from "./helpers.js";
 
 /* --- Anchor bắt buộc ------------------------------------------------------ */
 
@@ -277,4 +278,231 @@ test("⭐ trường lạ trong decision bị TỪ CHỐI, không bị nuốt im 
 test("decision khai sai tên trường phạm vi báo lỗi thay vì im lặng bỏ qua", () => {
   const parsed = zDecision.safeParse({ ...baseDecision, scop: "P-x" });
   assert.equal(parsed.success, false);
+});
+
+/* --------------------------------------------------------------------------
+ * collectArray: một bản ghi hỏng không được làm rụng CẢ FILE khỏi graph.
+ *
+ * Bug đã kiểm chứng: `collectArray` từng parse cả mảng bằng một lời gọi
+ * `schema.safeParse` cấp file (`zFactFile`/`zClaimFile`/`zDecisionFile`). Một
+ * phần tử hỏng ⇒ `parsed.success === false` ⇒ `continue` ⇒ toàn bộ bản ghi
+ * trong file đó biến mất khỏi graph — tri thức đã kiểm chứng biến mất im
+ * lặng khỏi brief/search. Nhóm test dưới đây khoá lại: chỉ phần tử hỏng bị
+ * loại, phần còn lại của file vẫn vào graph bình thường.
+ * ---------------------------------------------------------------------- */
+
+test("fact hỏng ở giữa file KHÔNG kéo các fact hợp lệ khác cùng file ra khỏi graph", async () => {
+  const root = await makeProject({
+    ".ganas/facts/f.yaml": `- id: F-ACC-001
+  scope: P-thu
+  statement: "fact một"
+  verify:
+    run: "true"
+- id: F-ACC-002
+  statement: "fact hai, thiếu scope"
+  verify:
+    run: "true"
+- id: F-ACC-003
+  scope: P-thu
+  statement: "fact ba"
+  verify:
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+
+    assert.ok(
+      graph.facts.has("F-ACC-001"),
+      "fact hợp lệ đứng TRƯỚC phần tử hỏng phải còn trong graph",
+    );
+    assert.ok(
+      graph.facts.has("F-ACC-003"),
+      "fact hợp lệ đứng SAU phần tử hỏng phải còn trong graph",
+    );
+    assert.ok(!graph.facts.has("F-ACC-002"), "fact hỏng (thiếu scope) không được lọt vào graph");
+    assert.equal(graph.facts.size, 2, "chỉ đúng phần tử hỏng bị loại, không phải cả file");
+
+    const schemaDiags = graph.loadDiagnostics.filter((d) => d.code.startsWith("schema/"));
+    assert.equal(
+      schemaDiags.length,
+      1,
+      `phải đúng một nhóm diagnostic schema/* cho riêng phần tử hỏng: ${JSON.stringify(schemaDiags)}`,
+    );
+    // Dòng phải trỏ vào vùng của F-ACC-002 (phần tử thứ hai, dòng 6 trong
+    // fixture trên) — KHÔNG phải dòng 1 (đầu file). Khoá lại việc gắn tiền tố
+    // chỉ số [index, ...issue.path] trước khi tính lineOfPath.
+    assert.equal(
+      schemaDiags[0]!.line,
+      6,
+      `line phải trỏ đúng vùng phần tử hỏng (dòng 6), nhận: ${schemaDiags[0]!.line}`,
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("claim hỏng ở giữa file KHÔNG kéo các claim hợp lệ khác cùng file ra khỏi graph", async () => {
+  const root = await makeProject({
+    ".ganas/claims/c.yaml": `- id: C-001
+  scope: P-thu
+  statement: "claim một"
+  anchors: ["src/a.ts#L1"]
+  provenance: session
+- id: C-002
+  scope: P-thu
+  statement: "claim hai, thiếu anchors"
+  provenance: session
+- id: C-003
+  scope: P-thu
+  statement: "claim ba"
+  anchors: ["src/c.ts#L1"]
+  provenance: session
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+
+    assert.ok(graph.claims.has("C-001"));
+    assert.ok(graph.claims.has("C-003"));
+    assert.ok(!graph.claims.has("C-002"), "claim hỏng (thiếu anchors) không được lọt vào graph");
+    assert.equal(graph.claims.size, 2);
+
+    const schemaDiags = graph.loadDiagnostics.filter((d) => d.code.startsWith("schema/"));
+    assert.equal(schemaDiags.length, 1, JSON.stringify(schemaDiags));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("decision hỏng ở giữa file KHÔNG kéo các decision hợp lệ khác cùng file ra khỏi graph", async () => {
+  const root = await makeProject({
+    ".ganas/decisions/d.yaml": `- id: DEC-001
+  statement: "quyết định một"
+  decided_by: "@alice"
+  decided_at: 2025-01-01T00:00:00Z
+- id: DEC-002
+  statement: "quyết định hai, thiếu decided_by"
+  decided_at: 2025-01-02T00:00:00Z
+- id: DEC-003
+  statement: "quyết định ba"
+  decided_by: "@bob"
+  decided_at: 2025-01-03T00:00:00Z
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+
+    assert.ok(graph.decisions.has("DEC-001"));
+    assert.ok(graph.decisions.has("DEC-003"));
+    assert.ok(
+      !graph.decisions.has("DEC-002"),
+      "decision hỏng (thiếu decided_by) không được lọt vào graph",
+    );
+    assert.equal(graph.decisions.size, 2);
+
+    const schemaDiags = graph.loadDiagnostics.filter((d) => d.code.startsWith("schema/"));
+    assert.equal(schemaDiags.length, 1, JSON.stringify(schemaDiags));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("file fact không phải mảng vẫn báo schema/invalid_type, không ném lỗi", async () => {
+  const root = await makeProject({
+    ".ganas/facts/f.yaml": `id: F-ACC-001
+scope: P-thu
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    assert.equal(graph.facts.size, 0);
+    assert.ok(graph.loadDiagnostics.some((d) => d.code === "schema/invalid_type"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("file fact rỗng không sinh diagnostic nào", async () => {
+  const root = await makeProject({
+    ".ganas/facts/f.yaml": "",
+  });
+  try {
+    const graph = await loadGraph(root);
+    assert.equal(graph.facts.size, 0);
+    assert.deepEqual(graph.loadDiagnostics, []);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("load/duplicate-id vẫn báo đúng khi trùng id trong CÙNG một file fact", async () => {
+  const root = await makeProject({
+    ".ganas/facts/f.yaml": `- id: F-ACC-001
+  scope: P-thu
+  statement: "bản đầu"
+  verify:
+    run: "true"
+- id: F-ACC-001
+  scope: P-thu
+  statement: "bản trùng"
+  verify:
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    assert.equal(graph.facts.size, 1);
+    assert.equal(graph.facts.get("F-ACC-001")!.value.statement, "bản đầu");
+    assert.ok(graph.loadDiagnostics.some((d) => d.code === "load/duplicate-id"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("load/duplicate-id vẫn báo đúng khi trùng id giữa HAI file fact", async () => {
+  const root = await makeProject({
+    ".ganas/facts/a.yaml": `- id: F-ACC-001
+  scope: P-thu
+  statement: "file a"
+  verify:
+    run: "true"
+`,
+    ".ganas/facts/b.yaml": `- id: F-ACC-001
+  scope: P-thu
+  statement: "file b"
+  verify:
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    assert.equal(graph.facts.size, 1);
+    assert.ok(graph.loadDiagnostics.some((d) => d.code === "load/duplicate-id"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("file fact toàn bộ hợp lệ thì không đổi gì — không diagnostic thừa", async () => {
+  const root = await makeProject({
+    ".ganas/facts/f.yaml": `- id: F-ACC-001
+  scope: P-thu
+  statement: "fact một"
+  verify:
+    run: "true"
+- id: F-ACC-002
+  scope: P-thu
+  statement: "fact hai"
+  verify:
+    run: "true"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    assert.equal(graph.facts.size, 2);
+    assert.deepEqual(graph.loadDiagnostics, []);
+  } finally {
+    await cleanup(root);
+  }
 });

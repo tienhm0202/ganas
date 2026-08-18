@@ -29,6 +29,8 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   verify: () => import("./commands/verify.js"),
   trace: () => import("./commands/trace.js"),
   debt: () => import("./commands/debt.js"),
+  icebox: () => import("./commands/icebox.js"),
+  search: () => import("./commands/search.js"),
   commit: () => import("./commands/commit.js"),
   note: () => import("./commands/note.js"),
   handoff: () => import("./commands/handoff.js"),
@@ -54,6 +56,9 @@ Lệnh:
   verify [target...]   Chạy bằng chứng: probe và eval, ghi sổ cái (--scope lọc theo phạm vi)
   trace                Kiểm tương thích cạnh (contract), in sơ đồ khối, báo nợ kiểm chứng (--scope)
   debt [--all]         Bảng xếp hạng nợ theo phạm vi task đang làm (--all: toàn dự án)
+  icebox [add|list|review|close|promote]
+                       Việc đã quyết CHƯA làm — ghi, xem, xem lại quá hạn, đóng, hoặc lên task
+  search <chuỗi>       Tìm fact liên quan (BM25) — hoặc --task để dùng chính task làm truy vấn
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng
   note "..."           Ghi chú thô của phiên vào .ganas/runs/notes/ (chưa kiểm, không phải fact)
   handoff --session id Ghi bản ghi tiếp nối của phiên, dẫn xuất từ transcript

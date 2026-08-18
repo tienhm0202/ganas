@@ -2,16 +2,18 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
-import type { z, ZodIssue, ZodTypeAny } from "zod";
+import type { ZodIssue, ZodTypeAny } from "zod";
+import { z } from "zod";
 
 import {
   LATEST_SCHEMA_VERSION,
-  zClaimFile,
+  zClaim,
   zConfig,
-  zDecisionFile,
+  zDecision,
   zDesign,
-  zFactFile,
+  zFact,
   zGoal,
+  zIcebox,
   zModule,
   zScope,
   zTask,
@@ -153,14 +155,24 @@ async function collectSingle<S extends ZodTypeAny>(
   return { items, diagnostics, sources };
 }
 
-/** Nạp thư mục mà mỗi file chứa một mảng bản ghi (facts, claims, decisions). */
+/**
+ * Nạp thư mục mà mỗi file chứa một mảng bản ghi (facts, claims, decisions).
+ *
+ * `schema` là schema của MỘT PHẦN TỬ (`zFact`/`zClaim`/`zDecision`), không
+ * phải schema cấp file. Từng phần tử được `safeParse` RIÊNG: một phần tử hỏng
+ * chỉ loại chính nó, các phần tử còn lại trong cùng file vẫn vào graph bình
+ * thường. Trước đây hàm này nhận schema cấp file (`z.array(zFact)`) và parse
+ * cả mảng bằng một lời gọi — một fact thiếu `scope` giữa file làm rụng luôn
+ * mọi fact hợp lệ khác cùng file khỏi brief/search, mà không một dòng log nào
+ * nói "bạn vừa mất N bản ghi". Xem test/knowledge.test.ts.
+ */
 async function collectArray<S extends ZodTypeAny>(
   dirs: string[],
   schema: S,
   root: string,
   kind: string,
-): Promise<CollectResult<z.infer<S>[number]>> {
-  const items = new Map<string, Sourced<z.infer<S>[number]>>();
+): Promise<CollectResult<z.infer<S>>> {
+  const items = new Map<string, Sourced<z.infer<S>>>();
   const diagnostics: Diagnostic[] = [];
   const sources = new Map<string, LoadedYaml>();
 
@@ -183,27 +195,47 @@ async function collectArray<S extends ZodTypeAny>(
       // File rỗng là hợp lệ (thư mục vừa khởi tạo).
       if (loaded.value === null || loaded.value === undefined) continue;
 
-      const parsed = schema.safeParse(loaded.value);
-      if (!parsed.success) {
-        diagnostics.push(...issuesToDiagnostics(loaded, parsed.error.issues, root));
+      // Kiểm "file phải là một mảng" TRƯỚC KHI parse từng phần tử — không đẻ
+      // mã chẩn đoán mới, cố tình dùng lại `issuesToDiagnostics` (sinh
+      // `schema/${issue.code}` bằng template literal) để giữ đúng
+      // `schema/invalid_type` mà hành vi cũ (parse cả mảng bằng schema cấp
+      // file) vẫn sinh ra cho file không phải mảng.
+      const shape = z.array(z.unknown()).safeParse(loaded.value);
+      if (!shape.success) {
+        diagnostics.push(...issuesToDiagnostics(loaded, shape.error.issues, root));
         continue;
       }
 
       const rel = relative(root, file) || file;
-      (parsed.data as { id: string }[]).forEach((record, index) => {
-        const existing = items.get(record.id);
+      shape.data.forEach((element, index) => {
+        const parsed = schema.safeParse(element);
+        if (!parsed.success) {
+          // zod trả `issue.path` TƯƠNG ĐỐI tới phần tử (vd ["scope"]) vì ta
+          // parse riêng từng phần tử — vị trí THẬT trong file là
+          // [index, ...issue.path]. Không gắn tiền tố này thì lineOfPath quy
+          // sai dòng (trỏ về đầu file) và thông điệp mất ngữ cảnh vị trí.
+          const issues = parsed.error.issues.map((issue) => ({
+            ...issue,
+            path: [index, ...issue.path],
+          }));
+          diagnostics.push(...issuesToDiagnostics(loaded, issues, root));
+          return;
+        }
+
+        const value = parsed.data as { id: string };
+        const existing = items.get(value.id);
         if (existing) {
           diagnostics.push({
             severity: "error",
             code: "load/duplicate-id",
-            message: `${kind} ${record.id} khai hai lần (lần trước ở ${existing.file})`,
+            message: `${kind} ${value.id} khai hai lần (lần trước ở ${existing.file})`,
             file: rel,
             line: lineOfPath(loaded, [index, "id"]),
             hint: "Mỗi ID chỉ được định nghĩa ở một chỗ.",
           });
           return;
         }
-        items.set(record.id, { value: record, file: rel, index });
+        items.set(value.id, { value: parsed.data as z.infer<S>, file: rel, index });
       });
     }
   }
@@ -249,21 +281,23 @@ export async function loadGraph(root: string): Promise<Graph> {
   const gitignoreFile = join(root, ".gitignore");
   const gitignoreRaw = existsSync(gitignoreFile) ? await readFile(gitignoreFile, "utf8") : null;
 
-  const [goals, designs, tasks, scopes, modules, facts, claims, decisions] = await Promise.all([
-    collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
-    collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
-    collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
-    collectSingle(ganasPath(root, DIRS.scopes), zScope, root, "phạm vi"),
-    collectSingle(ganasPath(root, DIRS.modules), zModule, root, "khối"),
-    collectArray([ganasPath(root, DIRS.facts)], zFactFile, root, "fact"),
-    collectArray(
-      [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
-      zClaimFile,
-      root,
-      "claim",
-    ),
-    collectArray([ganasPath(root, DIRS.decisions)], zDecisionFile, root, "decision"),
-  ]);
+  const [goals, designs, tasks, scopes, modules, facts, claims, decisions, icebox] =
+    await Promise.all([
+      collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
+      collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
+      collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
+      collectSingle(ganasPath(root, DIRS.scopes), zScope, root, "phạm vi"),
+      collectSingle(ganasPath(root, DIRS.modules), zModule, root, "khối"),
+      collectArray([ganasPath(root, DIRS.facts)], zFact, root, "fact"),
+      collectArray(
+        [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
+        zClaim,
+        root,
+        "claim",
+      ),
+      collectArray([ganasPath(root, DIRS.decisions)], zDecision, root, "decision"),
+      collectArray([ganasPath(root, DIRS.icebox)], zIcebox, root, "icebox"),
+    ]);
 
   return {
     root,
@@ -276,6 +310,7 @@ export async function loadGraph(root: string): Promise<Graph> {
     facts: facts.items,
     claims: claims.items,
     decisions: decisions.items,
+    icebox: icebox.items,
     ledger,
     ledgerRaw,
     gitignoreRaw,
@@ -288,6 +323,7 @@ export async function loadGraph(root: string): Promise<Graph> {
       ...facts.sources,
       ...claims.sources,
       ...decisions.sources,
+      ...icebox.sources,
     ]),
     loadDiagnostics: [
       ...configDiagnostics,
@@ -299,6 +335,7 @@ export async function loadGraph(root: string): Promise<Graph> {
       ...facts.diagnostics,
       ...claims.diagnostics,
       ...decisions.diagnostics,
+      ...icebox.diagnostics,
     ],
   };
 }

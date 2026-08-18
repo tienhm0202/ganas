@@ -25,6 +25,7 @@ const SUBDIRS = [
   DIRS.facts,
   DIRS.claims,
   DIRS.decisions,
+  DIRS.icebox,
   DIRS.domains,
   DIRS.legacyImported,
   DIRS.mapSurveys,

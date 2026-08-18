@@ -4,6 +4,145 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+## v0.5.0 — 2026-08-14
+
+- **`ganas id` thôi cấp trùng số cho hai phiên song song.** Lệnh này trước đây
+  chỉ tính số lớn nhất trong graph rồi +1 và in ra, không giữ chỗ gì cả — hai
+  phiên gọi gần như đồng thời nhận **cùng một** `T-017`, phiên ghi file sau
+  **ghi đè âm thầm** lên file phiên trước, và `load/duplicate-id` không bắt
+  được vì trên đĩa rốt cuộc chỉ còn một file. Đây là mất dữ liệu, không phải
+  phiền toái.
+
+  Nay mỗi số ứng viên đi qua `reserveId()`, dùng lại nguyên cơ chế
+  `open(file, "wx")` + TTL đã phục vụ claim task: nguyên tử ở tầng
+  filesystem, hai tiến trình gọi cùng lúc thì chỉ một cái thắng. Ứng viên
+  đang bị giữ thì bị nhảy qua. Đo thật: sáu tiến trình `ganas id task` chạy
+  đồng thời cho ra sáu số khác nhau.
+
+  Khác claim task một điểm cố ý: cùng một phiên gọi lại **không** nhận lại id
+  cũ. Claim là quyền sở hữu một thứ đã tồn tại, đặt chỗ id là tiêu thụ một
+  con số — cấp lại cho ai thì cũng là cấp trùng. (Không có đường nào trong
+  repo truyền `--session` cho `ganas id`, nên nếu giữ ngữ nghĩa "cùng phiên
+  thì giữ tiếp" thì mọi lời gọi thật đều rơi vào chung một danh tính và bản
+  vá sẽ vô hiệu đúng chỗ nó cần có tác dụng.)
+
+  Vá thêm một nguồn cấp trùng khác, tinh vi hơn: số kế tiếp trước đây chỉ
+  tính trên id đã qua được zod, nên một file thực thể **hỏng schema** (thiếu
+  trường bắt buộc) hoặc **hỏng cú pháp YAML** khiến id của nó **vô hình** với
+  bộ cấp số — `ganas id task` cấp lại đúng `T-001` đang nằm trên đĩa. Agent
+  ghi vào thì hook `PreToolUse` từ chối (file đã tồn tại), chạy lại `ganas id`
+  vẫn ra `T-001`: kẹt vòng lặp không lối ra, không mất dữ liệu nhưng không ai
+  nói cho agent biết nguyên nhân thật. Nay số kế tiếp tính trên hợp của id
+  trong graph **và** id đã khai trên đĩa (kể cả trong file hỏng) — chỉ lấy
+  `id` ở tầng trên cùng của mỗi bản ghi, cố ý không duyệt sâu vào các trường
+  tham chiếu (`serves`, `blocked_by`, ...), để một tham chiếu treo tới
+  `T-900` không thổi max lên 900.
+
+- **Hook từ chối `Write` ghi đè file thực thể `.ganas/` đã tồn tại.** Lớp thứ
+  hai, bắt đúng khoảnh khắc mất dữ liệu bất kể id tới từ đâu — kể cả id bịa
+  tay hay lấy lại từ context cũ sau compact. Chỉ áp cho `Write`; `Edit` sửa
+  file có sẵn vẫn cho qua, và thông điệp từ chối trỏ thẳng sang `Edit`. Không
+  theo cờ `warn`/`enforce`: thứ bị đe doạ là dữ liệu, không phải thói quen.
+
+  **Giới hạn đã biết:** `.ganas/.locks/` là `LOCAL_ONLY` nên lớp đặt chỗ chỉ
+  chống đua trên **cùng một máy**. Lớp 2 thì chỉ tồn tại bên trong Claude Code
+  có cài plugin — không phải vì ganas không đọc được `.locks` từ terminal (lớp
+  1 chạy đầy đủ ở đó), mà vì ghi file bằng editor hay `cat >` không đi qua
+  điểm chặn nào cả.
+
+  Và lớp 2 **không đọc `.locks`** — nó chỉ hỏi file đã tồn tại chưa. Nên nếu
+  một phiên ghi vào id mà phiên khác đang đặt chỗ (id bịa tay, hoặc lấy lại từ
+  context cũ) thì cú ghi đó được cho qua, còn chủ đặt chỗ hợp lệ mới là người
+  bị chặn sau đó. Không mất dữ liệu — nhưng đúng ra người bị chặn phải là kẻ
+  chiếm chỗ. Vá được điều này đòi `session_id` của hook và danh tính ghi trong
+  file đặt chỗ khớp nhau, mà hiện không đường nào truyền `--session` cho
+  `ganas id`.
+
+- **`ganas search` — BM25 trên fact, cộng gợi ý tự động trong brief.** Lời hứa
+  số 2 của README ("phiên sau không phải khám phá lại những gì phiên trước đã
+  kiểm chứng được") trước nay chỉ giao được qua `context_contract.facts` —
+  một mảng id khai tay. Task không khai id thì fact không bao giờ tới tay
+  phiên sau, dù cùng phạm vi và liên quan trực tiếp; đường duy nhất còn lại
+  là grep YAML. Khoảng cách nằm ở GIAO HÀNG, không ở việc ghi.
+
+  BM25 hợp bất thường ở đây vì `loadGraph` vốn đã nạp toàn bộ fact vào bộ
+  nhớ: chấm điểm chỉ là duyệt lại đúng `Map` đó — không đọc thêm file, không
+  dependency mới. Tokenizer bóc dấu tiếng Việt (kể cả `đ`, thứ NFD không tách
+  được) và tách cả đường dẫn/id thành mảnh con, nên tra theo tên file cũng
+  trúng.
+
+  Brief in tối đa **3** fact cùng phạm vi mà task không khai tay, mỗi fact một
+  dòng **kèm nhãn độ tươi**, và mục biến mất hoàn toàn khi không có gì vượt
+  ngưỡng — không tiêu đề rỗng. Ngưỡng là "khớp ít nhất 2 từ truy vấn khác
+  nhau", không phải một mốc điểm tuyệt đối: điểm BM25 không chuẩn hoá nên mốc
+  cứng sẽ vỡ khi kho fact to lên hay nhỏ đi.
+
+  Mọi kết quả PHẢI nói độ tươi, dùng `computeFreshness` sẵn có. Một cỗ máy
+  tìm kiếm trả về fact đã mục mà không nói nó mục thì chỉ là máy phát ảo giác
+  tốc độ cao.
+
+  **Giới hạn đã biết:** chỉ index fact, không index claim/decision — ràng
+  buộc "phải nói độ tươi" không áp được cho hai loại đó. Và khớp theo đường
+  dẫn nghĩa là task sửa trong `src/pay/` sẽ thấy fact về `src/pay/` kể cả khi
+  nội dung không liên quan; dòng `khớp:` nói rõ nó khớp bằng gì để người đọc
+  tự trừ hao.
+
+- **Một bản ghi hỏng schema không còn làm rụng CẢ FILE facts/claims/decisions
+  khỏi graph.** `collectArray` trước đây parse cả mảng bằng một lời gọi
+  `safeParse` với schema cấp file — một fact thiếu `scope` giữa file khiến
+  `safeParse` fail cho toàn mảng, và MỌI fact khác cùng file (kể cả đã kiểm
+  chứng xong) biến mất khỏi `graph.facts` mà `ganas validate` chỉ in một dòng
+  lỗi schema, không nói "bạn vừa mất N bản ghi". Tri thức đã kiểm chứng rụng
+  im lặng khỏi brief, `ganas search`, và mọi validator chéo.
+
+  Nay mỗi phần tử được `safeParse` RIÊNG: phần tử hỏng bị loại một mình, phần
+  còn lại của file vào graph bình thường. Path lỗi của zod được gắn tiền tố
+  chỉ số phần tử (`[index, ...issue.path]`) trước khi tính số dòng, nên
+  diagnostic vẫn trỏ đúng vùng của phần tử hỏng thay vì luôn báo về đầu file.
+
+- **Sổ icebox — việc đã quyết CHƯA làm.** Một phát hiện giữa phiên (đọc code
+  thấy vấn đề, nhưng không nằm trong phạm vi task đang chạy) trước nay chỉ có
+  hai lối: chẻ ngay thành Task cho đủ bộ — bịa `serves`/`implements`/
+  `exit_contract` để hợp lệ hoá một việc chưa ai duyệt — hoặc nói miệng rồi
+  mất theo context. Không lối nào đi vào repo. Đây là lời hứa số 2 của README
+  ("phiên sau không phải khám phá lại những gì phiên trước đã kiểm chứng
+  được") thủng đúng ở loại tri thức ganas sinh ra nhiều nhất: nhận định về
+  chính source code.
+
+  Thiết kế: **hai sổ tách nhau** cho hai câu hỏi khác nhau. "Giới hạn đã biết"
+  của một fact đã có sẵn đường đi — không cần thực thể mới: probe khẳng định
+  "vấn đề VẪN CÒN" gắn `ttl_days`, ai sửa code thì lần verify sau probe trượt
+  và brief tự nói phát biểu đang SAI. Nhưng "việc nên làm mà chưa tới lượt"
+  không có chỗ nào chứa — icebox là thực thể nhẹ mới, lặp lại đúng khuôn
+  Claim (nhẹ, chưa kiểm chứng) → Fact (nặng, đã kiểm chứng): `Task` không đổi
+  một dòng nào để dựng khuôn này.
+
+  Vì sao không nới `Task` thay vì thêm thực thể mới: bốn bất biến
+  `serves`/`implements`/`scope`/`exit_contract` là cột sống của mọi thứ đọc
+  `Task` — `select`, `brief`, `gate`, `commit`. Nới chúng thành tuỳ chọn có
+  điều kiện nghĩa là cả bốn nơi đó phải tự xử thêm một nhánh rỗng, và sót một
+  chỗ là một việc chưa quyết gì cả lọt vào hàng chờ giao cho phiên thật — coi
+  như nó đã được duyệt trong khi chưa ai duyệt.
+
+  Điểm hai trục (`weight`/`ease`) lần đầu vào được YAML thay vì hardcode
+  trong `src/debt.ts` theo mã chẩn đoán — icebox mang điểm ngay trên bản ghi
+  của chính nó.
+
+  Hết hạn xem lại là **đề xuất, không phải lệnh tự động dọn**: `ganas icebox
+  review` liệt kê mục quá hạn, `close` bắt buộc kèm lý do, bản ghi giữ
+  nguyên trên đĩa chứ không xoá. Vì sao không tự hết hạn: một mục hôm nay
+  chấm `weight: 2` có thể thành `weight: 5` sau khi kiến trúc xung quanh đổi
+  — nếu để tự động rụng, đúng lúc nó đáng nhìn lại nhất thì nó đã biến mất
+  rồi.
+
+  **Giới hạn đã biết:** điểm là người tự chấm, không probe nào kiểm được một
+  phán đoán về việc chưa xảy ra — `why_deferred` và `anchors` bắt buộc chỉ
+  làm lời khai soi được (ai đọc cũng thấy lý do và trỏ đúng chỗ), không
+  cưỡng chế được lời khai đó đúng. Và `ease` của một mục icebox ("làm việc
+  thật này khó đến đâu") không cùng thang đo với `ease` của một mã chẩn đoán
+  trong `src/debt.ts` ("sửa lỗi sổ sách này khó đến đâu") dù hai thứ nằm
+  chung một cột trong bảng `ganas debt`.
+
 ## v0.4.0 — 2026-08-14
 
 - **`ganas debt` — xếp hạng nợ hai trục.** Nợ vốn nằm ở hai nguồn rời nhau và

@@ -29,8 +29,14 @@ export const VERIFY_RESULT = ["pass", "fail", "unknown"] as const;
  * "CẦN VERIFY LẠI" thay vì "Đã biết". Đây là cơ chế chặn ảo giác lan truyền:
  * một điều từng đúng không được im lặng tiếp tục đúng.
  */
-/** Dung sai lệch đồng hồ giữa các máy khi kiểm ngày verify. */
-const CLOCK_SKEW_MS = 5 * 60_000;
+/**
+ * Dung sai lệch đồng hồ giữa các máy khi kiểm ngày verify.
+ *
+ * Export để `src/model/icebox.ts` dùng lại cho cùng phép kiểm trên `found_at`
+ * — MỘT hằng số cho "ngưỡng lệch đồng hồ chấp nhận được", không phải một số
+ * magic thứ hai khai riêng ở icebox trôi khỏi số này theo thời gian.
+ */
+export const CLOCK_SKEW_MS = 5 * 60_000;
 
 export const zFact = z
   .object({
@@ -82,8 +88,6 @@ export const zFact = z
   });
 
 export type Fact = z.infer<typeof zFact>;
-
-export const zFactFile = z.array(zFact);
 
 /* ------------------------------------------------------------------------- *
  * CLAIM — điều được tin nhưng chưa kiểm chứng
@@ -158,8 +162,6 @@ export const zClaim = z
 
 export type Claim = z.infer<typeof zClaim>;
 
-export const zClaimFile = z.array(zClaim);
-
 /* ------------------------------------------------------------------------- *
  * DECISION — điều người đã chốt
  * ------------------------------------------------------------------------- */
@@ -198,8 +200,6 @@ export const zDecision = z
   .strict();
 
 export type Decision = z.infer<typeof zDecision>;
-
-export const zDecisionFile = z.array(zDecision);
 
 /* ------------------------------------------------------------------------- *
  * Tính độ tươi của fact

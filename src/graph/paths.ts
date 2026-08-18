@@ -17,6 +17,8 @@ export const DIRS = {
   facts: "facts",
   claims: "claims",
   decisions: "decisions",
+  /** Việc đã quyết CHƯA làm — xem docstring đầu `src/model/icebox.ts`. */
+  icebox: "icebox",
   domains: "domains",
   legacy: "legacy",
   legacyImported: join("legacy", "imported"),

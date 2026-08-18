@@ -30,6 +30,26 @@ export interface VerificationState {
 /** Giữ tên cũ để brief và các chỗ đang dùng không phải đổi hết một lượt. */
 export type FactFreshness = VerificationState;
 
+/**
+ * Nhãn độ tươi in ra cho người đọc, một dòng, đặt ĐẦU dòng chứ không cuối —
+ * một fact đã mục mà nhãn chìm ở cuối thì người đọc lướt qua vẫn tưởng nó
+ * dùng được.
+ *
+ * Ở ĐÂY chứ không ở chỗ gọi: `ganas search` và brief cùng in nhãn này, và
+ * hai bản chép tay sẽ trôi khỏi nhau — hôm nào một bên thêm trạng thái mới
+ * mà bên kia không biết thì cùng một fact hiện hai kiểu ở hai lệnh, không
+ * gì báo. `VerificationState` sinh ra ở file này, nên cách gọi tên trạng
+ * thái của nó cũng thuộc về file này.
+ *
+ * `undefined` = chưa từng có bản ghi nào trong sổ cái cho target đó — vẫn
+ * phải cảnh báo, không được im lặng in như thể đáng tin.
+ */
+export function freshnessMark(state: VerificationState | undefined): string {
+  if (!state) return "⚠ [KHÔNG RÕ]";
+  if (state.freshness === "fresh") return "✓ [FRESH]";
+  return `⚠ [${state.freshness.toUpperCase()}]`;
+}
+
 interface Fingerprint {
   model?: string | undefined;
   prompt?: string | undefined;

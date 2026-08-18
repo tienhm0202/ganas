@@ -3,6 +3,7 @@ export * from "./common.js";
 export * from "./config.js";
 export * from "./design.js";
 export * from "./goal.js";
+export * from "./icebox.js";
 export * from "./knowledge.js";
 export * from "./module.js";
 export * from "./scope.js";

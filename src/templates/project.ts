@@ -358,6 +358,7 @@ Kho trạng thái và tri thức của dự án, do \`ganas\` quản lý.
 | \`facts/\` | Điều kiểm chứng được, có probe chạy lại được |
 | \`claims/\` | Điều được tin nhưng chưa kiểm chứng, có anchor |
 | \`decisions/\` | Điều người đã chốt |
+| \`icebox/\` | Việc đã quyết CHƯA làm — phát hiện giữa phiên, chấm điểm, chưa tới lượt làm |
 | \`legacy/\` | Tri thức import từ tài liệu cũ — bị cách ly cho tới khi đối chất |
 | \`map/\` | Bản đồ vùng code và survey |
 | \`proposals/\` | Đề xuất chờ người duyệt (spine, pack) |

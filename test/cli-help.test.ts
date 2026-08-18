@@ -32,6 +32,8 @@ const EXPECTED_COMMANDS = [
   "verify",
   "trace",
   "debt",
+  "icebox",
+  "search",
   "commit",
   "note",
   "handoff",

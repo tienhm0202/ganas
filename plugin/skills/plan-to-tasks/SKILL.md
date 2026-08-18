@@ -78,4 +78,6 @@ context của phiên này.
 
 Không có lệnh CLI riêng cho bước này — chẻ task là việc ghi file YAML vào
 `.ganas/tasks/` (và `.ganas/designs/` nếu cần) bằng Write/Edit như bình
-thường, rồi chạy `ganas validate` để xác nhận.
+thường, rồi chạy `ganas validate` để xác nhận. Write lên một file thực thể
+`.ganas/` ĐÃ tồn tại bị hook từ chối (ghi đè âm thầm là mất dữ liệu) — muốn
+sửa file có sẵn thì dùng Edit.

@@ -1,5 +1,7 @@
 import type { DebtItem, DebtKind } from "./graph/trace.js";
 import type { Diagnostic, Graph, Severity } from "./graph/types.js";
+import type { ScoreValue } from "./model/common.js";
+import type { Icebox } from "./model/icebox.js";
 
 /**
  * Bảng xếp hạng nợ.
@@ -15,16 +17,18 @@ import type { Diagnostic, Graph, Severity } from "./graph/types.js";
  * Thang điểm
  * ------------------------------------------------------------------------- */
 
-/** Một trong hai trục, cùng thang 1–5. */
 /**
- * Thang đầy đủ 1–5, không phải chỉ 1/3/5.
+ * `ScoreValue` (thang đầy đủ 1–5, không phải chỉ 1/3/5) khai ở
+ * `src/model/common.ts` — icebox (`src/model/icebox.ts`) dùng chung đúng
+ * thang đó cho `weight`/`ease`, để hai sổ không trôi khỏi nhau. Re-export ở
+ * đây để mọi chỗ đang `import { ScoreValue } from "./debt.js"` không phải đổi.
  *
- * Ba mốc lẻ là NEO để chấm cho nhất quán, không phải giới hạn: có luật thật sự
- * nằm giữa hai neo, và ép nó về neo gần nhất là làm sai thứ tự trong bảng —
- * đúng thứ mà bảng này tồn tại để làm đúng. Xem `spine/decision-cycle`
+ * Ba mốc lẻ là NEO để chấm cho nhất quán, không phải giới hạn: có luật thật
+ * sự nằm giữa hai neo, và ép nó về neo gần nhất là làm sai thứ tự trong bảng
+ * — đúng thứ mà bảng này tồn tại để làm đúng. Xem `spine/decision-cycle`
  * (weight 4) cho một ca cụ thể.
  */
-export type ScoreValue = 1 | 2 | 3 | 4 | 5;
+export type { ScoreValue } from "./model/common.js";
 
 export interface DebtScore {
   /**
@@ -173,6 +177,26 @@ const SCORES: Record<string, DebtScore> = {
   "load/yaml": { weight: 3, ease: 5 },
   "load/duplicate-id": { weight: 3, ease: 5 },
 
+  /* --- icebox: luật validate riêng của Icebox (KHÔNG phải hàng "icebox" ---
+   * tự mang điểm bên dưới trong `debtRows` — ba mã dưới đây là DIAGNOSTIC do
+   * `validateGraph` sinh ra khi một bản ghi icebox tự nó SAI, khác hẳn hàng
+   * "icebox" trong bảng nợ vốn không tra SCORES). ------------------------- */
+  // Bản sao của `knowledge/claim-missing-promoted-fact` (cũng 3/5): sổ nói
+  // "đã thành T-042" mà T-042 không tồn tại ⇒ một quyết định đã ghi đang trỏ
+  // vào hư không. Sửa = trỏ lại đúng id hoặc gỡ `promoted_to`.
+  "icebox/promoted-missing-task": { weight: 3, ease: 5 },
+  // Không sai lệch gì, chỉ nhắc một quyết định tới hạn xem lại — hạng "chỉ là
+  // thông tin". ease 3 chứ không 5: đóng nó là một lệnh, nhưng cái phải trả
+  // là một QUYẾT ĐỊNH, không phải một dòng YAML.
+  "icebox/review-overdue": { weight: 1, ease: 3 },
+  // Chấm theo hậu quả, không theo họ hàng (đúng lối lập luận đã ghi cho
+  // `spine/decision-cycle`). Anh em gần nhất `scope/module-without-scope` là
+  // 1/5, nhưng hậu quả khác hẳn: khối không khai scope vẫn nằm trên sơ đồ;
+  // mục icebox không khai scope RƠI KHỎI bảng `ganas debt` mặc định của MỌI
+  // task và khỏi báo cáo sau commit — chỉ còn thấy dưới `--all`. Đó là im
+  // lặng biến mất khỏi chỗ người thật sự nhìn.
+  "icebox/without-scope": { weight: 3, ease: 5 },
+
   /* --- computeDebt: nợ riêng của sơ đồ khối (DebtKind, không có "/") ------ */
   // Cạnh `depends_on` không cạnh contract nào kiểm — sơ đồ TRÔNG như đã nối
   // nhưng chưa ai kiểm tương thích thật.
@@ -234,10 +258,14 @@ export function scoreOf(code: string): DebtScore {
 
 export type DebtSource =
   | { origin: "diagnostic"; diagnostic: Diagnostic }
-  | { origin: "debt-item"; item: DebtItem };
+  | { origin: "debt-item"; item: DebtItem }
+  | { origin: "icebox"; item: Icebox; file: string };
 
 export interface DebtRow {
-  /** `Diagnostic.code`, hoặc `DebtItem.kind` cho hàng tới từ `computeDebt`. */
+  /**
+   * `Diagnostic.code`, `DebtItem.kind` cho hàng tới từ `computeDebt`, hoặc
+   * literal `"icebox"` cho hàng tới từ `graph.icebox`.
+   */
   code: string;
   score: DebtScore;
   /** `score.weight + score.ease` — khoá sắp xếp chính. */
@@ -249,8 +277,31 @@ export interface DebtRow {
   source: DebtSource;
 }
 
+/**
+ * `switch` + nhánh `default: never` thay vì ternary/if-else: TypeScript CHỈ
+ * báo lỗi biên dịch khi thêm origin thứ tư mà quên xử lý ở đây nếu khuôn là
+ * exhaustive switch trên literal union — ternary/if-else âm thầm rơi qua
+ * nhánh else mà tsc không hề kêu. Đây chính là bẫy làm mục icebox suýt in
+ * message của `DebtItem` (và crash, vì `item.message` không tồn tại trên
+ * `Icebox`) khi origin thứ ba được thêm vào `DebtSource`.
+ */
 function rowMessage(row: DebtRow): string {
-  return row.source.origin === "diagnostic" ? row.source.diagnostic.message : row.source.item.message;
+  switch (row.source.origin) {
+    case "diagnostic":
+      return row.source.diagnostic.message;
+    case "debt-item":
+      return row.source.item.message;
+    case "icebox": {
+      const i = row.source.item;
+      // Kèm `id`: tie-break của `compareRows` dựa vào message — thiếu id thì
+      // hai mục icebox cùng tiêu đề sắp không tất định.
+      return `${i.id} — ${i.title}`;
+    }
+    default: {
+      const _exhaustive: never = row.source;
+      throw new Error(`rowMessage: origin lạ ${JSON.stringify(_exhaustive)}`);
+    }
+  }
 }
 
 /**
@@ -292,6 +343,12 @@ export function scopeIndex(graph: Graph): Map<string, string> {
   }
   for (const fact of graph.facts.values()) index.set(fact.file, fact.value.scope);
   for (const claim of graph.claims.values()) index.set(claim.file, claim.value.scope);
+  // Icebox: `scope` tuỳ chọn (xem docstring `zIcebox`) — chỉ những bản ghi
+  // CÓ khai mới góp vào map, để diagnostic `schema/*` trên file icebox quy
+  // được về phạm vi khi có thể.
+  for (const i of graph.icebox.values()) {
+    if (i.value.scope !== undefined) index.set(i.file, i.value.scope);
+  }
   return index;
 }
 
@@ -335,6 +392,29 @@ export function debtRows(
       severity: undefined,
       scopeId: scopeOfDebtItem(item, graph),
       source: { origin: "debt-item", item },
+    });
+  }
+
+  for (const s of graph.icebox.values()) {
+    const i = s.value;
+    // `closed`/`promoted` không còn là nợ — đã đóng sổ hoặc đã lên task
+    // (nợ đó nay sống ở chính task đó, qua SCORES/DebtItem như bình thường).
+    if (i.status !== "open") continue;
+    rows.push({
+      // "icebox", KHÔNG có dấu "/": cùng quy ước với ba DebtKind tĩnh
+      // ("uncovered-edge", "broken-contract", "unverified-module"). Có dấu
+      // "/" thì một ngày nào đó code này sẽ vô tình khớp namespace trong
+      // NAMESPACE_DEFAULTS (vd nếu ai đó lỡ đặt "icebox/xxx") và bị chấm điểm
+      // sai qua fallback thay vì qua chính bản ghi — cố tình tránh cả khả
+      // năng đó bằng cách không có "/" ngay từ đầu.
+      code: "icebox",
+      // Điểm của CHÍNH bản ghi, KHÔNG qua `scoreOf`/`SCORES` — icebox tự
+      // mang điểm của nó lúc phát hiện, không phải một luật tĩnh tra bảng.
+      score: { weight: i.weight, ease: i.ease },
+      total: i.weight + i.ease,
+      severity: undefined,
+      scopeId: i.scope,
+      source: { origin: "icebox", item: i, file: s.file },
     });
   }
 

@@ -5,6 +5,7 @@ import type {
   Design,
   Fact,
   Goal,
+  Icebox,
   Module,
   Scope,
   Task,
@@ -46,6 +47,8 @@ export interface Graph {
   facts: Map<string, Sourced<Fact>>;
   claims: Map<string, Sourced<Claim>>;
   decisions: Map<string, Sourced<Decision>>;
+  /** Việc đã quyết CHƯA làm — xem docstring đầu `src/model/icebox.ts`. */
+  icebox: Map<string, Sourced<Icebox>>;
   /**
    * Document YAML đã parse, theo đường dẫn file tương đối. Giữ lại để validator
    * chéo quy được lỗi về đúng dòng, không chỉ đúng file.

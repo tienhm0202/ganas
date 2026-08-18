@@ -1,10 +1,11 @@
+import { stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import { evaluateGate } from "../gate.js";
 import { claimNextTask, claimTask, releaseClaimsForSession } from "../graph/claim.js";
 import { computeFreshness } from "../graph/freshness.js";
 import { loadGraph } from "../graph/load.js";
-import { CONFIG_FILE, findGanasRoot, GANAS_DIR, ganasPath } from "../graph/paths.js";
+import { CONFIG_FILE, DIRS, findGanasRoot, GANAS_DIR, ganasPath } from "../graph/paths.js";
 import { type Candidate, rankedCandidates, selectNextTask } from "../graph/select.js";
 import type { Diagnostic } from "../graph/types.js";
 import { validateGraph } from "../graph/validate.js";
@@ -158,11 +159,54 @@ const SKILL_WRITE_REASON =
   `phiên chính không biết nó đã đổi gì.\n\n` +
   `Nhờ phiên chính sửa hộ nếu skill cần cập nhật.`;
 
+/**
+ * Thư mục THỰC THỂ dưới `.ganas/` — mỗi file trong đó là một bản ghi có id
+ * (goal/design/task/scope/module/fact/claim/decision/icebox), khác với `runs/`,
+ * `.locks/`, `map/`, `proposals/`... vốn không phải "một thực thể = một id".
+ * Dùng lại `DIRS` thay vì khai tay chuỗi để không lệch nếu `paths.ts` đổi tên.
+ */
+const ENTITY_DIRS: readonly string[] = [
+  DIRS.goals,
+  DIRS.designs,
+  DIRS.tasks,
+  DIRS.scopes,
+  DIRS.modules,
+  DIRS.facts,
+  DIRS.claims,
+  DIRS.decisions,
+  DIRS.icebox,
+];
+
+function isEntityPath(rel: string): boolean {
+  return ENTITY_DIRS.some((dir) => rel.startsWith(`${GANAS_DIR}/${dir}/`));
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const ENTITY_OVERWRITE_REASON =
+  `File này đã tồn tại trong một thư mục thực thể của ganas. \`Write\` sẽ GHI ĐÈ ÂM THẦM ` +
+  `lên nó — không có gì báo cho phiên đang giữ nội dung cũ biết nó vừa mất dữ liệu.\n\n` +
+  `Muốn SỬA file có sẵn thì dùng \`Edit\`, không dùng \`Write\`.\n\n` +
+  `Nếu tưởng đang tạo một thực thể MỚI: id này đã có chủ. Chạy \`ganas id <loại>\` để lấy ` +
+  `một id khác, đừng tự đoán số kế tiếp.`;
+
 const PLAN_APPROVED_REASON =
   `Plan vừa được duyệt đang nằm trong context — và sẽ MẤT khi context bị compact. ` +
   `Chẻ ngay thành Task, đừng để sau.\n\n` +
   `Dùng skill \`plan-to-tasks\`: nó đã dạy đủ các bước, không cần đọc lại plan từ đâu cả. ` +
-  `Cấp ID thật ngay bằng \`ganas id task --count N\` — đừng dùng nhãn tạm kiểu T1, T4a.`;
+  `Cấp ID thật ngay bằng \`ganas id task --count N\` — đừng dùng nhãn tạm kiểu T1, T4a.\n\n` +
+  `Nhưng phát hiện KHÔNG thuộc plan này — thấy dọc đường, chưa ai duyệt — thì đừng nhét ` +
+  `thành Task cho đủ bộ: \`serves\`/\`implements\`/\`exit_contract\` bịa ra là dữ liệu giả. ` +
+  `Ghi vào sổ icebox bằng \`ganas icebox add\`. Task là đã quyết LÀM; icebox là đã quyết ` +
+  `CHƯA làm, kèm điểm, lý do và ngày xem lại. Cái repo này không cho phép tồn tại là một ` +
+  `việc chưa quyết gì cả, nằm lơ lửng — icebox không phải thứ đó.`;
 
 const DISPATCH_NUDGE_REASON =
   `Task đang làm khai tier rẻ hơn \`main\` (\`scribe\`/\`verifier\`) — việc cơ học hoặc kiểm ` +
@@ -219,6 +263,26 @@ async function pendingDispatchNudge(
  * cưỡng chế thật với Bash là hash-chain của chính sổ cái: sửa bằng cách nào
  * cũng đứt chain, và `ganas validate` / `ganas ledger --check` / `ganas commit`
  * đều thấy. Xem `verifyChain()` trong verify/ledger.ts.
+ *
+ * Luật ghi-đè-thực-thể (thêm ở đây, sau ledger/config/skill để giữ đúng thứ
+ * tự — luật cũ vẫn thắng trước, thông điệp cũ không đổi): CHỈ áp cho
+ * `tool_name === "Write"`, tuyệt đối không áp cho `Edit`/`MultiEdit`/
+ * `NotebookEdit` — sửa file có sẵn là việc hợp lệ (`Edit` vốn đòi file phải
+ * tồn tại rồi). `Write` đè lên file thực thể (`goals/designs/tasks/scopes/
+ * modules/facts/claims/decisions`) ĐÃ CÓ trên đĩa mới bị chặn — đây chính là
+ * lớp thứ hai vá lỗ đua của `ganas id` (xem doc comment ở `commands/id.ts`):
+ * lớp một (`reserveId`) chỉ chống được đua giữa các phiên đặt-chỗ TRƯỚC khi
+ * ghi; lớp này chặn cú GHI thật sự nếu một phiên khác đã ghi file trước đó
+ * (kể cả khi việc đặt chỗ id bị bỏ qua, hoặc hai máy khác nhau tính trùng
+ * id — `.locks/` không giúp được trường hợp đó).
+ *
+ * Không theo cờ `warn`/`enforce` như luật quy trình: thứ bị đe doạ ở đây là
+ * DỮ LIỆU, không phải thói quen — cùng lý lẽ với luật ledger phía trên.
+ *
+ * Giới hạn phải biết: hook này chỉ chạy khi plugin ganas được cài trong
+ * Claude Code. Gọi `ganas` trần từ terminal (hoặc bất kỳ agent nào không đi
+ * qua hook của plugin) không có lớp này — lúc đó chỉ còn `reserveId` (lớp 1)
+ * và kỷ luật của người/agent gọi lệnh.
  */
 export async function preToolUse(input: HookInput): Promise<HookOutput> {
   const cwd = input.cwd ?? process.cwd();
@@ -232,9 +296,12 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
       if (abs === ledgerPath(root)) return denyPreTool(LEDGER_REASON);
       if (abs === ganasPath(root, CONFIG_FILE)) return denyPreTool(CONFIG_REASON);
 
-      if (input.agent_id) {
-        const rel = relative(root, abs).split("\\").join("/");
-        if (rel.startsWith(SKILL_DIR)) return denyPreTool(SKILL_WRITE_REASON);
+      const rel = relative(root, abs).split("\\").join("/");
+
+      if (input.agent_id && rel.startsWith(SKILL_DIR)) return denyPreTool(SKILL_WRITE_REASON);
+
+      if (input.tool_name === "Write" && isEntityPath(rel) && (await fileExists(abs))) {
+        return denyPreTool(ENTITY_OVERWRITE_REASON);
       }
     }
     return ALLOW;

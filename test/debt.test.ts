@@ -27,8 +27,11 @@ function diag(code: string, file: string, message = code): Diagnostic {
 /**
  * Graph có phạm vi P-thu chứa M-a (khai scope hai chiều), cộng M-b KHÔNG khai
  * `scope`. Dùng chung cho các test lọc theo phạm vi.
+ *
+ * `extraFiles` cho phép test icebox thêm `.ganas/icebox/*.yaml` mà không phải
+ * lặp lại toàn bộ khung goal/design/task/scope/module.
  */
-async function fixtureGraph() {
+async function fixtureGraph(extraFiles: Record<string, string> = {}) {
   const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const root = await mkdtemp(join(tmpdir(), "ganas-debt-test-"));
@@ -46,6 +49,7 @@ nature: code
 paths:
   - "src/b/**"
 `,
+    ...extraFiles,
   };
   for (const [rel, content] of Object.entries(files)) {
     const file = join(root, rel);
@@ -54,6 +58,48 @@ paths:
   }
   const graph = await loadGraph(root);
   return { root, graph };
+}
+
+/**
+ * Một bản ghi icebox tối thiểu hợp lệ, dạng một phần tử YAML sẵn nối vào mảng
+ * `.ganas/icebox/YYYY-MM.yaml` (qua `iceboxFile`). Chỉ tham số hoá đúng những
+ * trường các test bên dưới cần biến thiên (`weight`/`ease`/`status`/`scope`);
+ * mọi trường khác giữ cố định ở mức tối thiểu hợp lệ theo `zIcebox`.
+ */
+function iceboxRecord(
+  id: string,
+  opts: {
+    weight?: number;
+    ease?: number;
+    status?: "open" | "closed" | "promoted";
+    scope?: string;
+    title?: string;
+  } = {},
+): string {
+  const status = opts.status ?? "open";
+  const lines = [
+    `- id: ${id}`,
+    `  title: "${opts.title ?? `Icebox ${id}`}"`,
+    `  found_at: "2026-01-01T00:00:00Z"`,
+    `  weight: ${opts.weight ?? 3}`,
+    `  ease: ${opts.ease ?? 3}`,
+    `  why_deferred: "chưa tới lượt làm"`,
+    `  anchors:`,
+    `    - "src/debt.ts#L1"`,
+    `  status: ${status}`,
+  ];
+  if (opts.scope) lines.push(`  scope: ${opts.scope}`);
+  if (status === "closed") {
+    lines.push(`  closed_at: "2026-02-01T00:00:00Z"`, `  closed_reason: "không còn cần nữa"`);
+  } else if (status === "promoted") {
+    lines.push(`  closed_at: "2026-02-01T00:00:00Z"`, `  promoted_to: T-001`);
+  }
+  return lines.join("\n");
+}
+
+/** Gộp nhiều `iceboxRecord(...)` thành nội dung file `.ganas/icebox/*.yaml`. */
+function iceboxFile(records: string[]): string {
+  return records.join("\n") + "\n";
 }
 
 /* --- scoreOf / bảng điểm ---------------------------------------------------- */
@@ -232,14 +278,16 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
     for (const m of src.matchAll(/code:\s*"([a-zA-Z0-9/_-]+)"/g)) codes.add(m[1]!);
   }
 
-  // Đối chiếu chính con số đã tự grep xác nhận: 43 mã DUY NHẤT trong
-  // validate.ts, cộng 3 mã DUY NHẤT trong load.ts (spine/config-unknown-key,
-  // load/yaml, load/duplicate-id — hai mã sau xuất hiện hai lần trong file
-  // nhưng cùng literal nên `Set` chỉ giữ một) → tổng 46.
+  // Đối chiếu chính con số đã tự grep xác nhận: 46 mã DUY NHẤT trong
+  // validate.ts (43 gốc + 3 mã icebox: icebox/promoted-missing-task,
+  // icebox/review-overdue, icebox/without-scope), cộng 3 mã DUY NHẤT trong
+  // load.ts (spine/config-unknown-key, load/yaml, load/duplicate-id — hai mã
+  // sau xuất hiện hai lần trong file nhưng cùng literal nên `Set` chỉ giữ
+  // một) → tổng 49.
   assert.equal(
     codes.size,
-    46,
-    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 46 (43 + 3) — kiểm lại pattern grep hoặc số đếm`,
+    49,
+    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 49 (46 + 3) — kiểm lại pattern grep hoặc số đếm`,
   );
 
   const missing = [...codes].filter((c) => !isExplicitlyScored(c));
@@ -248,4 +296,87 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
     [],
     `các mã tĩnh sau chưa có điểm tường minh trong SCORES ở src/debt.ts: ${missing.join(", ")}`,
   );
+});
+
+/* --- Icebox: nợ dẫn xuất từ điểm CỦA CHÍNH BẢN GHI, không qua scoreOf ------- */
+
+test("scoreOf(\"icebox\"): ném lỗi — mục icebox cố tình KHÔNG có mặt trong SCORES, điểm tới từ chính bản ghi, không tra bảng", () => {
+  assert.throws(() => scoreOf("icebox"), /không có điểm/);
+});
+
+test("debtRows: icebox status=open vào bảng với ĐÚNG weight/ease của chính nó; closed/promoted KHÔNG vào bảng", async () => {
+  const { root, graph } = await fixtureGraph({
+    ".ganas/icebox/2026-01.yaml": iceboxFile([
+      iceboxRecord("ICE-001", { weight: 4, ease: 2, status: "open", scope: "P-thu" }),
+      iceboxRecord("ICE-002", { weight: 5, ease: 5, status: "closed" }),
+      iceboxRecord("ICE-003", { weight: 5, ease: 5, status: "promoted" }),
+    ]),
+  });
+  try {
+    const rows = debtRows([], [], graph);
+    assert.equal(rows.length, 1, "chỉ mục status=open được vào bảng, closed/promoted không còn là nợ");
+    const row = rows[0]!;
+    assert.equal(row.code, "icebox");
+    assert.deepEqual(row.score, { weight: 4, ease: 2 }, "score lấy thẳng từ bản ghi, không qua scoreOf/SCORES");
+    assert.equal(row.total, 6);
+    assert.equal(row.severity, undefined);
+    assert.equal(row.scopeId, "P-thu");
+    assert.ok(row.source.origin === "icebox" && row.source.item.id === "ICE-001");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("debtRows: icebox không khai `scope` → scopeId undefined (không đoán)", async () => {
+  const { root, graph } = await fixtureGraph({
+    ".ganas/icebox/2026-01.yaml": iceboxFile([iceboxRecord("ICE-010", { status: "open" })]),
+  });
+  try {
+    const rows = debtRows([], [], graph);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.scopeId, undefined);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("debtRows: hàng icebox trộn đúng thứ tự theo total với hàng diagnostic", async () => {
+  const { root, graph } = await fixtureGraph({
+    ".ganas/icebox/2026-01.yaml": iceboxFile([
+      iceboxRecord("ICE-020", { weight: 5, ease: 5, status: "open" }), // total 10
+      iceboxRecord("ICE-021", { weight: 1, ease: 1, status: "open" }), // total 2
+    ]),
+  });
+  try {
+    const diags = [diag("spine/task-missing-model", ".ganas/tasks/T-001.yaml")]; // total 6
+    const rows = debtRows(diags, [], graph);
+    assert.deepEqual(
+      rows.map((r) => r.code),
+      ["icebox", "spine/task-missing-model", "icebox"],
+    );
+    assert.deepEqual(rows.map((r) => r.total), [10, 6, 2]);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("debtRows: tie-break hàng icebox theo id — rowMessage phải là \"id — title\" để hai mục cùng total, cùng code không sắp bất định", async () => {
+  const { root, graph } = await fixtureGraph({
+    ".ganas/icebox/2026-01.yaml": iceboxFile([
+      // Cùng total=6, cùng code "icebox". Nếu rowMessage chỉ dùng `title`
+      // (không có id) thì "A tieu de" < "Z tieu de" sẽ đứng trước ICE-030 —
+      // test này khẳng định ngược lại: id quyết định thứ tự.
+      iceboxRecord("ICE-030", { weight: 3, ease: 3, status: "open", title: "Z tiêu đề" }),
+      iceboxRecord("ICE-029", { weight: 3, ease: 3, status: "open", title: "A tiêu đề" }),
+    ]),
+  });
+  try {
+    const rows = debtRows([], [], graph);
+    assert.deepEqual(
+      rows.map((r) => (r.source.origin === "icebox" ? r.source.item.id : null)),
+      ["ICE-029", "ICE-030"],
+    );
+  } finally {
+    await cleanup(root);
+  }
 });

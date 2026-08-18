@@ -19,6 +19,8 @@ export const ID_PATTERNS = {
   module: /^M-[a-z0-9][a-z0-9-]*$/,
   /** Phạm vi công việc = đơn vị bàn giao có ranh giới code và người nghiệm thu. */
   scope: /^P-[a-z0-9][a-z0-9-]*$/,
+  /** Icebox = việc đã quyết CHƯA làm. Xem docstring đầu `src/model/icebox.ts`. */
+  icebox: /^ICE-\d{3,}$/,
 } as const;
 
 export const zGoalId = z.string().regex(ID_PATTERNS.goal, "ID goal phải dạng G-001");
@@ -32,6 +34,7 @@ export const zLegacyClaimId = z
 export const zDecisionId = z.string().regex(ID_PATTERNS.decision, "ID decision phải dạng DEC-004");
 export const zModuleId = z.string().regex(ID_PATTERNS.module, "ID khối phải dạng M-intent");
 export const zScopeId = z.string().regex(ID_PATTERNS.scope, "ID phạm vi phải dạng P-chat-core");
+export const zIceboxId = z.string().regex(ID_PATTERNS.icebox, "ID icebox phải dạng ICE-001");
 
 /** Ngày giờ ISO 8601. Chuỗi rỗng không hợp lệ — thà thiếu field còn hơn ghi rỗng. */
 export const zIsoDate = z
@@ -90,3 +93,24 @@ export const zProbe = z
   .strict();
 
 export type Probe = z.infer<typeof zProbe>;
+
+/**
+ * Thang điểm 1–5 dùng chung cho MỌI chỗ chấm nợ/độ ưu tiên trong repo — hiện
+ * là `DebtScore` (`src/debt.ts`) và icebox (`src/model/icebox.ts`).
+ *
+ * Khai MỘT LẦN ở đây, không phải hai bản độc lập: `src/debt.ts` từng tự khai
+ * `ScoreValue = 1 | 2 | 3 | 4 | 5`, và icebox cần đúng thang đó cho
+ * `weight`/`ease`. Hai bản trôi khỏi nhau (vd một bên đổi sang 1–10) là lỗi
+ * im lặng — không có gì báo, chỉ có hai module ngầm hiểu khác nhau "5" nghĩa
+ * là gì. `z.union` của năm literal thay vì `z.number().int().min(1).max(5)`
+ * để kiểu suy ra được đúng `1 | 2 | 3 | 4 | 5`, không tụt về `number`.
+ */
+export const zScoreValue = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+
+export type ScoreValue = z.infer<typeof zScoreValue>;

@@ -32,6 +32,11 @@ ghi.
   phải làm, trong 12 chặng cố định.
 - **Claim task theo phiên** — hai phiên Claude Code cùng lúc trên một dự án
   không giành nhau một task.
+- **Icebox — việc đã quyết CHƯA làm**, không phải loại tri thức thứ tư: nó
+  không có `last_result`, không lên `ganas search`, không được trình cho
+  phiên sau như sự thật. Chỉ là chỗ ghi một phát hiện giữa phiên đã chấm
+  điểm và có lý do hoãn, để nó không mất theo context và cũng không bị nhét
+  ép thành Task khi chưa ai duyệt.
 
 Xem [CHANGELOG.md](CHANGELOG.md) cho danh sách đầy đủ năng lực hiện có.
 

@@ -13,6 +13,13 @@
 export interface Argv {
   positional: string[];
   options: Record<string, string>;
+  /**
+   * Mọi giá trị của một cờ CÓ THỂ lặp lại (vd `--anchor A --anchor B`), theo
+   * đúng thứ tự gõ. `options` chỉ giữ giá trị CUỐI CÙNG (ghi đè) — lệnh nào
+   * cần nhận nhiều giá trị cho cùng một tên cờ (vd `ganas icebox add
+   * --anchor`) phải đọc từ đây qua `multiOption()`, không phải `option()`.
+   */
+  multi: Record<string, string[]>;
   flags: Record<string, boolean>;
   passthrough: string[];
 }
@@ -39,7 +46,11 @@ const KNOWN_BOOLEAN_FLAGS = new Set([
 
 export function parseArgs(raw: string[], booleanFlags: Iterable<string> = []): Argv {
   const bools = new Set([...KNOWN_BOOLEAN_FLAGS, ...booleanFlags]);
-  const argv: Argv = { positional: [], options: {}, flags: {}, passthrough: [] };
+  const argv: Argv = { positional: [], options: {}, multi: {}, flags: {}, passthrough: [] };
+
+  const pushMulti = (key: string, value: string): void => {
+    (argv.multi[key] ??= []).push(value);
+  };
 
   let i = 0;
   for (; i < raw.length; i++) {
@@ -54,7 +65,10 @@ export function parseArgs(raw: string[], booleanFlags: Iterable<string> = []): A
       const body = token.slice(2);
       const eq = body.indexOf("=");
       if (eq !== -1) {
-        argv.options[body.slice(0, eq)] = body.slice(eq + 1);
+        const key = body.slice(0, eq);
+        const value = body.slice(eq + 1);
+        argv.options[key] = value;
+        pushMulti(key, value);
         continue;
       }
       if (body.startsWith("no-")) {
@@ -66,6 +80,7 @@ export function parseArgs(raw: string[], booleanFlags: Iterable<string> = []): A
         argv.flags[body] = true;
       } else {
         argv.options[body] = next;
+        pushMulti(body, next);
         i++;
       }
       continue;
@@ -78,6 +93,7 @@ export function parseArgs(raw: string[], booleanFlags: Iterable<string> = []): A
         argv.flags[body] = true;
       } else {
         argv.options[body] = next;
+        pushMulti(body, next);
         i++;
       }
       continue;
@@ -117,4 +133,16 @@ export function option(argv: Argv, ...names: string[]): string | undefined {
     if (v !== undefined) return v;
   }
   return undefined;
+}
+
+/**
+ * Đọc MỌI giá trị của một cờ có thể lặp lại (vd `--anchor A --anchor B` →
+ * `["A", "B"]`), theo đúng thứ tự gõ trên dòng lệnh. Gộp theo mọi tên truyền
+ * vào (tên dài lẫn tên ngắn), không chỉ tên đầu tiên có mặt — khác `option()`,
+ * vì một cờ lặp lại có thể trộn cả hai dạng tên trên cùng một lời gọi.
+ */
+export function multiOption(argv: Argv, ...names: string[]): string[] {
+  const out: string[] = [];
+  for (const n of names) out.push(...(argv.multi[n] ?? []));
+  return out;
 }

@@ -154,6 +154,43 @@ function fakeRow(i: number): DebtRow {
   };
 }
 
+/**
+ * `rowLocation` (src/commands/debt.ts) chỉ tới được từ đây — nó không phải
+ * API của `src/debt.ts` nên `test/debt.test.ts` không import được. Đi vòng
+ * qua `renderDebtSection` (đã export) để quan sát output của nó thay vì gọi
+ * hàm private trực tiếp.
+ */
+function fakeIceboxRow(): DebtRow {
+  return {
+    code: "icebox",
+    score: { weight: 4, ease: 2 },
+    total: 6,
+    severity: undefined,
+    scopeId: "P-thu",
+    source: {
+      origin: "icebox",
+      file: ".ganas/icebox/2026-01.yaml",
+      item: {
+        id: "ICE-099",
+        title: "Việc hoãn thử",
+        found_at: "2026-01-01T00:00:00Z",
+        review_after_days: 30,
+        weight: 4,
+        ease: 2,
+        why_deferred: "chưa tới lượt làm",
+        anchors: [{ kind: "file", path: "src/debt.ts", line: 1 }],
+        status: "open",
+      },
+    },
+  };
+}
+
+test("renderDebtSection: hàng icebox in vị trí bằng anchor đầu tiên (rowLocation), không phải đường dẫn file YAML của nó", () => {
+  const out = renderDebtSection("Nợ demo:", [fakeIceboxRow()], 5);
+  assert.match(out, /src\/debt\.ts:1/, "phải in anchor đã formatAnchor");
+  assert.doesNotMatch(out, /2026-01\.yaml/, "không được in đường dẫn file YAML — anchor hữu ích hơn");
+});
+
 test("renderDebtSection: vượt ngưỡng thì có dòng nói rõ đã bỏ bao nhiêu", () => {
   const rows = Array.from({ length: 12 }, (_, i) => fakeRow(i));
   const out = renderDebtSection("Nợ demo:", rows, 5);

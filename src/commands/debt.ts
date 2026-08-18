@@ -2,6 +2,7 @@ import { type DebtRow, debtRows, rowsInScope } from "../debt.js";
 import { checkAllEdges, computeDebt, type EdgeCheck } from "../graph/trace.js";
 import type { Graph } from "../graph/types.js";
 import { validateGraph } from "../graph/validate.js";
+import { formatAnchor } from "../model/anchor.js";
 import { taskForSession } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
@@ -27,16 +28,36 @@ export function buildDebtRows(graph: Graph, checks: readonly EdgeCheck[]): DebtR
   return debtRows(validateGraph(graph), computeDebt(graph, checks), graph);
 }
 
-/** Vị trí để in cạnh mỗi hàng: file (+dòng) cho diagnostic, khối/cạnh cho debt item của sơ đồ. */
+/**
+ * Vị trí để in cạnh mỗi hàng: file (+dòng) cho diagnostic, khối/cạnh cho debt
+ * item của sơ đồ, anchor đầu tiên cho icebox.
+ *
+ * `switch` + nhánh `default: never` thay if/else: khuôn kiểm tra đủ nhánh lúc
+ * biên dịch — thêm origin thứ tư vào `DebtSource` mà quên xử lý ở đây thì tsc
+ * bắt được ngay, thay vì âm thầm rơi qua nhánh cuối và in chuỗi rỗng (đúng
+ * thứ suýt xảy ra với mục icebox khi if/else cũ chỉ phân hai nhánh).
+ */
 function rowLocation(row: DebtRow): string {
-  if (row.source.origin === "diagnostic") {
-    const d = row.source.diagnostic;
-    return d.line !== undefined ? `${d.file}:${d.line}` : d.file;
+  switch (row.source.origin) {
+    case "diagnostic": {
+      const d = row.source.diagnostic;
+      return d.line !== undefined ? `${d.file}:${d.line}` : d.file;
+    }
+    case "debt-item": {
+      const item = row.source.item;
+      if (item.moduleId !== undefined) return item.moduleId;
+      if (item.edge !== undefined) return `${item.edge.from} → ${item.edge.to}`;
+      return "";
+    }
+    case "icebox":
+      // Anchor trỏ vào code hữu ích hơn đường dẫn file YAML — người đọc bảng
+      // nợ muốn biết "chỗ nào trong code", không phải "file .ganas/icebox nào".
+      return formatAnchor(row.source.item.anchors[0]!);
+    default: {
+      const _exhaustive: never = row.source;
+      throw new Error(`rowLocation: origin lạ ${JSON.stringify(_exhaustive)}`);
+    }
   }
-  const item = row.source.item;
-  if (item.moduleId !== undefined) return item.moduleId;
-  if (item.edge !== undefined) return `${item.edge.from} → ${item.edge.to}`;
-  return "";
 }
 
 const CODE_WIDTH = 28;
@@ -105,6 +126,37 @@ export function commitDebtSummary(graph: Graph, scopeId: string): string {
   }
 }
 
+/**
+ * Suy phạm vi lọc từ task đang claim (`--session`, rồi `current_task`) —
+ * `undefined` nếu `--all` (bỏ lọc). Tách ra khỏi `run()` để `ganas icebox
+ * list`/`review` DÙNG LẠI đúng hàm này thay vì chép một bản logic + thông
+ * điệp lỗi thứ hai: một quy tắc trong repo ("lọc theo phạm vi task đang làm,
+ * `--all` bỏ lọc"), không phải hai bản có thể trôi khỏi nhau theo thời gian.
+ * Thông điệp lỗi cố tình vẫn nói "nợ" và trỏ sang `ganas debt --all` dù người
+ * gọi có thể là `ganas icebox` — hợp lý vì mục icebox `open` VỐN đã là một
+ * hàng trong chính bảng `ganas debt` (origin `"icebox"`, xem `src/debt.ts`).
+ */
+export async function scopeFromClaimedTask(
+  argv: Argv,
+  root: string,
+  graph: Graph,
+): Promise<string | undefined> {
+  if (flag(argv, "all")) return undefined;
+
+  const sessionId = option(argv, "session");
+  const taskId = await taskForSession(root, sessionId);
+  if (!taskId) {
+    throw new GanasError(
+      `chưa biết đang làm task nào — không lọc được phạm vi nợ.\n` +
+        `Dùng \`ganas debt --all\` để xem toàn dự án, hoặc gắn task trước bằng ` +
+        `\`ganas next\` / \`--session <id>\`.`,
+    );
+  }
+  const task = graph.tasks.get(taskId);
+  if (!task) throw new GanasError(`không có task ${taskId}`);
+  return task.value.scope;
+}
+
 export async function run(argv: Argv): Promise<number> {
   const { root, graph } = await openProject(argv);
 
@@ -116,22 +168,7 @@ export async function run(argv: Argv): Promise<number> {
   const rows = buildDebtRows(graph, checks);
 
   const all = flag(argv, "all");
-  let scopeId: string | undefined;
-
-  if (!all) {
-    const sessionId = option(argv, "session");
-    const taskId = await taskForSession(root, sessionId);
-    if (!taskId) {
-      throw new GanasError(
-        `chưa biết đang làm task nào — không lọc được phạm vi nợ.\n` +
-          `Dùng \`ganas debt --all\` để xem toàn dự án, hoặc gắn task trước bằng ` +
-          `\`ganas next\` / \`--session <id>\`.`,
-      );
-    }
-    const task = graph.tasks.get(taskId);
-    if (!task) throw new GanasError(`không có task ${taskId}`);
-    scopeId = task.value.scope;
-  }
+  const scopeId = await scopeFromClaimedTask(argv, root, graph);
 
   const filtered = scopeId === undefined ? rows : rowsInScope(rows, scopeId);
   const outside = rows.length - filtered.length;

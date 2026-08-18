@@ -529,6 +529,85 @@ exit_contract:
   }
 });
 
+/* --- PreToolUse: chặn Write đè file thực thể đã tồn tại -------------------- */
+
+test("⭐ Write đè file task đã tồn tại → deny", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: ".ganas/tasks/T-001.yaml" },
+    });
+    const h = out.hookSpecificOutput as Record<string, string>;
+    assert.equal(h["permissionDecision"], "deny");
+    assert.match(h["permissionDecisionReason"]!, /GHI ĐÈ/);
+    assert.match(h["permissionDecisionReason"]!, /Edit/);
+    assert.match(h["permissionDecisionReason"]!, /ganas id/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Write file task CHƯA tồn tại → allow", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: ".ganas/tasks/T-999.yaml" },
+    });
+    assert.deepEqual(out, {}, "tạo thực thể mới là việc hợp lệ");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Edit file task đã tồn tại → allow (luật chỉ áp cho Write)", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Edit",
+      tool_input: { file_path: ".ganas/tasks/T-001.yaml" },
+    });
+    assert.deepEqual(out, {}, "sửa file có sẵn bằng Edit là việc hợp lệ, không bị chặn");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Write vào file ngoài .ganas/ → allow", async () => {
+  const root = await project();
+  try {
+    await mkdir(join(root, "src"), { recursive: true });
+    await writeFile(join(root, "src", "index.ts"), "export {};\n", "utf8");
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: "src/index.ts" },
+    });
+    assert.deepEqual(out, {}, "ganas chỉ gác thư mục thực thể của nó, không gác code");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Write vào .ganas/state.json → allow (không phải thư mục thực thể)", async () => {
+  const root = await project();
+  try {
+    await writeFile(join(root, ".ganas", "state.json"), "{}", "utf8");
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: ".ganas/state.json" },
+    });
+    assert.deepEqual(out, {}, "state.json nằm ngay dưới .ganas/, không thuộc thư mục thực thể nào");
+  } finally {
+    await cleanup(root);
+  }
+});
+
 /* --- Gate: tiêu chí artifact và handoff ----------------------------------- */
 
 test("gate chấm được tiêu chí artifact có must_contain", async () => {

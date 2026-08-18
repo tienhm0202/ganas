@@ -65,7 +65,18 @@ function findCycle(edges: Map<string, readonly string[]>): string[] | null {
   return null;
 }
 
-export function validateGraph(graph: Graph): Diagnostic[] {
+/**
+ * Validate toàn graph, trả về mọi diagnostic (đã gộp `graph.loadDiagnostics`).
+ *
+ * ĐẦU RA HÀM NÀY PHỤ THUỘC ĐỒNG HỒ kể từ luật `icebox/review-overdue`: một
+ * bản ghi hôm nay "chưa quá hạn" có thể "quá hạn" ở lần gọi sau, cùng một
+ * graph, chỉ vì thời gian trôi. Đây là đánh đổi thật, không giấu: mọi test
+ * đọc diagnostic của luật đó (hoặc muốn kết quả tất định) PHẢI ghim `now` qua
+ * `opts.now` — không truyền thì hàm dùng `Date.now()` thật, và test sẽ trở
+ * thành flaky theo ngày chạy.
+ */
+export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagnostic[] {
+  const now = opts.now ?? Date.now();
   const diags: Diagnostic[] = [...graph.loadDiagnostics];
 
   /* --- Design: liên kết goal, mồ côi ---------------------------------- */
@@ -719,6 +730,66 @@ export function validateGraph(graph: Graph): Diagnostic[] {
         file: claim.file,
         line: at(graph, claim, "id"),
         hint: `Đây là một hiểu nhầm đã tồn tại trong dự án. Giữ lại để phiên sau không tin lại.`,
+      });
+    }
+  }
+
+  /* --- Icebox: quyết định đã ghi CHƯA làm -------------------------------- */
+
+  for (const item of graph.icebox.values()) {
+    const i = item.value;
+
+    // Bản sao của `knowledge/claim-missing-promoted-fact`: sổ nói "đã thành
+    // T-042" mà T-042 không tồn tại — không phân biệt open/closed/promoted,
+    // vì đây là một tham chiếu treo bất kể trạng thái hiện tại của bản ghi.
+    if (i.promoted_to && !graph.tasks.has(i.promoted_to)) {
+      diags.push({
+        severity: "error",
+        code: "icebox/promoted-missing-task",
+        message: `icebox ${i.id} khai đã thăng cấp thành task ${i.promoted_to} nhưng task đó không tồn tại`,
+        file: item.file,
+        line: at(graph, item, "promoted_to"),
+        hint: `Sửa \`promoted_to\` trỏ đúng id, hoặc gỡ nó nếu chưa thật sự thăng cấp.`,
+      });
+    }
+
+    // Hai luật dưới đây chỉ áp cho bản ghi còn "sống" (status: open) — mục đã
+    // đóng hay đã thăng cấp thì không còn là nợ, réo nữa là tiếng ồn.
+    if (i.status !== "open") continue;
+
+    const foundAtMs = Date.parse(i.found_at);
+    const reviewAfterMs = i.review_after_days * 24 * 60 * 60 * 1000;
+    if (foundAtMs + reviewAfterMs <= now) {
+      const daysSince = Math.floor((now - foundAtMs) / (24 * 60 * 60 * 1000));
+      diags.push({
+        severity: "warning",
+        code: "icebox/review-overdue",
+        message:
+          `icebox ${i.id} quá hạn xem lại: phát hiện ${daysSince} ngày trước, hẹn xem lại ` +
+          `sau ${i.review_after_days} ngày`,
+        file: item.file,
+        line: at(graph, item, "review_after_days"),
+        hint:
+          `Xem lại quyết định hoãn: đóng nó (status: closed + closed_reason), thăng cấp ` +
+          `thành task (status: promoted + promoted_to), hoặc nếu vẫn cố tình hoãn tiếp thì ` +
+          `dời found_at/review_after_days — đừng để nó nằm im quá hạn không ai đọc.`,
+      });
+    }
+
+    // Cùng lối lập luận với `scope/module-without-scope`, nhưng hậu quả khác
+    // hẳn: khối thiếu scope vẫn nằm trên sơ đồ, còn mục icebox thiếu scope
+    // rơi khỏi bảng `ganas debt` mặc định của MỌI task (chỉ lọc theo scope
+    // của chính task) — chỉ còn thấy được dưới `--all`.
+    if (i.scope === undefined) {
+      diags.push({
+        severity: "warning",
+        code: "icebox/without-scope",
+        message: `icebox ${i.id} đang open nhưng không khai \`scope\` — sẽ rơi khỏi bảng \`ganas debt\` mặc định của mọi task`,
+        file: item.file,
+        line: at(graph, item, "id"),
+        hint:
+          `Thêm \`scope: <id-phạm-vi>\` nếu đã biết thuộc phạm vi nào. Thiếu nó, mục này chỉ ` +
+          `còn thấy được dưới \`ganas debt --all\`, không nằm trong báo cáo sau commit của ai cả.`,
       });
     }
   }

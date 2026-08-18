@@ -24123,6 +24123,8 @@ var init_paths = __esm({
       facts: "facts",
       claims: "claims",
       decisions: "decisions",
+      /** Việc đã quyết CHƯA làm — xem docstring đầu `src/model/icebox.ts`. */
+      icebox: "icebox",
       domains: "domains",
       legacy: "legacy",
       legacyImported: join("legacy", "imported"),
@@ -25378,10 +25380,16 @@ var init_run = __esm({
 // src/graph/freshness.ts
 var freshness_exports = {};
 __export(freshness_exports, {
-  computeFreshness: () => computeFreshness
+  computeFreshness: () => computeFreshness,
+  freshnessMark: () => freshnessMark
 });
 import { stat } from "node:fs/promises";
 import { join as join5 } from "node:path";
+function freshnessMark(state) {
+  if (!state) return "\u26A0 [KH\xD4NG R\xD5]";
+  if (state.freshness === "fresh") return "\u2713 [FRESH]";
+  return `\u26A0 [${state.freshness.toUpperCase()}]`;
+}
 function decide(args) {
   const { entry, currentDef, current, ttlDays, depsChangedAt, changedFile, depsNow, now } = args;
   if (!entry) {
@@ -25551,7 +25559,7 @@ var init_freshness = __esm({
 });
 
 // src/model/common.ts
-var ID_PATTERNS, zGoalId, zDesignId, zTaskId, zFactId, zClaimId, zLegacyClaimId, zDecisionId, zModuleId, zScopeId, zIsoDate, zHandle, zNonEmpty, zGlob, zExpect, zProbe;
+var ID_PATTERNS, zGoalId, zDesignId, zTaskId, zFactId, zClaimId, zLegacyClaimId, zDecisionId, zModuleId, zScopeId, zIceboxId, zIsoDate, zHandle, zNonEmpty, zGlob, zExpect, zProbe, zScoreValue;
 var init_common = __esm({
   "src/model/common.ts"() {
     "use strict";
@@ -25570,7 +25578,9 @@ var init_common = __esm({
        */
       module: /^M-[a-z0-9][a-z0-9-]*$/,
       /** Phạm vi công việc = đơn vị bàn giao có ranh giới code và người nghiệm thu. */
-      scope: /^P-[a-z0-9][a-z0-9-]*$/
+      scope: /^P-[a-z0-9][a-z0-9-]*$/,
+      /** Icebox = việc đã quyết CHƯA làm. Xem docstring đầu `src/model/icebox.ts`. */
+      icebox: /^ICE-\d{3,}$/
     };
     zGoalId = external_exports.string().regex(ID_PATTERNS.goal, "ID goal ph\u1EA3i d\u1EA1ng G-001");
     zDesignId = external_exports.string().regex(ID_PATTERNS.design, "ID design ph\u1EA3i d\u1EA1ng D-001");
@@ -25581,6 +25591,7 @@ var init_common = __esm({
     zDecisionId = external_exports.string().regex(ID_PATTERNS.decision, "ID decision ph\u1EA3i d\u1EA1ng DEC-004");
     zModuleId = external_exports.string().regex(ID_PATTERNS.module, "ID kh\u1ED1i ph\u1EA3i d\u1EA1ng M-intent");
     zScopeId = external_exports.string().regex(ID_PATTERNS.scope, "ID ph\u1EA1m vi ph\u1EA3i d\u1EA1ng P-chat-core");
+    zIceboxId = external_exports.string().regex(ID_PATTERNS.icebox, "ID icebox ph\u1EA3i d\u1EA1ng ICE-001");
     zIsoDate = external_exports.string().min(1).refine((s) => !Number.isNaN(Date.parse(s)), "ph\u1EA3i l\xE0 ng\xE0y ISO 8601 h\u1EE3p l\u1EC7");
     zHandle = external_exports.string().regex(/^@[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'handle ph\u1EA3i d\u1EA1ng "@ten-nguoi"');
     zNonEmpty = external_exports.string().trim().min(1, "kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng");
@@ -25605,6 +25616,13 @@ var init_common = __esm({
       timeout_ms: external_exports.number().int().positive().max(6e5).optional(),
       cwd: external_exports.string().optional()
     }).strict();
+    zScoreValue = external_exports.union([
+      external_exports.literal(1),
+      external_exports.literal(2),
+      external_exports.literal(3),
+      external_exports.literal(4),
+      external_exports.literal(5)
+    ]);
   }
 });
 
@@ -25893,7 +25911,7 @@ function freshnessOf({ fact, depsChangedAt, now = Date.now() }) {
   if (fact.ttl_days > 0 && now - verifiedAt > fact.ttl_days * 864e5) return "stale";
   return "fresh";
 }
-var VERIFY_RESULT, CLOCK_SKEW_MS, zFact, zFactFile, PROVENANCE, TRUST, zClaim, zClaimFile, zDecision, zDecisionFile;
+var VERIFY_RESULT, CLOCK_SKEW_MS, zFact, PROVENANCE, TRUST, zClaim, zDecision;
 var init_knowledge = __esm({
   "src/model/knowledge.ts"() {
     "use strict";
@@ -25943,7 +25961,6 @@ var init_knowledge = __esm({
         });
       }
     });
-    zFactFile = external_exports.array(zFact);
     PROVENANCE = ["session", "human", "imported"];
     TRUST = ["unverified", "confirmed", "refuted", "unprovable"];
     zClaim = external_exports.object({
@@ -25996,7 +26013,6 @@ var init_knowledge = __esm({
         });
       }
     });
-    zClaimFile = external_exports.array(zClaim);
     zDecision = external_exports.object({
       id: zDecisionId,
       statement: zNonEmpty,
@@ -26018,7 +26034,96 @@ var init_knowledge = __esm({
       supersedes: external_exports.array(zDecisionId).default([]),
       notes: external_exports.string().optional()
     }).strict();
-    zDecisionFile = external_exports.array(zDecision);
+  }
+});
+
+// src/model/icebox.ts
+var ICEBOX_STATUS, zIcebox;
+var init_icebox = __esm({
+  "src/model/icebox.ts"() {
+    "use strict";
+    init_zod();
+    init_anchor();
+    init_common();
+    init_knowledge();
+    ICEBOX_STATUS = ["open", "closed", "promoted"];
+    zIcebox = external_exports.object({
+      id: zIceboxId,
+      title: zNonEmpty,
+      /** Thời điểm phát hiện. KHÔNG default `now` — lệnh `add` sẽ điền. */
+      found_at: zIsoDate,
+      /**
+       * Per-record, không per-project: "sửa kiến trúc khi rảnh" và "kiểm lại
+       * sau sprint" là hai chân trời khác nhau. Cùng khuôn `Fact.ttl_days`.
+       */
+      review_after_days: external_exports.number().int().min(1).default(30),
+      /** Quan trọng đến đâu nếu bỏ qua. Cùng thang với `DebtScore.weight`. */
+      weight: zScoreValue,
+      /** Dễ sửa đến đâu. Cùng thang với `DebtScore.ease`. */
+      ease: zScoreValue,
+      /**
+       * Lý do hoãn, bắt buộc, không rỗng. Trường giữ sổ này trung thực — sáu
+       * tháng sau không ai biết lý do hoãn còn đúng không nếu không ghi. Đây là
+       * thứ phân biệt "hoãn có ý thức" với "quên".
+       */
+      why_deferred: zNonEmpty,
+      anchors: zAnchors,
+      /**
+       * Tuỳ chọn CÓ CHỦ ĐÍCH, khác `Module.scope` bắt buộc: phát hiện giữa
+       * phiên thường chưa biết thuộc phạm vi nào, bắt buộc = ép bịa. Luật
+       * validate ở bước sau sẽ nhắc khi thiếu, không phải schema này.
+       */
+      scope: zScopeId.optional(),
+      status: external_exports.enum(ICEBOX_STATUS).default("open"),
+      closed_at: zIsoDate.optional(),
+      closed_reason: zNonEmpty.optional(),
+      promoted_to: zTaskId.optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((i, ctx) => {
+      if (i.status !== "open" && !i.closed_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["closed_at"],
+          message: `icebox ${i.id} c\xF3 status="${i.status}" nh\u01B0ng thi\u1EBFu closed_at`
+        });
+      }
+      if (i.status === "closed" && !i.closed_reason) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["closed_reason"],
+          message: `icebox ${i.id} \u0111\xF3ng (status="closed") nh\u01B0ng thi\u1EBFu closed_reason. \u0110\xF3ng m\xE0 kh\xF4ng n\xF3i v\xEC sao th\xEC phi\xEAn sau \u0111\u1EC1 xu\u1EA5t l\u1EA1i \u0111\xFAng th\u1EE9 v\u1EEBa b\u1ECB lo\u1EA1i.`
+        });
+      }
+      if (i.status === "promoted" && !i.promoted_to) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["promoted_to"],
+          message: `icebox ${i.id} c\xF3 status="promoted" nh\u01B0ng thi\u1EBFu promoted_to`
+        });
+      }
+      if (i.promoted_to && i.status !== "promoted") {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["promoted_to"],
+          message: `icebox ${i.id} ch\u1EC9 \u0111\u01B0\u1EE3c c\xF3 promoted_to khi status="promoted"`
+        });
+      }
+      if (i.status === "open" && (i.closed_at !== void 0 || i.closed_reason !== void 0)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["status"],
+          message: `icebox ${i.id} status="open" nh\u01B0ng c\xF3 closed_at/closed_reason \u2014 \u0111\xF3ng ch\u01B0a x\u1EA3y ra nh\u01B0ng l\u1EA1i c\xF3 d\u1EA5u v\u1EBFt \u0111\xE3 \u0111\xF3ng`
+        });
+      }
+      const t = Date.parse(i.found_at);
+      if (t > Date.now() + CLOCK_SKEW_MS) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["found_at"],
+          message: `icebox ${i.id} c\xF3 found_at \u1EDF t\u01B0\u01A1ng lai (${i.found_at}). Ch\u1EC9 \u0111\u1EB7t tr\u01B0\u1EDDng n\xE0y b\u1EB1ng th\u1EDDi \u0111i\u1EC3m ph\xE1t hi\u1EC7n th\u1EADt.`
+        });
+      }
+    });
   }
 });
 
@@ -26387,6 +26492,7 @@ var init_model = __esm({
     init_config();
     init_design();
     init_goal();
+    init_icebox();
     init_knowledge();
     init_module();
     init_scope();
@@ -26539,26 +26645,36 @@ async function collectArray(dirs, schema, root, kind) {
       }
       sources.set(relative2(root, file) || file, loaded);
       if (loaded.value === null || loaded.value === void 0) continue;
-      const parsed = schema.safeParse(loaded.value);
-      if (!parsed.success) {
-        diagnostics.push(...issuesToDiagnostics(loaded, parsed.error.issues, root));
+      const shape = external_exports.array(external_exports.unknown()).safeParse(loaded.value);
+      if (!shape.success) {
+        diagnostics.push(...issuesToDiagnostics(loaded, shape.error.issues, root));
         continue;
       }
       const rel = relative2(root, file) || file;
-      parsed.data.forEach((record3, index) => {
-        const existing = items.get(record3.id);
+      shape.data.forEach((element, index) => {
+        const parsed = schema.safeParse(element);
+        if (!parsed.success) {
+          const issues = parsed.error.issues.map((issue2) => ({
+            ...issue2,
+            path: [index, ...issue2.path]
+          }));
+          diagnostics.push(...issuesToDiagnostics(loaded, issues, root));
+          return;
+        }
+        const value = parsed.data;
+        const existing = items.get(value.id);
         if (existing) {
           diagnostics.push({
             severity: "error",
             code: "load/duplicate-id",
-            message: `${kind} ${record3.id} khai hai l\u1EA7n (l\u1EA7n tr\u01B0\u1EDBc \u1EDF ${existing.file})`,
+            message: `${kind} ${value.id} khai hai l\u1EA7n (l\u1EA7n tr\u01B0\u1EDBc \u1EDF ${existing.file})`,
             file: rel,
             line: lineOfPath(loaded, [index, "id"]),
             hint: "M\u1ED7i ID ch\u1EC9 \u0111\u01B0\u1EE3c \u0111\u1ECBnh ngh\u0129a \u1EDF m\u1ED9t ch\u1ED7."
           });
           return;
         }
-        items.set(record3.id, { value: record3, file: rel, index });
+        items.set(value.id, { value: parsed.data, file: rel, index });
       });
     }
   }
@@ -26590,20 +26706,21 @@ async function loadGraph(root) {
   const ledger = indexByTarget(ledgerRaw);
   const gitignoreFile = join6(root, ".gitignore");
   const gitignoreRaw = existsSync5(gitignoreFile) ? await readFile7(gitignoreFile, "utf8") : null;
-  const [goals, designs, tasks, scopes, modules, facts, claims, decisions] = await Promise.all([
+  const [goals, designs, tasks, scopes, modules, facts, claims, decisions, icebox] = await Promise.all([
     collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
     collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
     collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
     collectSingle(ganasPath(root, DIRS.scopes), zScope, root, "ph\u1EA1m vi"),
     collectSingle(ganasPath(root, DIRS.modules), zModule, root, "kh\u1ED1i"),
-    collectArray([ganasPath(root, DIRS.facts)], zFactFile, root, "fact"),
+    collectArray([ganasPath(root, DIRS.facts)], zFact, root, "fact"),
     collectArray(
       [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
-      zClaimFile,
+      zClaim,
       root,
       "claim"
     ),
-    collectArray([ganasPath(root, DIRS.decisions)], zDecisionFile, root, "decision")
+    collectArray([ganasPath(root, DIRS.decisions)], zDecision, root, "decision"),
+    collectArray([ganasPath(root, DIRS.icebox)], zIcebox, root, "icebox")
   ]);
   return {
     root,
@@ -26616,6 +26733,7 @@ async function loadGraph(root) {
     facts: facts.items,
     claims: claims.items,
     decisions: decisions.items,
+    icebox: icebox.items,
     ledger,
     ledgerRaw,
     gitignoreRaw,
@@ -26627,7 +26745,8 @@ async function loadGraph(root) {
       ...modules.sources,
       ...facts.sources,
       ...claims.sources,
-      ...decisions.sources
+      ...decisions.sources,
+      ...icebox.sources
     ]),
     loadDiagnostics: [
       ...configDiagnostics,
@@ -26638,7 +26757,8 @@ async function loadGraph(root) {
       ...modules.diagnostics,
       ...facts.diagnostics,
       ...claims.diagnostics,
-      ...decisions.diagnostics
+      ...decisions.diagnostics,
+      ...icebox.diagnostics
     ]
   };
 }
@@ -26646,6 +26766,7 @@ var REMOVED_CONFIG_KEYS;
 var init_load = __esm({
   "src/graph/load.ts"() {
     "use strict";
+    init_zod();
     init_model();
     init_errors2();
     init_yaml();
@@ -37025,7 +37146,10 @@ var KNOWN_BOOLEAN_FLAGS = /* @__PURE__ */ new Set([
 ]);
 function parseArgs(raw, booleanFlags = []) {
   const bools = /* @__PURE__ */ new Set([...KNOWN_BOOLEAN_FLAGS, ...booleanFlags]);
-  const argv = { positional: [], options: {}, flags: {}, passthrough: [] };
+  const argv = { positional: [], options: {}, multi: {}, flags: {}, passthrough: [] };
+  const pushMulti = (key, value) => {
+    (argv.multi[key] ??= []).push(value);
+  };
   let i = 0;
   for (; i < raw.length; i++) {
     const token = raw[i];
@@ -37037,7 +37161,10 @@ function parseArgs(raw, booleanFlags = []) {
       const body = token.slice(2);
       const eq = body.indexOf("=");
       if (eq !== -1) {
-        argv.options[body.slice(0, eq)] = body.slice(eq + 1);
+        const key = body.slice(0, eq);
+        const value = body.slice(eq + 1);
+        argv.options[key] = value;
+        pushMulti(key, value);
         continue;
       }
       if (body.startsWith("no-")) {
@@ -37049,6 +37176,7 @@ function parseArgs(raw, booleanFlags = []) {
         argv.flags[body] = true;
       } else {
         argv.options[body] = next;
+        pushMulti(body, next);
         i++;
       }
       continue;
@@ -37060,6 +37188,7 @@ function parseArgs(raw, booleanFlags = []) {
         argv.flags[body] = true;
       } else {
         argv.options[body] = next;
+        pushMulti(body, next);
         i++;
       }
       continue;
@@ -37231,6 +37360,25 @@ var SCORES = {
   // KHÔNG một tiếng động — downstream coi như nó chưa từng tồn tại.
   "load/yaml": { weight: 3, ease: 5 },
   "load/duplicate-id": { weight: 3, ease: 5 },
+  /* --- icebox: luật validate riêng của Icebox (KHÔNG phải hàng "icebox" ---
+   * tự mang điểm bên dưới trong `debtRows` — ba mã dưới đây là DIAGNOSTIC do
+   * `validateGraph` sinh ra khi một bản ghi icebox tự nó SAI, khác hẳn hàng
+   * "icebox" trong bảng nợ vốn không tra SCORES). ------------------------- */
+  // Bản sao của `knowledge/claim-missing-promoted-fact` (cũng 3/5): sổ nói
+  // "đã thành T-042" mà T-042 không tồn tại ⇒ một quyết định đã ghi đang trỏ
+  // vào hư không. Sửa = trỏ lại đúng id hoặc gỡ `promoted_to`.
+  "icebox/promoted-missing-task": { weight: 3, ease: 5 },
+  // Không sai lệch gì, chỉ nhắc một quyết định tới hạn xem lại — hạng "chỉ là
+  // thông tin". ease 3 chứ không 5: đóng nó là một lệnh, nhưng cái phải trả
+  // là một QUYẾT ĐỊNH, không phải một dòng YAML.
+  "icebox/review-overdue": { weight: 1, ease: 3 },
+  // Chấm theo hậu quả, không theo họ hàng (đúng lối lập luận đã ghi cho
+  // `spine/decision-cycle`). Anh em gần nhất `scope/module-without-scope` là
+  // 1/5, nhưng hậu quả khác hẳn: khối không khai scope vẫn nằm trên sơ đồ;
+  // mục icebox không khai scope RƠI KHỎI bảng `ganas debt` mặc định của MỌI
+  // task và khỏi báo cáo sau commit — chỉ còn thấy dưới `--all`. Đó là im
+  // lặng biến mất khỏi chỗ người thật sự nhìn.
+  "icebox/without-scope": { weight: 3, ease: 5 },
   /* --- computeDebt: nợ riêng của sơ đồ khối (DebtKind, không có "/") ------ */
   // Cạnh `depends_on` không cạnh contract nào kiểm — sơ đồ TRÔNG như đã nối
   // nhưng chưa ai kiểm tương thích thật.
@@ -37259,7 +37407,20 @@ function scoreOf(code) {
   );
 }
 function rowMessage(row) {
-  return row.source.origin === "diagnostic" ? row.source.diagnostic.message : row.source.item.message;
+  switch (row.source.origin) {
+    case "diagnostic":
+      return row.source.diagnostic.message;
+    case "debt-item":
+      return row.source.item.message;
+    case "icebox": {
+      const i = row.source.item;
+      return `${i.id} \u2014 ${i.title}`;
+    }
+    default: {
+      const _exhaustive = row.source;
+      throw new Error(`rowMessage: origin l\u1EA1 ${JSON.stringify(_exhaustive)}`);
+    }
+  }
 }
 function compareRows(a, b) {
   if (b.total !== a.total) return b.total - a.total;
@@ -37277,6 +37438,9 @@ function scopeIndex(graph) {
   }
   for (const fact of graph.facts.values()) index.set(fact.file, fact.value.scope);
   for (const claim of graph.claims.values()) index.set(claim.file, claim.value.scope);
+  for (const i of graph.icebox.values()) {
+    if (i.value.scope !== void 0) index.set(i.file, i.value.scope);
+  }
   return index;
 }
 function scopeOfDebtItem(item, graph) {
@@ -37306,6 +37470,26 @@ function debtRows(diagnostics, items, graph) {
       severity: void 0,
       scopeId: scopeOfDebtItem(item, graph),
       source: { origin: "debt-item", item }
+    });
+  }
+  for (const s of graph.icebox.values()) {
+    const i = s.value;
+    if (i.status !== "open") continue;
+    rows.push({
+      // "icebox", KHÔNG có dấu "/": cùng quy ước với ba DebtKind tĩnh
+      // ("uncovered-edge", "broken-contract", "unverified-module"). Có dấu
+      // "/" thì một ngày nào đó code này sẽ vô tình khớp namespace trong
+      // NAMESPACE_DEFAULTS (vd nếu ai đó lỡ đặt "icebox/xxx") và bị chấm điểm
+      // sai qua fallback thay vì qua chính bản ghi — cố tình tránh cả khả
+      // năng đó bằng cách không có "/" ngay từ đầu.
+      code: "icebox",
+      // Điểm của CHÍNH bản ghi, KHÔNG qua `scoreOf`/`SCORES` — icebox tự
+      // mang điểm của nó lúc phát hiện, không phải một luật tĩnh tra bảng.
+      score: { weight: i.weight, ease: i.ease },
+      total: i.weight + i.ease,
+      severity: void 0,
+      scopeId: i.scope,
+      source: { origin: "icebox", item: i, file: s.file }
     });
   }
   return rows.sort(compareRows);
@@ -37542,7 +37726,8 @@ function findCycle(edges) {
   }
   return null;
 }
-function validateGraph(graph) {
+function validateGraph(graph, opts = {}) {
+  const now = opts.now ?? Date.now();
   const diags = [...graph.loadDiagnostics];
   for (const design of graph.designs.values()) {
     const d = design.value;
@@ -38069,6 +38254,43 @@ function validateGraph(graph) {
       });
     }
   }
+  for (const item of graph.icebox.values()) {
+    const i = item.value;
+    if (i.promoted_to && !graph.tasks.has(i.promoted_to)) {
+      diags.push({
+        severity: "error",
+        code: "icebox/promoted-missing-task",
+        message: `icebox ${i.id} khai \u0111\xE3 th\u0103ng c\u1EA5p th\xE0nh task ${i.promoted_to} nh\u01B0ng task \u0111\xF3 kh\xF4ng t\u1ED3n t\u1EA1i`,
+        file: item.file,
+        line: at(graph, item, "promoted_to"),
+        hint: `S\u1EEDa \`promoted_to\` tr\u1ECF \u0111\xFAng id, ho\u1EB7c g\u1EE1 n\xF3 n\u1EBFu ch\u01B0a th\u1EADt s\u1EF1 th\u0103ng c\u1EA5p.`
+      });
+    }
+    if (i.status !== "open") continue;
+    const foundAtMs = Date.parse(i.found_at);
+    const reviewAfterMs = i.review_after_days * 24 * 60 * 60 * 1e3;
+    if (foundAtMs + reviewAfterMs <= now) {
+      const daysSince = Math.floor((now - foundAtMs) / (24 * 60 * 60 * 1e3));
+      diags.push({
+        severity: "warning",
+        code: "icebox/review-overdue",
+        message: `icebox ${i.id} qu\xE1 h\u1EA1n xem l\u1EA1i: ph\xE1t hi\u1EC7n ${daysSince} ng\xE0y tr\u01B0\u1EDBc, h\u1EB9n xem l\u1EA1i sau ${i.review_after_days} ng\xE0y`,
+        file: item.file,
+        line: at(graph, item, "review_after_days"),
+        hint: `Xem l\u1EA1i quy\u1EBFt \u0111\u1ECBnh ho\xE3n: \u0111\xF3ng n\xF3 (status: closed + closed_reason), th\u0103ng c\u1EA5p th\xE0nh task (status: promoted + promoted_to), ho\u1EB7c n\u1EBFu v\u1EABn c\u1ED1 t\xECnh ho\xE3n ti\u1EBFp th\xEC d\u1EDDi found_at/review_after_days \u2014 \u0111\u1EEBng \u0111\u1EC3 n\xF3 n\u1EB1m im qu\xE1 h\u1EA1n kh\xF4ng ai \u0111\u1ECDc.`
+      });
+    }
+    if (i.scope === void 0) {
+      diags.push({
+        severity: "warning",
+        code: "icebox/without-scope",
+        message: `icebox ${i.id} \u0111ang open nh\u01B0ng kh\xF4ng khai \`scope\` \u2014 s\u1EBD r\u01A1i kh\u1ECFi b\u1EA3ng \`ganas debt\` m\u1EB7c \u0111\u1ECBnh c\u1EE7a m\u1ECDi task`,
+        file: item.file,
+        line: at(graph, item, "id"),
+        hint: `Th\xEAm \`scope: <id-ph\u1EA1m-vi>\` n\u1EBFu \u0111\xE3 bi\u1EBFt thu\u1ED9c ph\u1EA1m vi n\xE0o. Thi\u1EBFu n\xF3, m\u1EE5c n\xE0y ch\u1EC9 c\xF2n th\u1EA5y \u0111\u01B0\u1EE3c d\u01B0\u1EDBi \`ganas debt --all\`, kh\xF4ng n\u1EB1m trong b\xE1o c\xE1o sau commit c\u1EE7a ai c\u1EA3.`
+      });
+    }
+  }
   const corrupt = ledgerCorruption(graph.root);
   if (corrupt > 0) {
     diags.push({
@@ -38107,6 +38329,7 @@ function validateGraph(graph) {
 }
 
 // src/commands/debt.ts
+init_anchor();
 init_state();
 init_errors2();
 var COMMIT_LIMIT = 8;
@@ -38114,14 +38337,24 @@ function buildDebtRows(graph, checks) {
   return debtRows(validateGraph(graph), computeDebt(graph, checks), graph);
 }
 function rowLocation(row) {
-  if (row.source.origin === "diagnostic") {
-    const d = row.source.diagnostic;
-    return d.line !== void 0 ? `${d.file}:${d.line}` : d.file;
+  switch (row.source.origin) {
+    case "diagnostic": {
+      const d = row.source.diagnostic;
+      return d.line !== void 0 ? `${d.file}:${d.line}` : d.file;
+    }
+    case "debt-item": {
+      const item = row.source.item;
+      if (item.moduleId !== void 0) return item.moduleId;
+      if (item.edge !== void 0) return `${item.edge.from} \u2192 ${item.edge.to}`;
+      return "";
+    }
+    case "icebox":
+      return formatAnchor(row.source.item.anchors[0]);
+    default: {
+      const _exhaustive = row.source;
+      throw new Error(`rowLocation: origin l\u1EA1 ${JSON.stringify(_exhaustive)}`);
+    }
   }
-  const item = row.source.item;
-  if (item.moduleId !== void 0) return item.moduleId;
-  if (item.edge !== void 0) return `${item.edge.from} \u2192 ${item.edge.to}`;
-  return "";
 }
 var CODE_WIDTH = 28;
 function renderRow(row) {
@@ -38774,7 +39007,7 @@ C\xF2n ${result.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\x
 
 // src/graph/claim.ts
 init_paths();
-import { mkdir as mkdir3, open, readdir as readdir3, readFile as readFile9, rm as rm3 } from "node:fs/promises";
+import { mkdir as mkdir3, open, readdir as readdir3, readFile as readFile9, rm as rm3, stat as stat2 } from "node:fs/promises";
 import { dirname as dirname4 } from "node:path";
 function claimFile(root, taskId) {
   return ganasPath(root, DIRS.locks, `${taskId}.claim`);
@@ -38784,9 +39017,9 @@ function isStale(claim, ttlMinutes) {
   if (Number.isNaN(claimedAt)) return true;
   return Date.now() - claimedAt > ttlMinutes * 6e4;
 }
-async function claimOwner(root, taskId) {
+async function readClaimFile(file) {
   try {
-    const raw = await readFile9(claimFile(root, taskId), "utf8");
+    const raw = await readFile9(file, "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -38806,17 +39039,19 @@ async function createClaimFile(file, claim) {
     throw err;
   }
 }
-async function claimTask(root, taskId, sessionId, ttlMinutes) {
-  const file = claimFile(root, taskId);
+async function acquireLock(file, sessionId, ttlMinutes, sameSessionKeeps) {
   await mkdir3(dirname4(file), { recursive: true });
   const claim = { session_id: sessionId, claimed_at: (/* @__PURE__ */ new Date()).toISOString() };
   if (await createClaimFile(file, claim)) return true;
-  const existing = await claimOwner(root, taskId);
+  const existing = await readClaimFile(file);
   if (!existing) return createClaimFile(file, claim);
-  if (existing.session_id === sessionId) return true;
+  if (existing.session_id === sessionId && sameSessionKeeps) return true;
   if (!isStale(existing, ttlMinutes)) return false;
   await rm3(file, { force: true });
   return createClaimFile(file, claim);
+}
+async function claimTask(root, taskId, sessionId, ttlMinutes) {
+  return acquireLock(claimFile(root, taskId), sessionId, ttlMinutes, true);
 }
 async function claimNextTask(graph, root, sessionId, opts = {}) {
   const ttlMinutes = graph.config.claim.ttl_minutes;
@@ -38827,9 +39062,98 @@ async function claimNextTask(graph, root, sessionId, opts = {}) {
 }
 
 // src/render/brief.ts
+init_freshness();
 import { existsSync as existsSync8 } from "node:fs";
 import { join as join9 } from "node:path";
 init_model();
+
+// src/search.ts
+var COMBINING_MARKS = new RegExp("\\p{M}", "gu");
+var D_WITH_STROKE = /đ/g;
+var D_WITH_STROKE_UPPER = /Đ/g;
+var COMPOUND = /[a-z0-9]+(?:[-_./][a-z0-9]+)*/g;
+var SEPARATOR = /[-_./]/;
+var MIN_TOKEN_LEN = 2;
+function tokenize(text) {
+  const normalized = text.toLowerCase().replace(D_WITH_STROKE, "d").replace(D_WITH_STROKE_UPPER, "d").normalize("NFD").replace(COMBINING_MARKS, "");
+  const tokens = [];
+  for (const compound of normalized.match(COMPOUND) ?? []) {
+    if (compound.length >= MIN_TOKEN_LEN) tokens.push(compound);
+    if (SEPARATOR.test(compound)) {
+      for (const frag of compound.split(SEPARATOR)) {
+        if (frag.length >= MIN_TOKEN_LEN) tokens.push(frag);
+      }
+    }
+  }
+  return tokens;
+}
+function factDocument(fact) {
+  const parts = [fact.statement, fact.notes ?? "", fact.verify.run, ...fact.depends_on];
+  return parts.join(" \n ");
+}
+var K1 = 1.2;
+var B = 0.75;
+function buildDoc(factId, fact, file) {
+  const tokens = tokenize(factDocument(fact));
+  const termFreq = /* @__PURE__ */ new Map();
+  for (const t of tokens) termFreq.set(t, (termFreq.get(t) ?? 0) + 1);
+  return { factId, fact, file, termFreq, length: tokens.length };
+}
+function idf(df, n) {
+  return Math.log(1 + (n - df + 0.5) / (df + 0.5));
+}
+var DEFAULT_LIMIT = 10;
+var DEFAULT_MIN_MATCHED_TERMS = 2;
+function searchFacts(graph, query, opts = {}) {
+  const limit = opts.limit ?? DEFAULT_LIMIT;
+  const exclude = new Set(opts.exclude ?? []);
+  const docs = [];
+  for (const [factId, sourced] of graph.facts) {
+    if (exclude.has(factId)) continue;
+    if (opts.scope !== void 0 && sourced.value.scope !== opts.scope) continue;
+    docs.push(buildDoc(factId, sourced.value, sourced.file));
+  }
+  if (docs.length === 0) return [];
+  const queryTerms = [...new Set(tokenize(query))];
+  if (queryTerms.length === 0) return [];
+  const minMatched = opts.minMatchedTerms ?? (queryTerms.length === 1 ? 1 : DEFAULT_MIN_MATCHED_TERMS);
+  const n = docs.length;
+  const avgLength = docs.reduce((sum, d) => sum + d.length, 0) / n;
+  const df = /* @__PURE__ */ new Map();
+  for (const term of queryTerms) {
+    let count = 0;
+    for (const doc of docs) if (doc.termFreq.has(term)) count++;
+    df.set(term, count);
+  }
+  const hits = [];
+  for (const doc of docs) {
+    let score = 0;
+    const matchedTerms = [];
+    for (const term of queryTerms) {
+      const f = doc.termFreq.get(term) ?? 0;
+      if (f === 0) continue;
+      matchedTerms.push(term);
+      const termIdf = idf(df.get(term), n);
+      const denom = f + K1 * (1 - B + B * (doc.length / (avgLength || 1)));
+      score += termIdf * (f * (K1 + 1) / denom);
+    }
+    if (matchedTerms.length < minMatched) continue;
+    hits.push({ factId: doc.factId, score, matchedTerms, fact: doc.fact, file: doc.file });
+  }
+  hits.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.factId < b.factId ? -1 : a.factId > b.factId ? 1 : 0;
+  });
+  return hits.slice(0, limit);
+}
+function taskQuery(task) {
+  const parts = [
+    task.title,
+    ...task.context_contract.must_read.map((m) => m.path),
+    ...task.context_contract.open_questions
+  ];
+  return parts.join(" \n ");
+}
 
 // src/render/group.ts
 function renderGroupedByScope(graph, items, taskOf, renderTask) {
@@ -38887,6 +39211,54 @@ function relevantLegacyClaims(graph, task) {
 }
 function bullet(lines) {
   return lines.map((l) => `- ${l}`).join("\n");
+}
+function truncateStatement(s, max = 90) {
+  return s.length > max ? `${s.slice(0, max).trimEnd()}\u2026` : s;
+}
+var SUGGESTED_FACTS_LIMIT = 3;
+function suggestedFactsSection(graph, freshness, t) {
+  const hits = searchFacts(graph, taskQuery(t), {
+    scope: t.scope,
+    exclude: t.context_contract.facts,
+    limit: Number.MAX_SAFE_INTEGER
+  });
+  if (hits.length === 0) return "";
+  const shown = hits.slice(0, SUGGESTED_FACTS_LIMIT);
+  const omitted = hits.length - shown.length;
+  const lines = shown.map((h) => {
+    const mark = freshnessMark(freshness.get(h.factId));
+    return `${mark} \`${h.factId}\` \u2014 ${truncateStatement(h.fact.statement)}`;
+  });
+  const note = omitted > 0 ? `
+
+\u2026 c\xF2n ${omitted} fact kh\xE1c kh\u1EDBp, ch\u01B0a in \u2014 d\xF9ng \`ganas search --task ${t.id}\` \u0111\u1EC3 xem h\u1EBFt.` : "";
+  return `## C\xF3 th\u1EC3 li\xEAn quan \u2014 g\u1EE3i \xFD t\u1EF1 \u0111\u1ED9ng, CH\u01AFA ai x\xE1c nh\u1EADn
+
+M\xE1y kh\u1EDBp CH\u1EEE (BM25) tr\xEAn fact c\xF9ng ph\u1EA1m vi m\xE0 task kh\xF4ng khai tay. Kh\xE1c m\u1EE5c "Tri th\u1EE9c d\xF9ng \u0111\u01B0\u1EE3c" \u1EDF tr\xEAn: \u1EDF \u0111\xF3 c\xF3 ng\u01B0\u1EDDi x\xE1c nh\u1EADn l\xE0 li\xEAn quan, \u1EDF \u0111\xE2y th\xEC kh\xF4ng \u2014 ki\u1EC3m (\`ganas verify <id>\`) tr\u01B0\u1EDBc khi d\u1EF1a v\xE0o:
+
+` + bullet(lines) + note;
+}
+var ICEBOX_OVERDUE_LIMIT = 3;
+var DAY_MS = 24 * 60 * 60 * 1e3;
+function overdueIceboxSection(graph, t, now) {
+  const overdue = [...graph.icebox.values()].map((s) => s.value).filter((i) => i.status === "open" && i.scope === t.scope).map((i) => {
+    const dueAt = Date.parse(i.found_at) + i.review_after_days * DAY_MS;
+    return { i, overdueDays: Math.floor((now - dueAt) / DAY_MS) };
+  }).filter((x) => x.overdueDays > 0).sort((a, b) => b.overdueDays - a.overdueDays || a.i.id.localeCompare(b.i.id));
+  if (overdue.length === 0) return "";
+  const shown = overdue.slice(0, ICEBOX_OVERDUE_LIMIT);
+  const omitted = overdue.length - shown.length;
+  const lines = shown.map(
+    ({ i, overdueDays }) => `\`${i.id}\` \u2014 ${i.title} \u2014 qu\xE1 h\u1EA1n xem l\u1EA1i ${overdueDays} ng\xE0y \u2014 t\u1ED5ng \u0111i\u1EC3m ${i.weight + i.ease}`
+  );
+  const note = omitted > 0 ? `
+
+\u2026 c\xF2n ${omitted} m\u1EE5c icebox qu\xE1 h\u1EA1n kh\xE1c, ch\u01B0a in \u2014 d\xF9ng \`ganas icebox review\` \u0111\u1EC3 xem h\u1EBFt.` : "";
+  return `## Icebox qu\xE1 h\u1EA1n xem l\u1EA1i
+
+\u0110\xE2y l\xE0 vi\u1EC7c **\u0111\xE3 c\xF3 ng\u01B0\u1EDDi quy\u1EBFt \u0111\u1ECBnh ho\xE3n**, kh\xF4ng ph\u1EA3i vi\u1EC7c ph\u1EA3i l\xE0m b\xE2y gi\u1EDD. M\u1ED1c h\u1EB9n xem l\u1EA1i quy\u1EBFt \u0111\u1ECBnh \u0111\xF3 \u0111\xE3 qua \u2014 kh\xF4ng t\u1EF1 \xFD l\xE0m, c\u0169ng kh\xF4ng t\u1EF1 \xFD b\u1ECF; x\xE1c nh\u1EADn l\u1EA1i l\xFD do ho\xE3n (\`why_deferred\`) c\xF2n \u0111\xFAng kh\xF4ng, qua \`ganas icebox review\` (in k\xE8m anchor t\u1EDBi code) ho\u1EB7c \u0111\u1ECDc th\u1EB3ng file trong \`.ganas/icebox/\`:
+
+` + bullet(lines) + note;
 }
 function findSupersededBy(graph, designId) {
   for (const sourced of graph.designs.values()) {
@@ -38961,6 +39333,7 @@ Ch\u1EA5m t\u1EEBng c\xE1i b\u1EB1ng \`ganas gate <id>\` sau khi sub-agent t\u01
 }
 function renderBrief(input) {
   const { graph, task: sourced, freshness } = input;
+  const now = input.now ?? Date.now();
   const t = sourced.value;
   const parts = [];
   const design = graph.designs.get(t.implements);
@@ -39172,6 +39545,8 @@ Ch\xFAng kh\xF4ng sai \u2014 ch\u1EC9 l\xE0 ch\u01B0a ai ki\u1EC3m r\u1EB1ng ch\
 ` + bullet(outOfScope)
     );
   }
+  const suggested = suggestedFactsSection(graph, freshness, t);
+  if (suggested) parts.push(suggested);
   const legacy = relevantLegacyClaims(graph, t);
   const totalUnverifiedLegacy = [...graph.claims.values()].filter(
     (c) => c.value.provenance === "imported" && c.value.trust === "unverified"
@@ -39257,6 +39632,8 @@ ${gateNote}
 C\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn (kh\xF4ng ch\u1EB7n phi\xEAn, nh\u01B0ng ch\u1EB7n vi\u1EC7c \u0111\xE1nh d\u1EA5u task done):
 ` + bullet(manual) : "")
   );
+  const icebox = overdueIceboxSection(graph, t, now);
+  if (icebox) parts.push(icebox);
   parts.push(RULE_REMINDER);
   const stable = parts.join("\n\n");
   if (stable.length > BRIEF_LENGTH_WARNING_CHARS) {

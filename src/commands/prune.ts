@@ -22,6 +22,10 @@ function summarize(plan: PrunePlan): string {
     lines.push(`${plan.doneTasks.length} task done sẽ chuyển sang tasks/done/:`);
     for (const t of plan.doneTasks) lines.push(`  - ${t.id} (${t.file})`);
   }
+  if (plan.iceboxFiles.length > 0) {
+    lines.push(`${plan.iceboxFiles.length} file icebox đã đóng hết sẽ chuyển sang icebox/closed/:`);
+    for (const f of plan.iceboxFiles) lines.push(`  - ${f.month} (${f.ageDays} ngày, ${f.file})`);
+  }
 
   return lines.join("\n");
 }
@@ -36,7 +40,8 @@ export async function run(argv: Argv): Promise<number> {
   }
 
   const plan = await planPrune(root, graph, { olderThanDays });
-  const total = plan.staleRuns.length + plan.deadSessions.length + plan.doneTasks.length;
+  const total =
+    plan.staleRuns.length + plan.deadSessions.length + plan.doneTasks.length + plan.iceboxFiles.length;
 
   const apply = flag(argv, "yes", "y");
 

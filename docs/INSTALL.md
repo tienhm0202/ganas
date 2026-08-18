@@ -48,8 +48,8 @@ Output thật:
 ✔ Successfully installed plugin: ganas@ganas (scope: project)
 ```
 
-Claude Code đã có sẵn 9 skill (`commit`, `gate`, `handoff`, `next`,
-`plan-to-tasks`, `prune`, `scope`, `trace`, `verify`) và hook cưỡng chế thật —
+Claude Code đã có sẵn 10 skill (`commit`, `gate`, `handoff`, `icebox`,
+`next`, `plan-to-tasks`, `prune`, `scope`, `trace`, `verify`) và hook cưỡng chế thật —
 **không cần** cấu hình thêm MCP client trong chính Claude Code, MCP server ở
 mục 2 là cho editor khác.
 
@@ -82,7 +82,7 @@ claude plugin details ganas@ganas
 ```
 ganas 0.0.1
   Component inventory
-    Skills (9)  commit, gate, handoff, next, plan-to-tasks, prune, scope, trace, verify
+    Skills (10) commit, gate, handoff, icebox, next, plan-to-tasks, prune, scope, trace, verify
     Agents (0)
     Hooks (6)  SessionStart, PreToolUse, PostToolUse, Stop, PreCompact, SessionEnd
   Projected token cost
@@ -249,12 +249,12 @@ node node_modules/ganas/scripts/install-target.mjs --windsurf
 Output thật (`--claude-code`):
 
 ```
-✓ Claude Code: 6 hook mới trong .claude/settings.json, 9 skill ghi vào .claude/skills
+✓ Claude Code: 6 hook mới trong .claude/settings.json, 10 skill ghi vào .claude/skills
 ```
 
 `--claude-code` ghi hook vào `.claude/settings.json` — đọc thẳng
 `plugin/hooks/hooks.json` làm nguồn (luôn khớp đúng 6 hook thật, không chép
-tay ra một chỗ khác dễ trôi dạt) — và copy 9 skill vào `.claude/skills/`,
+tay ra một chỗ khác dễ trôi dạt) — và copy 10 skill vào `.claude/skills/`,
 thay `${CLAUDE_PLUGIN_ROOT}` bằng đường dẫn tương đối
 `node_modules/ganas/plugin`. `--zed`/`--cursor` ghi MCP config
 **project-local** (`.zed/settings.json`, `.cursor/mcp.json`). `--windsurf`
@@ -317,7 +317,7 @@ trong git" lấy "cài xong là chạy".
 
 Trước P2 N30 thì không như vậy: `bin/ganas.mjs` nạp `../../dist/cli.js` (ngoài
 plugin) và `dist/` nằm trong `.gitignore`. Cài qua marketplace thì Claude Code
-báo *Successfully installed*, `plugin details` liệt kê đủ 9 skill và 6 hook, và
+báo *Successfully installed*, `plugin details` liệt kê đủ 10 skill và 6 hook, và
 **ganas im lặng không làm gì** — hook fail-open nên không lỗi nào nổi lên.
 
 Đó là chế độ hỏng tệ nhất có thể cho một công cụ mà toàn bộ giá trị là cưỡng

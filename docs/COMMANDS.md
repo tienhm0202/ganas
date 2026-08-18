@@ -261,14 +261,38 @@ trỏ sang `ganas scope new`, nơi id được suy từ tiêu đề.
 | `--group <nhóm>` | **Bắt buộc** khi `<loại>` là `fact` — id fact có thêm đoạn nhóm ở giữa (`F-<NHÓM>-003`), phải khớp `^[A-Z0-9]+$`. |
 | `--json` | Xuất `{ kind, group?, ids: [...] }`. |
 
-**Giới hạn đã biết — chỉ là GỢI Ý, không phải KHOÁ.** Lệnh này không ghi file
-nào cả, chỉ tính số lớn nhất đang dùng trong graph rồi +1 và in ra; việc ghi
-file task/fact/... do agent tự làm bằng công cụ Write. `ganas scope new`
-chống trùng id bằng cách ghi file với cờ `wx` (từ chối ghi đè nếu đã tồn tại);
-`ganas id` không có lớp đó. Hai phiên gọi `ganas id task` gần như đồng thời sẽ
-nhận **cùng một số** — phiên ghi file sau sẽ **ghi đè âm thầm** lên file của
-phiên trước, và luật `load/duplicate-id` không bắt được vì trên đĩa rốt cuộc
-chỉ còn một file. Đừng dựa vào lệnh này để chống đua giữa các phiên song song.
+**Chống đua bằng đặt chỗ.** Id chỉ ra khỏi lệnh này khi phiên gọi đã thật sự
+giữ được chỗ cho nó: mỗi số ứng viên đi qua `reserveId()`
+(`src/graph/claim.ts`), tạo file `.ganas/.locks/<id>.id` bằng `open(file,
+"wx")` — nguyên tử ở tầng filesystem, hai tiến trình gọi cùng lúc thì hệ điều
+hành đảm bảo chỉ một cái thắng. Ứng viên đang bị phiên khác giữ thì bị **nhảy
+qua**, không cấp lại. Vì vậy hai phiên gọi `ganas id task` đồng thời nhận **hai
+số khác nhau**; lỗ hổng số ở giữa là chấp nhận được và không được lấp.
+
+Đặt chỗ hết hạn theo `claim.ttl_minutes` (mặc định 240 phút, dùng chung với
+claim task), và được dọn lúc `SessionEnd` cho đúng phiên đã giữ. Khác `ganas
+next`: cùng một phiên gọi lại **không** nhận lại id cũ — claim task là quyền
+sở hữu một thứ đã tồn tại, còn đặt chỗ id là tiêu thụ một con số, cấp lại cho
+ai thì cũng là cấp trùng.
+
+**Hai giới hạn còn lại, phải biết:**
+
+1. `.ganas/.locks/` nằm trong `LOCAL_ONLY` — không commit, không đồng bộ qua
+   git. Lớp này **chỉ** chống đua giữa các phiên trên **cùng một máy**.
+2. Lệnh này vẫn không ghi file thực thể hộ bạn; việc đó do agent tự làm bằng
+   Write. Chỗ hở đó do lớp thứ hai lo: hook `PreToolUse` từ chối `Write` ghi đè
+   lên file thực thể `.ganas/` **đã tồn tại** (dùng `Edit` để sửa file có sẵn).
+   Hàng rào đó chỉ có hiệu lực khi plugin ganas được cài trong Claude Code —
+   gọi `ganas` trần từ terminal thì không có hook nào chặn.
+
+**Id đã khai trên đĩa nhưng graph không thấy vẫn tính là ĐÃ DÙNG.** Số kế tiếp
+không chỉ tính trên id đã qua được zod (`graph.tasks`/`graph.facts`/...) — id
+khai trong một file **hỏng schema** (vẫn đọc được YAML nhưng thiếu trường bắt
+buộc) hoặc **hỏng cú pháp YAML** (không parse được) cũng được gộp vào, nên lệnh
+không cấp lại đúng id đang nằm trên đĩa. Không có lớp này thì một file hỏng sẽ
+khiến id của nó vô hình với bộ cấp số — lệnh cấp lại id đó, agent ghi vào bị
+hook `PreToolUse` từ chối (file đã tồn tại), chạy lại `ganas id` vẫn ra id cũ:
+kẹt vòng lặp không lối ra.
 
 **Mã thoát:** `0` khi cấp được id; `1` (`GanasError`) nếu thiếu `<loại>`,
 loại không tồn tại, loại là slug (`module`/`scope`/`verification`), `fact`
@@ -486,6 +510,189 @@ trace`, vốn trả `1` khi còn nợ). Lỗi (`1`, `GanasError`) nếu không x
 ganas debt                    # nợ trong phạm vi task đang làm
 ganas debt --all              # toàn dự án
 ganas debt --json | jq '.rows[0]'
+```
+
+### `ganas icebox [add|list|review|close|promote]`
+
+Sổ **việc đã quyết CHƯA làm** (`src/model/icebox.ts`) — đối lập có chủ đích với
+`Task`: `Task` đã quyết LÀM (có `exit_contract`, được `candidates()` chọn cho
+một phiên), icebox là một phát hiện giữa phiên đã chấm điểm hai trục
+(`weight`/`ease`, cùng thang `ganas debt`) nhưng chưa tới lượt làm. Mỗi bản
+ghi bắt buộc có điểm số, lý do hoãn (`why_deferred`), và ngày xem lại
+(`found_at` + `review_after_days`) — ba thứ phân biệt "hoãn có ý thức" với
+"quên mất". Ghi vào `.ganas/icebox/<YYYY-MM>.yaml`, một file mảng theo tháng
+(cùng khuôn `facts/`, `claims/`, `decisions/`).
+
+#### `ganas icebox add`
+
+Ghi một mục mới vào file tháng hiện tại (tạo file nếu chưa có). Id đặt chỗ
+qua `reserveId()` (`src/graph/claim.ts`) — cùng cơ chế nguyên tử `ganas id`
+dùng, không bịa tay. Ghi bằng `parseDocument` + `addIn` nên **comment sẵn có
+trong file được giữ nguyên**.
+
+**Khoá quanh lượt đọc-sửa-ghi.** `reserveId` chỉ bảo vệ CON SỐ, không bảo vệ
+FILE — hai lượt `add` gần như đồng thời vào CÙNG tháng vẫn có thể cùng đọc
+một nội dung rồi cùng ghi đè, một mục biến mất không tiếng động. `withFileLock`
+(`src/graph/claim.ts`, sinh cho lệnh này) khoá mutex quanh trọn lượt đọc-sửa-ghi,
+TTL tính bằng **mili giây** (không phải phút như `claim.ttl_minutes`) vì khoá
+chỉ cần sống qua đúng một lượt ghi, và giải phóng trong `finally`.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--title <chuỗi>` | **Bắt buộc.** Tiêu đề ngắn. |
+| `--weight <1-5>` | **Bắt buộc.** Quan trọng đến đâu nếu bỏ qua — cùng thang `ganas debt`. |
+| `--ease <1-5>` | **Bắt buộc.** Dễ sửa đến đâu — cùng thang `ganas debt`. |
+| `--why <chuỗi>` | **Bắt buộc.** Vì sao hoãn. Ghi nửa vời quay lại đúng bệnh "nằm trong chat mà không ai tìm được". |
+| `--anchor <chuỗi>` | **Bắt buộc, lặp lại được** (`--anchor A --anchor B`). Bằng chứng cho phát hiện — ít nhất một. |
+| `--scope <P-...>` | Phạm vi công việc, nếu đã biết. Thiếu thì luật `icebox/without-scope` sẽ nhắc. |
+| `--review-after <n>` | Số ngày trước khi tính là quá hạn xem lại. Mặc định `30`. |
+| `--json` | Xuất `{ id, file }`. |
+
+**Mã thoát:** `0` nếu ghi được; `1` (`GanasError`) nếu thiếu một trong năm
+tuỳ chọn bắt buộc, `--weight`/`--ease` ngoài thang 1-5, hoặc `--review-after`
+không phải số nguyên ≥1.
+
+#### `ganas icebox list`
+
+Liệt kê. Mặc định lọc theo phạm vi của task đang claim — **cùng logic và
+cùng thông điệp lỗi** với `ganas debt` khi không xác định được task đang làm
+(`scopeFromClaimedTask()`, dùng chung giữa hai lệnh: một quy tắc trong repo,
+không phải hai bản có thể trôi khỏi nhau). `--all` bỏ lọc.
+
+Mặc định chỉ mục `status: open`; `--closed` in cả mục đã đóng/đã thăng cấp
+(đây là nơi `closed_reason` được đọc, cho mục `closed`).
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--all` | Bỏ lọc phạm vi. |
+| `--closed` | In cả mục `closed`/`promoted`, không chỉ `open`. |
+| `--json` | Xuất `{ scope, closed, total, rows }`. |
+
+**Mã thoát:** `0`; lỗi (`1`, `GanasError`) nếu không xác định được task đang
+làm mà thiếu `--all`.
+
+#### `ganas icebox review`
+
+Mục `open` **đã quá hạn xem lại** (`found_at + review_after_days < now`).
+`--older-than N` ghi đè ngưỡng cho lượt quét ad-hoc bằng một số ngày cố định
+thay cho `review_after_days` riêng của từng mục — cùng tên và cùng nghĩa cờ
+với `ganas prune`.
+
+Mỗi mục in: số ngày quá hạn, `weight + ease`, **`why_deferred`** (điểm mấu
+chốt của lệnh này — lý do hoãn, thứ `ganas icebox list` không in), anchors,
+và hai lệnh bấm được (`ganas icebox close`, `ganas icebox promote`).
+**Không sửa gì cả** — quá hạn là ĐỀ XUẤT xem lại, người bấm mới là hành động.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--older-than <ngày>` | Ghi đè `review_after_days` bằng một ngưỡng chung cho lượt quét này. |
+| `--json` | Xuất `{ olderThan, total, rows }` — mỗi row là icebox kèm `overdue_days`. |
+
+**Mã thoát:** luôn `0` — đây là báo cáo, không phải cổng. Lỗi (`1`,
+`GanasError`) nếu `--older-than` không phải số ngày hợp lệ.
+
+#### `ganas icebox close <ICE-id>`
+
+Đặt `status: closed` + `closed_at` + `closed_reason`, giữ nguyên comment
+(cùng kỹ thuật `add`). **Không dry-run** — khác `ganas prune` (mặc định
+dry-run vì nó đụng NHIỀU thứ do máy chọn trong một lượt): `close` đụng ĐÚNG
+MỘT id do người gõ, kèm lý do bắt buộc, nên không cần bước xem trước.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--reason <chuỗi>` | **Bắt buộc.** Vì sao đóng — thiếu thì phiên sau đề xuất lại đúng thứ vừa bị loại. |
+
+**Mã thoát:** `0` nếu đóng được; `1` (`GanasError`) nếu thiếu `<ICE-id>`, id
+không tồn tại, hoặc thiếu `--reason`.
+
+#### `ganas icebox promote <ICE-id>`
+
+**Không tạo Task hộ.** Thiếu `--task`: in khung YAML dán được (title từ mục,
+`context_contract.must_read` suy từ `anchors`, `scope` nếu có), để trống
+`serves`/`implements`/`exit_contract` kèm chú thích (đó là thứ chỉ người
+quyết được), gợi `ganas id task`, rồi thoát mã `1`.
+
+Có `--task T-042`: kiểm `graph.tasks.has(...)` — task sai schema thì không
+vào graph nên tự động bị từ chối (cưỡng chế miễn phí, không validate lại
+tay); kiểm `scope` khớp khi cả hai cùng khai; rồi đặt `status: promoted` +
+`promoted_to` + `closed_at`.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--task <T-id>` | Task đích. Thiếu thì in khung dán được thay vì ghi. |
+
+**Mã thoát:** `0` nếu thăng cấp được; `1` (`GanasError`) nếu thiếu `<ICE-id>`,
+id không tồn tại, `--task` trỏ task không tồn tại, hoặc `scope` hai bên lệch
+nhau; `1` (không phải lỗi) khi thiếu `--task` — đã in khung, chờ người điền.
+
+**Ví dụ:**
+```
+ganas icebox add --title "Cache miss khi restart" --weight 3 --ease 4 \
+  --why "chưa gấp, chờ đo lại sau khi tối ưu DB" --anchor src/cache.ts:88
+ganas icebox list                       # phạm vi task đang làm
+ganas icebox list --all --closed --json
+ganas icebox review                     # mục quá hạn xem lại
+ganas icebox review --older-than 14
+ganas icebox close ICE-003 --reason "không còn cần nữa, đã đổi thiết kế"
+ganas icebox promote ICE-004            # in khung, chưa có --task
+ganas icebox promote ICE-004 --task T-042
+```
+
+### `ganas search <chuỗi>`
+
+BM25 trên fact (`src/search.ts`) — trả lời câu hỏi mà `context_contract.facts`
+không trả lời được: "phiên trước có kiểm chứng điều gì LIÊN QUAN tới việc tôi
+đang làm mà không ai khai tay?" Trước lệnh này, đường duy nhất là grep YAML.
+
+Chấm điểm trên `statement`, `notes`, `verify.run` (lệnh probe — chứa tên
+file/lệnh), và `depends_on` (glob đường dẫn — mạnh nhất cho câu hỏi "fact nào
+liên quan tới file tôi đang sửa"). Tokenize xử lý được tiếng Việt (bỏ dấu) và
+sinh cả token nguyên lẫn mảnh con cho id/đường dẫn (`T-017` → `t-017` + `017`;
+`src/graph/load.ts` → cả cụm lẫn `src`, `graph`, `load`, `ts`) — tra theo tên
+file vẫn khớp dù fact không chép nguyên văn đường dẫn đó.
+
+Chỉ nhận hit khớp **ít nhất 2 token truy vấn khác nhau** (`minMatchedTerms`,
+hạ xuống 1 nếu truy vấn chỉ có một từ) — điểm BM25 không chuẩn hoá theo kích
+thước kho, nên một ngưỡng điểm tuyệt đối sẽ vỡ khi kho fact to/nhỏ đi; "khớp
+≥2 từ" thì ổn định và giải thích được.
+
+**Mỗi kết quả PHẢI nói độ tươi** (`computeFreshness`, dùng lại nguyên, không
+tự tính lại) — nhãn `[FRESH]`/`[STALE]`/... đứng NGAY ĐẦU dòng, không chìm ở
+cuối. Một cỗ máy tìm kiếm trả fact đã mục mà không nói nó mục chỉ là máy phát
+ảo giác tốc độ cao.
+
+**Phạm vi.** Có `--task` (không kèm `--scope`) thì search cả graph rồi LABEL
+hit khác phạm vi task (⚠ NGOÀI PHẠM VI ĐANG XÉT) thay vì giấu nó — cùng cách
+`ganas brief` xử lý fact khai tay khác phạm vi: không giấu, chỉ cảnh báo.
+`--scope` tường minh thì hard-filter thật, chỉ trả fact thuộc đúng phạm vi đó.
+
+Dùng `--task <id>`: truy vấn dựng từ `title` + đường dẫn trong
+`context_contract.must_read` + `open_questions` của task (`taskQuery()` trong
+`src/search.ts` — cùng hàm brief dùng, không có hai bản logic lệch nhau); fact
+đã khai tay trong `context_contract.facts` của task đó bị loại khỏi kết quả
+(đã có trong brief rồi, search chỉ có giá trị thêm khi trả về thứ CHƯA khai).
+
+**Cắt bớt có ghi chú**, cùng nguyên tắc `ganas debt`: vượt `--limit` thì có
+một dòng nói rõ đã bỏ bao nhiêu.
+
+| Đối số / Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `<chuỗi>` | Truy vấn thô. Bắt buộc trừ khi dùng `--task`. |
+| `--task <id>` | Dùng chính task này làm truy vấn thay vì gõ tay. |
+| `--scope <id>` | Bó cứng kết quả trong một phạm vi (khác `--task` một mình: đây là lọc thật, không phải label). |
+| `--limit <n>` | Số kết quả in ra tối đa. Mặc định 10. |
+| `--json` | Xuất `{ query, task, scope, total, shown, omitted, hits[] }` — mỗi hit có `factId`, `score`, `matchedTerms`, `freshness`, `freshnessReason`, `scope`, `file`, `outOfScope`. |
+
+**Mã thoát:** luôn `0` — không tìm thấy kết quả không phải lỗi, chỉ là một sự
+thật cần biết. Lỗi (`1`, `GanasError`) nếu thiếu cả `<chuỗi>` lẫn `--task`,
+task không tồn tại, hoặc `--limit` không phải số nguyên dương.
+
+**Ví dụ:**
+```
+ganas search "webhook zalo timeout"
+ganas search --task T-017              # truy vấn suy từ chính task
+ganas search "auth token" --scope P-checkout --limit 5
+ganas search "..." --json | jq '.hits[0]'
 ```
 
 ### `ganas commit [task]`

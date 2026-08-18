@@ -595,6 +595,329 @@ test("design superseded mà không design nào khai thay thế → vẫn cảnh 
   }
 });
 
+/* --- Gợi ý fact liên quan (BM25, `src/search.ts`) ------------------------- */
+
+/**
+ * Statement giàu từ khoá trùng với title task bên dưới ("Sửa lỗi webhook
+ * Zalo timeout") — khớp đủ ≥2 từ ("webhook", "zalo", "timeout") để vượt
+ * `DEFAULT_MIN_MATCHED_TERMS` của `searchFacts`.
+ */
+const SUGGEST_STATEMENT = "Webhook Zalo OA bị timeout khi gọi API gửi tin nhắn xác nhận.";
+const UNRELATED_STATEMENT = "Không liên quan gì hết, chủ đề hoàn toàn khác.";
+
+function suggestFactYaml(id: string, opts: { scope?: string; statement?: string } = {}): string {
+  return `- id: ${id}
+  scope: ${opts.scope ?? "P-thu"}
+  statement: "${opts.statement ?? SUGGEST_STATEMENT}"
+  verify:
+    run: "true"
+`;
+}
+
+/** Task với title khớp `SUGGEST_STATEMENT`, `context_contract.facts` tuỳ chọn. */
+function taskYamlForSuggestion(declaredFacts: string[] = []): string {
+  const facts = declaredFacts.length
+    ? `\n${declaredFacts.map((f) => `    - ${f}`).join("\n")}`
+    : " []";
+  return `id: T-001
+title: "Sửa lỗi webhook Zalo timeout"
+serves:
+  - G-001
+implements: D-001
+scope: P-thu
+status: todo
+exit_contract:
+  - kind: command
+    run: "true"
+context_contract:
+  facts:${facts}
+  must_read: []
+  open_questions: []
+`;
+}
+
+async function withSuggestionFacts(
+  factsYaml: string,
+  declaredFacts: string[] = [],
+): Promise<string> {
+  return makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/tasks/T-001.yaml": taskYamlForSuggestion(declaredFacts),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/scopes/P-khac.yaml": scope("P-khac", { modules: ["M-b"] }),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/modules/M-b.yaml": moduleYaml("M-b", { scope: "P-khac", paths: ["src/b/**"] }),
+    ".ganas/facts/f.yaml": factsYaml,
+  });
+}
+
+test("⭐ fact cùng scope, liên quan, KHÔNG khai tay → xuất hiện trong mục gợi ý", async () => {
+  const root = await withSuggestionFacts(suggestFactYaml("F-SUG-001"));
+  try {
+    const brief = await briefOf(root);
+    assert.match(brief, /## Có thể liên quan/, "phải có mục gợi ý");
+    const section = brief.slice(brief.indexOf("## Có thể liên quan"));
+    assert.match(section, /F-SUG-001/, "phải nêu đúng id fact liên quan");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("fact ĐÃ khai tay trong context_contract.facts → KHÔNG lặp lại trong mục gợi ý", async () => {
+  const root = await withSuggestionFacts(
+    [suggestFactYaml("F-KNOWN-001"), suggestFactYaml("F-SUG-002")].join("\n"),
+    ["F-KNOWN-001"],
+  );
+  try {
+    const brief = await briefOf(root);
+    const section = brief.slice(brief.indexOf("## Có thể liên quan"));
+    assert.match(section, /F-SUG-002/, "fact chưa khai tay phải xuất hiện");
+    assert.doesNotMatch(
+      section,
+      /F-KNOWN-001/,
+      "fact đã khai tay đã in ở mục khác, không được lặp lại ở đây",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("fact cùng nội dung nhưng KHÁC scope task → không được gợi ý", async () => {
+  const root = await withSuggestionFacts(suggestFactYaml("F-SUG-001", { scope: "P-khac" }));
+  try {
+    const brief = await briefOf(root);
+    assert.ok(
+      !brief.includes("## Có thể liên quan"),
+      "fact ngoài phạm vi task không được gợi ý ở đây — ganas search mới là chỗ tra rộng",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("không fact nào vượt ngưỡng khớp → brief KHÔNG in tiêu đề mục gợi ý", async () => {
+  const root = await withSuggestionFacts(
+    suggestFactYaml("F-UNRELATED-001", { statement: UNRELATED_STATEMENT }),
+  );
+  try {
+    const brief = await briefOf(root);
+    assert.ok(
+      !brief.includes("## Có thể liên quan"),
+      "không có gì liên quan thì mục phải biến mất hoàn toàn, không in tiêu đề rỗng",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("fact được gợi ý mà chưa verify bao giờ → dòng của nó mang nhãn cảnh báo, không in như tri thức tin được", async () => {
+  const root = await withSuggestionFacts(suggestFactYaml("F-SUG-001"));
+  try {
+    const brief = await briefOf(root);
+    const section = brief.slice(brief.indexOf("## Có thể liên quan"));
+    const line = section.split("\n").find((l) => l.includes("F-SUG-001"));
+    assert.ok(line, `không thấy dòng của F-SUG-001 trong:\n${section}`);
+    assert.match(
+      line,
+      /^- ⚠ \[NEVER_VERIFIED\]/,
+      `nhãn cảnh báo phải đứng đầu dòng (ngay sau dấu gạch bullet), thực tế: "${line}"`,
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("nhiều hơn 3 fact khớp → chỉ in 3, có ghi chú phần còn lại và gợi ý `ganas search`", async () => {
+  const factsYaml = ["001", "002", "003", "004"]
+    .map((n) => suggestFactYaml(`F-SUG-${n}`))
+    .join("\n");
+  const root = await withSuggestionFacts(factsYaml);
+  try {
+    const brief = await briefOf(root);
+    const section = brief.slice(
+      brief.indexOf("## Có thể liên quan"),
+      brief.indexOf("## Có thể liên quan") +
+        brief.slice(brief.indexOf("## Có thể liên quan")).indexOf("\n## ", 3),
+    );
+    // Tie-break tăng dần theo factId (cùng statement ⇒ cùng điểm BM25) ⇒ ba
+    // id đầu bảng chữ cái được in, id thứ tư bị cắt.
+    assert.match(section, /F-SUG-001/);
+    assert.match(section, /F-SUG-002/);
+    assert.match(section, /F-SUG-003/);
+    assert.doesNotMatch(section, /F-SUG-004/, "chỉ in tối đa 3, không được in cả 4");
+    assert.match(section, /còn 1 fact khác khớp/, "phải nói rõ còn bao nhiêu bị cắt");
+    assert.match(section, /ganas search --task T-001/, "phải gợi ý lệnh tra rộng hơn");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- Icebox quá hạn xem lại ------------------------------------------------ */
+
+/** `found_at` dùng chung cho các test dưới đây — `review_after_days` mặc định
+ * 30 ⇒ hạn xem lại rơi vào 2026-01-31T00:00:00Z. */
+const ICE_FOUND_AT = "2026-01-01T00:00:00Z";
+
+/** Mốc `now` giả lập: 30 ngày SAU hạn xem lại mặc định (2026-01-31 + 30). */
+const NOW_OVERDUE = Date.parse("2026-03-02T00:00:00Z");
+
+/** Mốc `now` giả lập: TRƯỚC hạn xem lại mặc định (2026-01-31). */
+const NOW_NOT_YET = Date.parse("2026-01-15T00:00:00Z");
+
+/** Bản ghi icebox tối thiểu hợp lệ, các trường bắt buộc theo status khai đủ. */
+function iceboxYaml(
+  id: string,
+  opts: { status?: "open" | "closed" | "promoted"; scope?: string; reviewAfterDays?: number } = {},
+): string {
+  const status = opts.status ?? "open";
+  const scope = opts.scope ?? "P-thu";
+  const extra =
+    status === "open"
+      ? ""
+      : status === "closed"
+        ? `\n  closed_at: 2026-02-01T00:00:00Z\n  closed_reason: "không còn cần"`
+        : `\n  closed_at: 2026-02-01T00:00:00Z\n  promoted_to: T-001`;
+  return `- id: ${id}
+  title: "Việc đã hoãn ${id}"
+  found_at: ${ICE_FOUND_AT}
+  review_after_days: ${opts.reviewAfterDays ?? 30}
+  weight: 3
+  ease: 2
+  why_deferred: "chưa ai rảnh, không chặn mục tiêu hiện tại"
+  anchors: ["src/a.ts#L1"]
+  scope: ${scope}
+  status: ${status}${extra}
+`;
+}
+
+/** Dự án hai phạm vi (P-thu/P-khac) + task T-001 ở P-thu + một block icebox. */
+async function withIcebox(iceboxYamlBlock: string): Promise<string> {
+  return makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/scopes/P-khac.yaml": scope("P-khac", { modules: ["M-b"] }),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/modules/M-b.yaml": moduleYaml("M-b", { scope: "P-khac", paths: ["src/b/**"] }),
+    ".ganas/icebox/2026-01.yaml": iceboxYamlBlock,
+  });
+}
+
+/** `renderBrief` với `now` ghim — brief KHÔNG được phụ thuộc đồng hồ thật. */
+async function briefOfAt(root: string, now: number, taskId = "T-001"): Promise<string> {
+  const graph = await loadGraph(root);
+  const freshness = await computeFreshness(graph);
+  return renderBrief({ graph, task: graph.tasks.get(taskId)!, freshness, now });
+}
+
+test("⭐ icebox open, quá hạn, cùng scope task → brief có mục, nêu đúng id/ngày quá hạn/tổng điểm", async () => {
+  const root = await withIcebox(iceboxYaml("ICE-001"));
+  try {
+    const brief = await briefOfAt(root, NOW_OVERDUE);
+    assert.match(brief, /## Icebox quá hạn xem lại/);
+    const section = brief.slice(brief.indexOf("## Icebox quá hạn xem lại"));
+    assert.match(section, /ICE-001/, "phải nêu đúng id");
+    assert.match(section, /quá hạn xem lại 30 ngày/, "phải nêu đúng số ngày quá hạn");
+    assert.match(section, /tổng điểm 5/, "phải nêu tổng điểm weight+ease");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("icebox open nhưng CHƯA quá hạn → không hiện", async () => {
+  const root = await withIcebox(iceboxYaml("ICE-001"));
+  try {
+    const brief = await briefOfAt(root, NOW_NOT_YET);
+    assert.ok(!brief.includes("## Icebox quá hạn xem lại"), "chưa tới hạn thì mục không được hiện");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("icebox quá hạn nhưng KHÁC scope task → không hiện", async () => {
+  const root = await withIcebox(iceboxYaml("ICE-001", { scope: "P-khac" }));
+  try {
+    const brief = await briefOfAt(root, NOW_OVERDUE);
+    assert.ok(!brief.includes("## Icebox quá hạn xem lại"), "khác scope thì không được lọt vào brief");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("icebox quá hạn nhưng status closed/promoted → không hiện", async () => {
+  for (const status of ["closed", "promoted"] as const) {
+    const root = await withIcebox(iceboxYaml("ICE-001", { status }));
+    try {
+      const brief = await briefOfAt(root, NOW_OVERDUE);
+      assert.ok(
+        !brief.includes("## Icebox quá hạn xem lại"),
+        `status="${status}" không còn là nợ đang mở, không được hiện`,
+      );
+    } finally {
+      await cleanup(root);
+    }
+  }
+});
+
+test("không mục icebox nào thoả điều kiện → brief KHÔNG có tiêu đề mục (không tiêu đề rỗng)", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+  });
+  try {
+    const brief = await briefOfAt(root, NOW_OVERDUE);
+    assert.ok(!brief.includes("## Icebox quá hạn xem lại"));
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("nhiều hơn 3 mục icebox quá hạn cùng scope → chỉ in 3, có dòng đếm phần còn lại kèm gợi ý lệnh", async () => {
+  const block = ["001", "002", "003", "004"].map((n) => iceboxYaml(`ICE-${n}`)).join("\n");
+  const root = await withIcebox(block);
+  try {
+    const brief = await briefOfAt(root, NOW_OVERDUE);
+    const start = brief.indexOf("## Icebox quá hạn xem lại");
+    const section = brief.slice(start, start + brief.slice(start).indexOf("\n## ", 3));
+    // Tie-break tăng dần theo id (cùng found_at/review_after_days ⇒ cùng số
+    // ngày quá hạn) ⇒ ba id đầu bảng chữ cái được in, id thứ tư bị cắt.
+    assert.match(section, /ICE-001/);
+    assert.match(section, /ICE-002/);
+    assert.match(section, /ICE-003/);
+    assert.doesNotMatch(section, /ICE-004/, "chỉ in tối đa 3, không được in cả 4");
+    assert.match(section, /còn 1 mục icebox quá hạn khác/, "phải nói rõ còn bao nhiêu bị cắt");
+    assert.match(section, /ganas icebox review/, "phải trỏ sang lệnh để xem hết");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("mục icebox nằm TRƯỚC phần volatile trong chuỗi kết quả", async () => {
+  const root = await withIcebox(iceboxYaml("ICE-001"));
+  try {
+    const graph = await loadGraph(root);
+    const freshness = await computeFreshness(graph);
+    const brief = renderBrief({
+      graph,
+      task: graph.tasks.get("T-001")!,
+      freshness,
+      now: NOW_OVERDUE,
+      volatile: "MOC-THOI-GIAN",
+    });
+    assert.ok(
+      brief.indexOf("## Icebox quá hạn xem lại") < brief.indexOf("MOC-THOI-GIAN"),
+      "mục icebox thuộc phần ổn định, phải đứng trước phần volatile (đặt sau sẽ phá prompt cache)",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
 test("phạm vi không có notes thì brief không đổi", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),

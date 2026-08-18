@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import type { FactFreshness } from "../graph/freshness.js";
+import { type FactFreshness, freshnessMark } from "../graph/freshness.js";
 import { openBlockers, parallelCandidates } from "../graph/select.js";
 import type { Graph, Sourced } from "../graph/types.js";
 import {
@@ -12,12 +12,23 @@ import {
   formatAnchor,
   type Task,
 } from "../model/index.js";
+import { searchFacts, taskQuery } from "../search.js";
 import { renderGroupedByScope } from "./group.js";
 
 export interface BriefInput {
   graph: Graph;
   task: Sourced<Task>;
   freshness: Map<string, FactFreshness>;
+  /**
+   * Mốc thời gian để tính "quá hạn xem lại" cho mục icebox (xem
+   * `overdueIceboxSection`). Tuỳ chọn, mặc định `Date.now()` — nhưng default
+   * đặt NGAY TRONG `renderBrief`, không phải ở từng chỗ gọi: phần lớn caller
+   * thật (`next.ts`, `hooks/handlers.ts`) không biết và không cần biết gì về
+   * icebox, bắt tất cả chúng tự gọi `Date.now()` rồi truyền vào chỉ để phục vụ
+   * MỘT mục nhỏ là việc thừa. Test cần đồng hồ tất định thì tự truyền `now` —
+   * đây là chỗ duy nhất cần độ chính xác đó.
+   */
+  now?: number;
   /**
    * Phần trạng thái biến động (nhánh git, thời điểm). Đặt CUỐI brief và tách
    * hẳn ra: prompt cache khớp theo tiền tố, một mốc thời gian ở đầu sẽ làm mọi
@@ -67,6 +78,147 @@ export function relevantLegacyClaims(graph: Graph, task: Task): Claim[] {
 
 function bullet(lines: string[]): string {
   return lines.map((l) => `- ${l}`).join("\n");
+}
+
+/**
+ * Cắt statement dài, để lại dấu hiệu cắt — mục gợi ý phải gọn (xem
+ * `BRIEF_LENGTH_WARNING_CHARS`), không phải chỗ in nguyên statement dài như
+ * "Tri thức dùng được" cho phép.
+ */
+function truncateStatement(s: string, max = 90): string {
+  return s.length > max ? `${s.slice(0, max).trimEnd()}…` : s;
+}
+
+const SUGGESTED_FACTS_LIMIT = 3;
+
+/**
+ * Mục "Có thể liên quan": BM25 (`src/search.ts`) trên fact CÙNG PHẠM VI mà
+ * task KHÔNG khai tay trong `context_contract.facts`. Bịt khoảng cách GIAO
+ * HÀNG mà README hứa — "phiên sau không phải khám phá lại những gì phiên
+ * trước đã kiểm chứng được — trong cùng một phạm vi công việc" — trước mục
+ * này, một fact liên quan mà không được khai id thì không bao giờ tới tay
+ * phiên sau, dù cùng scope và liên quan trực tiếp.
+ *
+ * `scope: t.scope`, KHÔNG search toàn dự án: ganas đã có nguyên tắc "một
+ * phát biểu chỉ đúng bên trong ranh giới phạm vi của nó" (xem mục "NGOÀI
+ * PHẠM VI" ở trên, áp dụng cùng lý lẽ). Gợi ý fact ngoài phạm vi ở ĐÂY là
+ * mời phiên sau tin nhầm nó áp dụng cho việc đang làm — lệnh `ganas search`
+ * (tra rộng toàn dự án, không bó phạm vi) mới là chỗ đúng cho việc đó.
+ *
+ * Trả về `""` khi không có hit nào vượt ngưỡng `minMatchedTerms` mặc định
+ * của `searchFacts` — mục này PHẢI biến mất hoàn toàn, không in tiêu đề
+ * rỗng cho người đọc tưởng "đã tra mà không có gì".
+ *
+ * KHÔNG tự tính freshness: dùng lại `freshness` đã truyền vào (tính một lần
+ * ở `computeFreshness`, async) — `renderBrief` không async, và tính lại ở
+ * đây sẽ là một nguồn sự thật thứ hai cho cùng một câu hỏi.
+ */
+function suggestedFactsSection(
+  graph: Graph,
+  freshness: Map<string, FactFreshness>,
+  t: Task,
+): string {
+  const hits = searchFacts(graph, taskQuery(t), {
+    scope: t.scope,
+    exclude: t.context_contract.facts,
+    limit: Number.MAX_SAFE_INTEGER,
+  });
+  if (hits.length === 0) return "";
+
+  const shown = hits.slice(0, SUGGESTED_FACTS_LIMIT);
+  const omitted = hits.length - shown.length;
+
+  const lines = shown.map((h) => {
+    const mark = freshnessMark(freshness.get(h.factId));
+    return `${mark} \`${h.factId}\` — ${truncateStatement(h.fact.statement)}`;
+  });
+
+  // Cắt bớt PHẢI có ghi chú — cùng nguyên tắc "ganas debt" và "ganas search"
+  // đã dùng: cắt im lặng làm người đọc tưởng đã thấy hết.
+  const note =
+    omitted > 0
+      ? `\n\n… còn ${omitted} fact khác khớp, chưa in — dùng \`ganas search --task ${t.id}\` để xem hết.`
+      : "";
+
+  return (
+    `## Có thể liên quan — gợi ý tự động, CHƯA ai xác nhận\n\n` +
+    `Máy khớp CHỮ (BM25) trên fact cùng phạm vi mà task không khai tay. Khác mục ` +
+    `"Tri thức dùng được" ở trên: ở đó có người xác nhận là liên quan, ở đây thì ` +
+    `không — kiểm (\`ganas verify <id>\`) trước khi dựa vào:\n\n` +
+    bullet(lines) +
+    note
+  );
+}
+
+const ICEBOX_OVERDUE_LIMIT = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Mục "Icebox quá hạn xem lại": bản ghi `graph.icebox` với `status: "open"`,
+ * CÙNG PHẠM VI với task (`i.scope === t.scope` — bản ghi không khai `scope`
+ * không bao giờ khớp, đúng ý "tuỳ chọn" của schema: chưa biết phạm vi thì
+ * không thể coi là "cùng phạm vi" với bất cứ gì), và đã qua mốc
+ * `found_at + review_after_days`.
+ *
+ * Đây KHÔNG phải việc phải làm ngay — khác hẳn "Tri thức dùng được" hay
+ * "CẦN VERIFY LẠI" phía trên, những mục nói về ĐỘ TIN của tri thức đang dùng.
+ * Icebox là việc ĐÃ CÓ NGƯỜI QUYẾT hoãn lại; mục này chỉ nhắc rằng mốc hẹn
+ * xem lại quyết định đó đã qua, không phải ra lệnh làm nó bây giờ. Đặt câu
+ * dẫn tách bạch để khỏi trông ngang hàng hai mục kia.
+ *
+ * KHÔNG in `why_deferred` (dài, và là thứ đọc LÚC XEM LẠI chứ không phải lúc
+ * đang làm task khác) — nhưng bắt buộc trỏ sang lệnh tra chi tiết:
+ * `ganas icebox review`, chính lệnh dựng cho việc này (in kèm số ngày quá
+ * hạn, `why_deferred`, anchors, và hai lệnh bấm được `close`/`promote`) —
+ * đúng hơn `ganas icebox list` (chỉ liệt kê, không nói gì về hạn xem lại).
+ * Trước khi `ganas icebox` tồn tại, mục này từng phải trỏ tạm sang `ganas
+ * debt` (lệnh duy nhất khi đó có in icebox) vì test hồi quy "brief chỉ nhắc
+ * lệnh ganas CÓ THẬT" (`scope-brief.test.ts`) chặn trỏ sang lệnh chưa có
+ * trong `cli.ts` — nay `icebox` đã vào bảng lệnh, chỗ trỏ tạm đó không còn
+ * lý do tồn tại.
+ *
+ * Không in cả tồn kho: tối đa `ICEBOX_OVERDUE_LIMIT` dòng, phần dư gộp một
+ * dòng đếm — cùng nguyên tắc "cắt bớt PHẢI có ghi chú" mà `suggestedFactsSection`
+ * và `ganas debt` đã dùng.
+ *
+ * Trả về `""` khi không mục nào thoả điều kiện — mục này PHẢI biến mất hoàn
+ * toàn, không in tiêu đề rỗng.
+ */
+function overdueIceboxSection(graph: Graph, t: Task, now: number): string {
+  const overdue = [...graph.icebox.values()]
+    .map((s) => s.value)
+    .filter((i) => i.status === "open" && i.scope === t.scope)
+    .map((i) => {
+      const dueAt = Date.parse(i.found_at) + i.review_after_days * DAY_MS;
+      return { i, overdueDays: Math.floor((now - dueAt) / DAY_MS) };
+    })
+    .filter((x) => x.overdueDays > 0)
+    .sort((a, b) => b.overdueDays - a.overdueDays || a.i.id.localeCompare(b.i.id));
+
+  if (overdue.length === 0) return "";
+
+  const shown = overdue.slice(0, ICEBOX_OVERDUE_LIMIT);
+  const omitted = overdue.length - shown.length;
+
+  const lines = shown.map(
+    ({ i, overdueDays }) =>
+      `\`${i.id}\` — ${i.title} — quá hạn xem lại ${overdueDays} ngày — tổng điểm ${i.weight + i.ease}`,
+  );
+
+  const note =
+    omitted > 0
+      ? `\n\n… còn ${omitted} mục icebox quá hạn khác, chưa in — dùng \`ganas icebox review\` để xem hết.`
+      : "";
+
+  return (
+    `## Icebox quá hạn xem lại\n\n` +
+    `Đây là việc **đã có người quyết định hoãn**, không phải việc phải làm bây giờ. ` +
+    `Mốc hẹn xem lại quyết định đó đã qua — không tự ý làm, cũng không tự ý bỏ; ` +
+    `xác nhận lại lý do hoãn (\`why_deferred\`) còn đúng không, qua \`ganas icebox review\` ` +
+    `(in kèm anchor tới code) hoặc đọc thẳng file trong \`.ganas/icebox/\`:\n\n` +
+    bullet(lines) +
+    note
+  );
 }
 
 /**
@@ -187,6 +339,7 @@ function parallelBlock(graph: Graph, t: Task): string {
  */
 export function renderBrief(input: BriefInput): string {
   const { graph, task: sourced, freshness } = input;
+  const now = input.now ?? Date.now();
   const t = sourced.value;
   const parts: string[] = [];
 
@@ -454,6 +607,9 @@ export function renderBrief(input: BriefInput): string {
     );
   }
 
+  const suggested = suggestedFactsSection(graph, freshness, t);
+  if (suggested) parts.push(suggested);
+
   const legacy = relevantLegacyClaims(graph, t);
   const totalUnverifiedLegacy = [...graph.claims.values()].filter(
     (c) => c.value.provenance === "imported" && c.value.trust === "unverified",
@@ -567,6 +723,14 @@ export function renderBrief(input: BriefInput): string {
           bullet(manual)
         : ""),
   );
+
+  /* --- Icebox quá hạn xem lại: việc đã quyết hoãn, KHÔNG phải việc phải làm
+   * ngay — đặt sau điều kiện hoàn thành, không cạnh "Tri thức dùng được", để
+   * khỏi trông ngang hàng hai loại thông tin khác bản chất nhau. Vẫn PHẢI ở
+   * phần ỔN ĐỊNH, trước `volatile` (xem doc `BriefInput.volatile`). --------- */
+
+  const icebox = overdueIceboxSection(graph, t, now);
+  if (icebox) parts.push(icebox);
 
   parts.push(RULE_REMINDER);
 
