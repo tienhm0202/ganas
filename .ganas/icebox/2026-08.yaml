@@ -1,0 +1,31 @@
+- id: ICE-001
+  title: ganas search không index claim/decision
+  found_at: 2026-08-18T10:19:25.322Z
+  review_after_days: 30
+  weight: 3
+  ease: 3
+  why_deferred: Ràng buộc cứng của search là mọi kết quả phải nói được độ tươi.
+    Claim/decision không có depends_on nên không có độ tươi — cần một nhãn tin
+    cậy khác (trust cho claim, decided_at cho decision) trước khi index được,
+    chứ không phải nối thêm vào BM25. Phiên phát hiện đang sửa lớp id/graph, mở
+    thêm mặt trận là chẻ mất context.
+  anchors:
+    - src/search.ts#L18-L21
+    - src/commands/search.ts
+  scope: P-cli
+  status: open
+- id: ICE-002
+  title: Danh sách skill trong docs/INSTALL.md không có guard, đã trôi dạt một lần
+  found_at: 2026-08-18T10:19:25.402Z
+  review_after_days: 30
+  weight: 2
+  ease: 4
+  why_deferred: INSTALL.md hardcode số lượng và tên skill ở 5 chỗ. Thêm skill
+    icebox làm cả 5 chỗ sai cùng lúc và không test nào bắt — phải sửa tay. Repo
+    đã có đúng khuôn guard cho việc này ở test/cli-help.test.ts (bảng lệnh đối
+    chiếu cli.ts + docs). Chưa làm vì đang giữa đợt dựng icebox.
+  anchors:
+    - docs/INSTALL.md#L51
+    - test/cli-help.test.ts#L99
+  scope: P-cli
+  status: open

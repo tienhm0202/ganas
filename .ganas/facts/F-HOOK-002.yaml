@@ -1,0 +1,27 @@
+- id: F-HOOK-002
+  statement: >-
+    Luật ghi-đè-thực-thể của `preToolUse` quyết định CHỈ dựa trên sự tồn tại của
+    file, nó không đọc `.ganas/.locks/`. Hệ quả: một phiên chưa đặt chỗ id vẫn
+    được phép ghi trước và thắng, còn phiên đã đặt chỗ hợp lệ mới là người bị
+    chặn sau đó — chặn nhầm người. Không mất dữ liệu, nhưng thông điệp từ chối
+    ("id này đã có chủ") đọc trớ trêu với chính người đang là chủ.
+  scope: P-hook
+  verify:
+    run: "sh 'scripts/probe-hook-ignores-locks.sh'"
+    expect: exit_zero
+  depends_on:
+    - "src/hooks/handlers.ts"
+    - "src/graph/claim.ts"
+  ttl_days: 0
+  anchors:
+    - "src/hooks/handlers.ts#L179"
+    - "src/graph/claim.ts#L83"
+  notes: >-
+    Probe là HÀNH VI chứ không phải grep: dựng dự án tạm, để phiên A đặt chỗ
+    T-001, rồi hỏi hook xem phiên B có được ghi T-001 không. Grep không dùng
+    được ở đây — handlers.ts CÓ nhắc chuỗi ".locks" trong comment, nên `! grep
+    -q locks` trượt dù code thật không hề đọc lock. Đã thử và loại. Ngày hook
+    biết đọc lock, script exit 1 và fact chuyển FAILING.
+  last_verified_at: 2026-08-18T10:18:48.212Z
+  last_result: pass
+  verified_by: cli

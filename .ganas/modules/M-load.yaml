@@ -1,0 +1,15 @@
+id: M-load
+scope: P-graph-core
+title: "Nạp YAML thành graph"
+nature: code
+paths:
+  - "src/graph/load.ts"
+  - "src/util/yaml.ts"
+depends_on:
+  - M-model
+status: surveyed
+verify:
+  - id: V-load-smoke
+    kind: probe
+    run: "npx tsx --test 'test/knowledge.test.ts'"
+    expect: exit_zero

@@ -1,0 +1,21 @@
+- id: F-ID-001
+  statement: >-
+    reserveId KHÔNG coi cùng session_id là "đã giữ, cho qua" khi cấp id: hai lời
+    gọi `ganas id` cùng rơi vào danh tính "cli" vẫn nhận hai id khác nhau
+    (reserveId nhận tham số sameSessionKeeps, và ganas id gọi nó với
+    sameSessionKeeps: false — xem docstring đầu src/commands/id.ts).
+  scope: P-hook
+  verify:
+    run: "grep -q 'cùng một --session gọi' test/id-alloc.test.ts && npx tsx --test
+      'test/id-alloc.test.ts'"
+    expect: exit_zero
+  depends_on:
+    - "src/graph/claim.ts"
+    - "src/commands/id.ts"
+  ttl_days: 0
+  anchors:
+    - "src/graph/claim.ts#L83-L92"
+    - "src/commands/id.ts"
+  last_verified_at: 2026-08-18T10:23:57.316Z
+  last_result: pass
+  verified_by: cli

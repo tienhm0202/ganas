@@ -1,0 +1,12 @@
+id: M-model
+scope: P-graph-core
+title: "Kiểu dữ liệu lõi của graph (schema Zod)"
+nature: code
+paths:
+  - "src/model/**"
+status: surveyed
+verify:
+  - id: V-model-smoke
+    kind: probe
+    run: "npx tsx --test 'test/icebox-model.test.ts'"
+    expect: exit_zero

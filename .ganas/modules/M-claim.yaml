@@ -1,0 +1,13 @@
+id: M-claim
+scope: P-hook
+title: "Giữ chỗ id, claim task, trạng thái phiên"
+nature: code
+paths:
+  - "src/graph/claim.ts"
+  - "src/state.ts"
+status: surveyed
+verify:
+  - id: V-claim-smoke
+    kind: probe
+    run: "npx tsx --test 'test/claim.test.ts'"
+    expect: exit_zero

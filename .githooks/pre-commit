@@ -1,0 +1,16 @@
+#!/bin/sh
+# ganas: sổ cái .ganas/verify-ledger.jsonl là append-only và có hash-chain.
+# Đứt chain nghĩa là có dòng bị sửa, xoá hoặc đảo thứ tự SAU khi ghi — tức
+# bằng chứng "probe đã thật sự chạy" không còn đáng tin.
+
+if command -v ganas >/dev/null 2>&1; then
+  ganas ledger --check || exit 1
+elif command -v bunx >/dev/null 2>&1 && [ -d node_modules/ganas ]; then
+  bunx ganas ledger --check || exit 1
+elif command -v npx >/dev/null 2>&1 && [ -d node_modules/ganas ]; then
+  npx --no-install ganas ledger --check || exit 1
+fi
+# Không tìm thấy ganas: nhường đường. Hook không phải hàng rào an ninh —
+# `ganas validate` và CI mới là chỗ chuyện này được chặn thật.
+
+exit 0

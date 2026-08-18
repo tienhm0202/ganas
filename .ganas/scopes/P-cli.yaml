@@ -1,0 +1,16 @@
+id: P-cli
+title: "CLI: parse tham số, điều phối lệnh con"
+version: 0.1.0
+owner: "@tienhm"
+status: active
+
+# Ranh giới code của phạm vi. Fact/claim chỉ được coi là đúng BÊN TRONG đây.
+modules:
+  - M-cli
+  - M-commands
+entry: M-cli
+
+acceptance:
+  - id: V-cli-e2e
+    kind: probe
+    run: "npm test"

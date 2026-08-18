@@ -1,0 +1,13 @@
+id: M-cli
+scope: P-cli
+title: "Điểm vào CLI: parse argv, điều phối lệnh con"
+nature: code
+paths:
+  - "src/cli.ts"
+  - "src/util/args.ts"
+status: surveyed
+verify:
+  - id: V-cli-smoke
+    kind: probe
+    run: "npx tsx --test 'test/cli-help.test.ts'"
+    expect: exit_zero

@@ -1,0 +1,15 @@
+id: M-validate
+scope: P-graph-core
+title: "Kiểm tra graph: schema, liên kết, luật spine, nợ"
+nature: code
+paths:
+  - "src/graph/validate.ts"
+  - "src/debt.ts"
+depends_on:
+  - M-load
+status: surveyed
+verify:
+  - id: V-validate-smoke
+    kind: probe
+    run: "npx tsx --test 'test/icebox-validate.test.ts'"
+    expect: exit_zero

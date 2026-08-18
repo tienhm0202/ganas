@@ -1,0 +1,19 @@
+- id: F-SEARCH-001
+  statement: >-
+    BM25 trên graph.facts trả kết quả kèm nhãn độ tươi (freshness), tính bằng
+    computeFreshness ngay trong tiến trình — không cần dependency ngoài (không
+    embeddings, không service ngoài).
+  scope: P-cli
+  verify:
+    run: "grep -q 'nhãn độ tươi' test/search.test.ts && npx tsx --test
+      'test/search.test.ts'"
+    expect: exit_zero
+  depends_on:
+    - "src/search.ts"
+    - "src/commands/search.ts"
+  ttl_days: 0
+  anchors:
+    - "src/search.ts#L18-L21"
+  last_verified_at: 2026-08-18T10:23:58.693Z
+  last_result: pass
+  verified_by: cli

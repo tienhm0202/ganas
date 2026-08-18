@@ -1,0 +1,18 @@
+- id: F-HOOK-001
+  statement: >-
+    preToolUse từ chối Write đè lên file thực thể ĐÃ TỒN TẠI dưới .ganas/
+    (goals/designs/tasks/scopes/modules/facts/claims/decisions/icebox), và CHỈ
+    áp cho tool_name "Write" — không áp cho Edit/MultiEdit/NotebookEdit.
+  scope: P-hook
+  verify:
+    run: "grep -q 'Write đè file task đã tồn tại' test/hooks.test.ts && npx tsx
+      --test 'test/hooks.test.ts'"
+    expect: exit_zero
+  depends_on:
+    - "src/hooks/handlers.ts"
+  ttl_days: 0
+  anchors:
+    - "src/hooks/handlers.ts#L304"
+  last_verified_at: 2026-08-18T10:23:59.475Z
+  last_result: pass
+  verified_by: cli

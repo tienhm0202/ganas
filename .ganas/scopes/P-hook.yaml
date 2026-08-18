@@ -1,0 +1,16 @@
+id: P-hook
+title: "Hook Claude Code: hàng rào ghi/đọc, giữ chỗ id và task"
+version: 0.1.0
+owner: "@tienhm"
+status: active
+
+# Ranh giới code của phạm vi. Fact/claim chỉ được coi là đúng BÊN TRONG đây.
+modules:
+  - M-hooks
+  - M-claim
+entry: M-hooks
+
+acceptance:
+  - id: V-hook-e2e
+    kind: probe
+    run: "npm test"

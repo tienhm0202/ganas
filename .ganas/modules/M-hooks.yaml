@@ -1,0 +1,14 @@
+id: M-hooks
+scope: P-hook
+title: "Điểm vào hook Claude Code (preToolUse, postToolUse, sessionStart, stop...)"
+nature: code
+paths:
+  - "src/hooks/**"
+depends_on:
+  - M-claim
+status: surveyed
+verify:
+  - id: V-hooks-smoke
+    kind: probe
+    run: "npx tsx --test 'test/hooks.test.ts'"
+    expect: exit_zero

@@ -18,3 +18,8 @@ coverage/
 # message (xem git log). Không commit lại PLAN.md dù ở gốc repo hay docs/.
 PLAN.md
 docs/PLAN.md
+
+# ganas — trạng thái phiên, không chia sẻ giữa các máy
+.ganas/runs/
+.ganas/.locks/
+.ganas/state.json

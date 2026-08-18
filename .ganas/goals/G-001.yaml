@@ -1,0 +1,14 @@
+id: G-001
+title: "Phiên sau nối tiếp được phiên trước, không phải khám phá lại"
+outcome: "Một phiên Claude Code mới nối tiếp được phiên trước mà không phải khám phá lại những gì phiên trước đã kiểm chứng"
+
+# Tiêu chí nghiệm thu. Bắt buộc có ít nhất một, và phải trả lời được có/không.
+acceptance:
+  - id: A-1
+    kind: command
+    run: "npm test"
+    expect: exit_zero
+
+status: active
+approved_by: "@tienhm"
+approved_at: "2026-08-14T00:00:00Z"

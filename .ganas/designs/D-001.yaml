@@ -1,0 +1,10 @@
+id: D-001
+title: "Tri thức neo phạm vi, mang bằng chứng chạy lại được"
+serves:
+  - G-001
+summary: >-
+  Tri thức phải neo vào một phạm vi (scope) và mang bằng chứng chạy lại được
+  (probe/eval) mới được phiên sau coi là sự thật. Việc chưa quyết làm thì ghi
+  vào sổ icebox riêng, không được giả làm task để có đủ serves/implements/
+  exit_contract bịa ra.
+status: active

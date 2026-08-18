@@ -1,0 +1,32 @@
+# ganas — cấu hình dự án
+version: 1
+project: "ganas"
+
+# Mức cưỡng chế của hook.
+#   warn    — chỉ cảnh báo, không chặn (shadow mode; hợp khi mới bắt đầu)
+#   enforce — chặn thao tác sai
+# Dự án mới bắt đầu bằng enforce luôn: chưa có thói quen cũ nào để phá.
+enforcement: enforce
+
+# Bật/tắt riêng từng luật khi cần nới ở một chỗ mà vẫn giữ chặt chỗ khác.
+enforcement_rules: {}
+  # knowledge_anchor: enforce
+  # schema: enforce
+  # exit_contract: enforce
+  # task_link: enforce
+
+# Harness giao việc: claude-code | cursor | zed | windsurf | other
+# Quyết định brief hướng dẫn giao task kiểu nào: claude-code thì tạo sub-agent
+# với model của tier; các harness còn lại chỉ nối qua MCP nên brief chỉ khuyến
+# nghị đổi model trong picker. Repo mở bằng nhiều editor thì khai cái bạn thật
+# sự giao việc từ đó.
+harness: claude-code
+
+# Model thật cho từng tier. Task khai `model: <tier>` lúc chẻ, brief tra ở đây.
+#   main     — việc khó/mơ hồ, cần phán đoán
+#   verifier — khoảng giữa
+#   scribe   — việc cơ học, ít quyết định (tier thấp để đỡ nghĩ quá tay)
+models:
+  main: claude-opus-5
+  verifier: claude-sonnet-5
+  scribe: claude-haiku-4-5

@@ -1,0 +1,17 @@
+id: P-graph-core
+title: "Đồ thị tri thức: model, nạp, kiểm tra"
+version: 0.1.0
+owner: "@tienhm"
+status: active
+
+# Ranh giới code của phạm vi. Fact/claim chỉ được coi là đúng BÊN TRONG đây.
+modules:
+  - M-model
+  - M-load
+  - M-validate
+entry: M-model
+
+acceptance:
+  - id: V-graph-core-e2e
+    kind: probe
+    run: "npm test"

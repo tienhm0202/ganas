@@ -1,0 +1,18 @@
+- id: F-LOAD-001
+  statement: >-
+    collectArray parse RIÊNG từng phần tử của một file YAML mảng — một bản ghi
+    hỏng chỉ loại chính nó khỏi graph, phần còn lại của file vẫn nạp được bình
+    thường.
+  scope: P-graph-core
+  verify:
+    run: "grep -q 'hỏng ở giữa file KHÔNG kéo' test/knowledge.test.ts && npx tsx
+      --test 'test/knowledge.test.ts'"
+    expect: exit_zero
+  depends_on:
+    - "src/graph/load.ts"
+  ttl_days: 0
+  anchors:
+    - "src/graph/load.ts#L169"
+  last_verified_at: 2026-08-18T10:23:58.215Z
+  last_result: pass
+  verified_by: cli

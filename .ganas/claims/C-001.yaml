@@ -1,0 +1,22 @@
+- id: C-001
+  statement: >-
+    Hàng rào hook của ganas chỉ có hiệu lực khi plugin được cài trong Claude
+    Code. Gọi `ganas` trần từ terminal, hoặc chạy dưới một harness khác, thì
+    không lớp nào chặn việc ghi đè file thực thể — lúc đó chỉ còn lớp đặt chỗ
+    id của `reserveId` (vẫn hoạt động đầy đủ) và kỷ luật của người gõ lệnh.
+  scope: P-hook
+  provenance: session
+  trust: unverified
+  anchors:
+    - "plugin/hooks/hooks.json#L19"
+    - "src/commands/hook.ts#L14"
+  notes: >-
+    CỐ Ý là claim chứ không phải fact, và đây là chỗ ranh giới đáng nhớ. Nửa
+    mang tải của phát biểu — "Claude Code chỉ gọi `ganas hook` khi plugin được
+    cài" — là hành vi của HARNESS, không lệnh nào trong repo này quan sát được.
+    Một probe grep chỉ chứng minh được nửa nằm trong repo (rằng code hook chỉ
+    vào được qua lệnh `hook`), tức là bằng chứng cho một phát biểu KHÁC, hẹp
+    hơn. Ghi thành fact là đúng loại ảo giác mà README hứa chống.
+    Đường tốt nghiệp có thật: viết được test dựng cache plugin giả rồi quan sát
+    hook có bắn không (khuôn test/plugin-selfcontained.test.ts) thì thăng lên
+    fact qua verdict.promoted_to.

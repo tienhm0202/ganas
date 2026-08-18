@@ -1,0 +1,24 @@
+- id: F-LOCK-001
+  statement: >-
+    `.ganas/.locks/` nằm trong LOCAL_ONLY nên không được commit và không đồng bộ
+    qua git. Vì vậy lớp đặt chỗ id của `reserveId` CHỈ chống đua giữa các phiên
+    trên CÙNG một máy — hai máy khác nhau (vd hai người cùng clone) vẫn có thể
+    được cấp cùng một id. Va chạm đó không im lặng: hai bên ghi cùng một đường
+    dẫn nên git báo CONFLICT (add/add) lúc gộp.
+  scope: P-hook
+  verify:
+    run: 'grep -qE "LOCAL_ONLY.*DIRS\.locks" src/graph/paths.ts'
+    expect: exit_zero
+  depends_on:
+    - "src/graph/paths.ts"
+  ttl_days: 0
+  anchors:
+    - "src/graph/paths.ts#L44"
+  notes: >-
+    Probe khẳng định GIỚI HẠN VẪN CÒN, không phải khẳng định một tính năng chạy
+    đúng. Ngày ai đó đưa .locks ra khỏi LOCAL_ONLY (tức là sửa giới hạn này),
+    probe TRƯỢT và brief sẽ nói "phát biểu này đang SAI" — đó là tín hiệu xoá
+    bản ghi đi, không phải tín hiệu sửa code.
+  last_verified_at: 2026-08-18T10:18:11.295Z
+  last_result: pass
+  verified_by: cli

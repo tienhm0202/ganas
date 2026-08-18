@@ -1,0 +1,18 @@
+- id: F-ID-002
+  statement: >-
+    `ganas id` gộp id đã KHAI trên đĩa nhưng graph không thấy (hỏng schema hoặc
+    hỏng cú pháp YAML) vào phép tính max qua rawDeclaredIds(), nên không cấp lại
+    một id đang bị chiếm bởi một file hỏng.
+  scope: P-cli
+  verify:
+    run: "grep -q 'hỏng schema' test/id-alloc.test.ts && npx tsx --test
+      'test/id-alloc.test.ts'"
+    expect: exit_zero
+  depends_on:
+    - "src/commands/id.ts"
+  ttl_days: 0
+  anchors:
+    - "src/commands/id.ts#L150"
+  last_verified_at: 2026-08-18T10:23:57.766Z
+  last_result: pass
+  verified_by: cli
