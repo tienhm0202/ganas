@@ -101,7 +101,12 @@ Khởi tạo `.ganas/` cho dự án mới (greenfield): tạo cây thư mục co
 `proposals/`, `runs/`), `config.yaml`, `state.json`, `.ganas/README.md`,
 `.claude/rules/ganas-knowledge.md`, `.claude/rules/architecture.md`,
 `.claude/rules/ganas-git.md` (tag semver, ký commit local, không
-Co-Authored-By), `CLAUDE.md`/`AGENTS.md`, một goal mẫu (`G-001`) — không sinh
+Co-Authored-By), `.claude/rules/naming.md` (định danh tiếng Anh, văn xuôi
+tiếng Việt), `.claude/rules/agent-guide.md` (viết file hướng dẫn cho agent:
+ngắn ở gốc, đặt gần code), **file hướng dẫn tên theo `--harness`** —
+`CLAUDE.md` cho `claude-code`, `AGENTS.md` cho `codex`/`cursor`/`zed`/
+`windsurf`, `GEMINI.md` cho `gemini` — cộng một `AGENTS.md` **cửa trỏ** ngắn
+khi tên file chính không phải `AGENTS.md`, một goal mẫu (`G-001`) — không sinh
 phạm vi mẫu, nó cần ranh giới code thật mà chỉ `ganas scope new` mới hỏi
 được — thêm mục `.ganas/runs/` vào `.gitignore` nếu dự án dùng git, và
 — nếu dự án dùng git — sinh `.githooks/commit-msg` (tự xoá dòng
@@ -114,6 +119,7 @@ Không có đối số định vị.
 |---|---|
 | `--project <tên>` | Tên dự án điền vào template. Không truyền thì hỏi tương tác (TTY) hoặc lấy tên thư mục hiện tại (non-TTY/`--yes`). |
 | `--owner <handle>` | Handle người duyệt mục tiêu (vd `@nguyen-a`, tự thêm `@` nếu thiếu). Không truyền thì hỏi tương tác hoặc để trống. |
+| `--harness <tên>` | Harness giao việc: `claude-code` (mặc định), `codex`, `cursor`, `zed`, `windsurf`, `gemini`, `other`. Quyết định **tên file hướng dẫn** được sinh ra và cách brief dạy giao task. Tên ngoài danh sách thì báo lỗi, không đoán. |
 | `--force` | Cho phép chạy dù `.ganas/` đã tồn tại, và **đè** lên các file đã có thay vì giữ nguyên. |
 | `--yes, -y` | Không hỏi tương tác — dùng giá trị mặc định/suy ra cho mọi câu hỏi (tự động bật khi stdin không phải TTY, vd chạy trong CI). |
 

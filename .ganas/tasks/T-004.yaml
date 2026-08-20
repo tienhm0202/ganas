@@ -1,0 +1,44 @@
+id: T-004
+title: "Luật viết file hướng dẫn cho agent: ngắn ở gốc, đặt gần code"
+serves:
+  - G-001
+implements: D-002
+scope: P-cli
+status: done
+done_at: 2026-08-20T16:44:47Z
+estimated_context: medium
+model: verifier
+blocked_by:
+  - T-003
+
+context_contract:
+  must_read:
+    - path: ".ganas/claims/C-002.yaml"
+      why: "Mọi con số và hành vi nạp trong luật phải lấy từ claim này, không viết theo trí nhớ"
+    - path: ".claude/rules/architecture.md"
+      why: "Khuôn của một luật KHÔNG có hook cưỡng chế — mục cuối phải nói thẳng điều đó"
+  facts: []
+  open_questions:
+    - "Import @path trong file hướng dẫn ở thư mục con nạp lười hay nạp ngay lúc mở phiên? Tài liệu Claude Code không nói."
+
+touches:
+  - M-templates
+  - M-commands
+
+exit_contract:
+  - kind: artifact
+    path: ".claude/rules/agent-guide.md"
+    must_contain: "thư mục con"
+  - kind: command
+    run: "grep -q guideRuleMd src/templates/project.ts && grep -q guideRuleMd src/commands/init.ts"
+  - kind: command
+    run: "grep -q agent-guide test/init.test.ts && grep -q agent-guide docs/COMMANDS.md && grep -q agent-guide docs/WORKFLOW.md"
+  - kind: verification
+    target: "M-templates/V-templates-init"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Người dùng đã chốt: CHỈ hướng dẫn, không thêm check vào ganas validate. Luật
+  phải nói thẳng AGENTS.md không phải chuẩn dùng được cho mọi tool, và chỉ
+  đường "cấu hình tool đọc file của bạn" thay vì nhân bản file.

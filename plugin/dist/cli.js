@@ -4783,6 +4783,12 @@ var init_anchor = __esm({
 });
 
 // src/model/config.ts
+function guideFileName(harness) {
+  return GUIDE_FILE[harness];
+}
+function pointerFileName(harness) {
+  return guideFileName(harness) === "AGENTS.md" ? void 0 : "AGENTS.md";
+}
 function canDispatchSubagent(harness) {
   return harness === "claude-code";
 }
@@ -4792,7 +4798,7 @@ function agentModelAlias(modelId) {
 function enforcementFor(config, rule) {
   return config.enforcement_rules[rule] ?? config.enforcement;
 }
-var ENFORCEMENT, ENFORCEMENT_RULES, MODEL_TIER, HARNESS, LATEST_SCHEMA_VERSION, zConfig;
+var ENFORCEMENT, ENFORCEMENT_RULES, MODEL_TIER, HARNESS, GUIDE_FILE, LATEST_SCHEMA_VERSION, zConfig;
 var init_config = __esm({
   "src/model/config.ts"() {
     "use strict";
@@ -4810,7 +4816,24 @@ var init_config = __esm({
       "task_link"
     ];
     MODEL_TIER = ["main", "verifier", "scribe"];
-    HARNESS = ["claude-code", "cursor", "zed", "windsurf", "other"];
+    HARNESS = [
+      "claude-code",
+      "codex",
+      "cursor",
+      "zed",
+      "windsurf",
+      "gemini",
+      "other"
+    ];
+    GUIDE_FILE = {
+      "claude-code": "CLAUDE.md",
+      codex: "AGENTS.md",
+      cursor: "AGENTS.md",
+      zed: "AGENTS.md",
+      windsurf: "AGENTS.md",
+      gemini: "GEMINI.md",
+      other: "AGENTS.md"
+    };
     LATEST_SCHEMA_VERSION = 1;
     zConfig = external_exports.object({
       version: external_exports.literal(LATEST_SCHEMA_VERSION).default(LATEST_SCHEMA_VERSION).describe("phi\xEAn b\u1EA3n schema .ganas/"),
@@ -15466,12 +15489,15 @@ enforcement_rules: {}
   # exit_contract: enforce
   # task_link: enforce
 
-# Harness giao vi\u1EC7c: claude-code | cursor | zed | windsurf | other
-# Quy\u1EBFt \u0111\u1ECBnh brief h\u01B0\u1EDBng d\u1EABn giao task ki\u1EC3u n\xE0o: claude-code th\xEC t\u1EA1o sub-agent
-# v\u1EDBi model c\u1EE7a tier; c\xE1c harness c\xF2n l\u1EA1i ch\u1EC9 n\u1ED1i qua MCP n\xEAn brief ch\u1EC9 khuy\u1EBFn
-# ngh\u1ECB \u0111\u1ED5i model trong picker. Repo m\u1EDF b\u1EB1ng nhi\u1EC1u editor th\xEC khai c\xE1i b\u1EA1n th\u1EADt
-# s\u1EF1 giao vi\u1EC7c t\u1EEB \u0111\xF3.
-harness: claude-code
+# Harness giao vi\u1EC7c:
+#   claude-code | codex | cursor | zed | windsurf | gemini | other
+# Quy\u1EBFt \u0111\u1ECBnh HAI th\u1EE9. M\u1ED9t: brief h\u01B0\u1EDBng d\u1EABn giao task ki\u1EC3u n\xE0o \u2014 claude-code th\xEC
+# t\u1EA1o sub-agent v\u1EDBi model c\u1EE7a tier; c\xE1c harness c\xF2n l\u1EA1i ch\u1EC9 n\u1ED1i qua MCP n\xEAn
+# brief ch\u1EC9 khuy\u1EBFn ngh\u1ECB \u0111\u1ED5i model trong picker. Hai: T\xCAN FILE H\u01AF\u1EDANG D\u1EAAN m\xE0
+# \`ganas init\` sinh (CLAUDE.md / AGENTS.md / GEMINI.md) \u2014 m\u1ED7i c\xF4ng c\u1EE5 \u0111\u1ECDc m\u1ED9t
+# t\xEAn kh\xE1c nhau. Repo m\u1EDF b\u1EB1ng nhi\u1EC1u editor th\xEC khai c\xE1i b\u1EA1n th\u1EADt s\u1EF1 giao vi\u1EC7c
+# t\u1EEB \u0111\xF3, r\u1ED3i tr\u1ECF c\xF4ng c\u1EE5 c\xF2n l\u1EA1i sang \u0111\xFAng file \u0111\xF3 thay v\xEC ch\xE9p file th\u1EE9 hai.
+harness: ${v.harness ?? "claude-code"}
 
 # Model th\u1EADt cho t\u1EEBng tier. Task khai \`model: <tier>\` l\xFAc ch\u1EBB, brief tra \u1EDF \u0111\xE2y.
 #   main     \u2014 vi\u1EC7c kh\xF3/m\u01A1 h\u1ED3, c\u1EA7n ph\xE1n \u0111o\xE1n
@@ -15483,7 +15509,8 @@ models:
   scribe: claude-haiku-4-5
 `;
 }
-function claudeMd(v) {
+function guideMd(v) {
+  const guide = guideFileName(v.harness ?? "claude-code");
   return `# ${v.project}
 
 D\u1EF1 \xE1n n\xE0y d\xF9ng **ganas** \u0111\u1EC3 ki\u1EC3m so\xE1t phi\xEAn l\xE0m vi\u1EC7c. Tr\u1EA1ng th\xE1i c\xF4ng vi\u1EC7c v\xE0 tri
@@ -15498,12 +15525,17 @@ Brief c\u1EE7a task hi\u1EC7n t\u1EA1i \u0111\u01B0\u1EE3c b\u01A1m t\u1EF1 \u01
 ganas next
 \`\`\`
 
-## Lu\u1EADt quan tr\u1ECDng nh\u1EA5t
+## Lu\u1EADt
 
-\u0110\u1ECDc \`.claude/rules/ganas-knowledge.md\`. T\xF3m t\u1EAFt m\u1ED9t d\xF2ng: **kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng
-th\xEC kh\xF4ng \u0111\u01B0\u1EE3c ghi v\xE0o kho tri th\u1EE9c**.
+\u0110\u1ECDc tr\u01B0\u1EDBc khi s\u1EEDa g\xEC \u2014 m\u1ED7i file m\u1ED9t lu\u1EADt, \u0111\u1EC1u n\u1EB1m \u1EDF \`.claude/rules/\`:
 
-Ki\u1EBFn tr\xFAc: \u0111\u1ECDc \`.claude/rules/architecture.md\` \u2014 t\xE1ch l\xF5i nghi\u1EC7p v\u1EE5 kh\u1ECFi I/O.
+| File | Lu\u1EADt |
+|---|---|
+| \`ganas-knowledge.md\` | **Kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng th\xEC kh\xF4ng \u0111\u01B0\u1EE3c ghi v\xE0o kho tri th\u1EE9c.** Lu\u1EADt quan tr\u1ECDng nh\u1EA5t, v\xE0 l\xE0 lu\u1EADt duy nh\u1EA5t c\xF3 hook ch\u1EB7n. |
+| \`architecture.md\` | T\xE1ch l\xF5i nghi\u1EC7p v\u1EE5 kh\u1ECFi I/O. |
+| \`naming.md\` | \u0110\u1ECBnh danh trong code b\u1EB1ng ti\u1EBFng Anh, v\u0103n xu\xF4i b\u1EB1ng ti\u1EBFng Vi\u1EC7t. |
+| \`agent-guide.md\` | Vi\u1EBFt file h\u01B0\u1EDBng d\u1EABn cho agent: ng\u1EAFn \u1EDF g\u1ED1c, \u0111\u1EB7t g\u1EA7n code. |
+| \`ganas-git.md\` | Tag semver, k\xFD commit theo repo, kh\xF4ng nh\u1EAFc AI trong commit. |
 
 ## L\u1EC7nh hay d\xF9ng
 
@@ -15515,8 +15547,9 @@ Ki\u1EBFn tr\xFAc: \u0111\u1ECDc \`.claude/rules/architecture.md\` \u2014 t\xE1c
 | \`ganas gate\` | Ch\u1EA5m \u0111i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh c\u1EE7a task \u0111ang l\xE0m |
 | \`ganas commit\` | Commit task \u0111\xE3 \u0111\u1EA1t gate \u2014 ch\u1EC9 khi th\u1EADt s\u1EF1 xong |
 
-<!-- Gi\u1EEF file n\xE0y d\u01B0\u1EDBi ~200 d\xF2ng. Quy tr\xECnh nhi\u1EC1u b\u01B0\u1EDBc \u2192 chuy\u1EC3n th\xE0nh skill.
-     Lu\u1EADt theo v\xF9ng code \u2192 chuy\u1EC3n th\xE0nh .claude/rules/*.md c\xF3 \`paths:\`. -->
+<!-- Gi\u1EEF ${guide} d\u01B0\u1EDBi ~200 d\xF2ng. Th\xF4ng tin ri\xEAng m\u1ED9t v\xF9ng code \u2192 ${guide}
+     trong ch\xEDnh th\u01B0 m\u1EE5c \u0111\xF3. Quy tr\xECnh nhi\u1EC1u b\u01B0\u1EDBc \u2192 chuy\u1EC3n th\xE0nh skill.
+     Xem .claude/rules/agent-guide.md. -->
 `;
 }
 function knowledgeRuleMd() {
@@ -15613,6 +15646,83 @@ hook n\xE0o ch\u1EB7n. \xC1p d\u1EE5ng khi vi\u1EBFt code, v\xE0 khi g\xE1n \`na
 "kh\u1ED1i n\xE0y c\xF3 t\u1EF1 ch\u1EA1m ra ngo\xE0i kh\xF4ng" tr\u01B0\u1EDBc khi ch\u1ECDn \`io\` hay kh\xF4ng.
 `;
 }
+function guideRuleMd(harness) {
+  const guide = guideFileName(harness);
+  return `# Lu\u1EADt vi\u1EBFt file h\u01B0\u1EDBng d\u1EABn cho agent (ganas)
+
+File h\u01B0\u1EDBng d\u1EABn l\xE0 th\u1EE9 agent \u0111\u1ECDc TR\u01AF\u1EDAC KHI \u0111\u1ECDc code. N\xF3 kh\xF4ng ph\u1EA3i kho tri th\u1EE9c,
+v\xE0 kh\xF4ng ph\u1EA3i ch\u1ED7 ch\xE9p l\u1EA1i nh\u1EEFng g\xEC \u0111\u1ECDc code l\xE0 bi\u1EBFt.
+
+## T\xEAn file ph\u1EE5 thu\u1ED9c m\xF4i tr\u01B0\u1EDDng, kh\xF4ng \u0111\xF3ng c\u1EE9ng
+
+D\u1EF1 \xE1n n\xE0y khai \`harness: ${harness}\` trong \`.ganas/config.yaml\`, n\xEAn file
+h\u01B0\u1EDBng d\u1EABn c\u1EE7a n\xF3 t\xEAn \`${guide}\`. Kh\xF4ng c\xF3 t\xEAn n\xE0o d\xF9ng chung \u0111\u01B0\u1EE3c cho m\u1ECDi
+c\xF4ng c\u1EE5:
+
+| Harness | File n\xF3 T\u1EF0 \u0111\u1ECDc |
+|---|---|
+| \`claude-code\` | \`CLAUDE.md\` \u2014 **kh\xF4ng** \u0111\u1ECDc \`AGENTS.md\`, k\u1EC3 c\u1EA3 \u1EDF th\u01B0 m\u1EE5c con |
+| \`codex\`, \`cursor\`, \`zed\`, \`windsurf\` | \`AGENTS.md\` |
+| \`gemini\` | \`GEMINI.md\` (\u0111\u1ED5i \u0111\u01B0\u1EE3c b\u1EB1ng \`context.fileName\`) |
+
+Mu\u1ED1n c\xF4ng c\u1EE5 th\u1EE9 hai \u0111\u1ECDc \u0111\u01B0\u1EE3c th\xEC **c\u1EA5u h\xECnh c\xF4ng c\u1EE5 \u0111\xF3**, \u0111\u1EEBng ch\xE9p file:
+Codex c\xF3 \`project_doc_fallback_filenames\`, Gemini c\xF3 \`context.fileName\`, VS
+Code Copilot c\xF3 \`chat.useClaudeMdFile\`. Hai b\u1EA3n \u0111\u1EA7y \u0111\u1EE7 song song th\xEC b\u1EA3n sai
+lu\xF4n l\xE0 b\u1EA3n kh\xF4ng ai \u0111\u1ECDc.
+
+## Ba ch\u1ED7 \u0111\u1EB7t, ba lo\u1EA1i n\u1ED9i dung
+
+- **\`${guide}\` \u1EDF g\u1ED1c** \u2014 b\u1EA3ng ch\u1EC9 \u0111\u01B0\u1EDDng. N\u1EA1p M\u1ECCI phi\xEAn n\xEAn m\u1ED7i d\xF2ng \u0111\u1EC1u t\u1ED1n
+  context. Gi\u1EEF d\u01B0\u1EDBi **200 d\xF2ng**. Ch\u1EC9 n\xF3i: d\u1EF1 \xE1n l\xE0 g\xEC, g\xF5 g\xEC \u0111\u1EC3 b\u1EAFt \u0111\u1EA7u, lu\u1EADt
+  n\u1EB1m \u1EDF \u0111\xE2u.
+- **\`${guide}\` trong TH\u01AF M\u1EE4C CON** \u2014 \u0111\xFAng vai \`README.md\` ng\xE0y x\u01B0a. Ch\u1EC9
+  \u0111\u01B0\u1EE3c n\u1EA1p khi agent \u0111\u1EE5ng v\xE0o file trong th\u01B0 m\u1EE5c \u0111\xF3, n\xEAn phi\xEAn kh\xF4ng li\xEAn quan
+  kh\xF4ng ph\u1EA3i tr\u1EA3 context cho n\xF3.
+- **\`.claude/rules/*.md\` kh\xF4ng c\xF3 \`paths:\`** \u2014 lu\u1EADt ph\u1EA3i s\u1ED1ng su\u1ED1t phi\xEAn.
+
+## \u0110\u1EB7t \u1EDF th\u01B0 m\u1EE5c n\xE0o th\xEC h\u1EBFt m\u01A1 h\u1ED3
+
+Ranh gi\u1EDBi \u0111\xE3 c\xF3 s\u1EB5n trong graph: \`paths\` c\u1EE7a kh\u1ED1i trong \`.ganas/modules/\`. M\u1ED9t
+kh\u1ED1i \u2192 m\u1ED9t \`${guide}\` \u1EDF th\u01B0 m\u1EE5c g\u1ED1c c\u1EE7a kh\u1ED1i \u0111\xF3. Ch\u01B0a c\xF3 kh\u1ED1i th\xEC ch\u01B0a c\u1EA7n file.
+
+## Vi\u1EBFt g\xEC
+
+C\u1ED5ng v\xE0o th\u1EADt c\u1EE7a v\xF9ng (h\xE0m n\xE0o l\xE0 entry), b\u1EA5t bi\u1EBFn d\u1EC5 ph\xE1, c\u1EA1m b\u1EABy \u0111\xE3 tr\u1EA3 gi\xE1
+b\u1EB1ng m\u1ED9t l\u1EA7n h\u1ECFng, l\u1EC7nh ch\u1EA1y test ri\xEAng c\u1EE7a v\xF9ng.
+
+## Kh\xF4ng vi\u1EBFt g\xEC
+
+- Th\u1EE9 \u0111\u1ECDc code ba m\u01B0\u01A1i gi\xE2y l\xE0 bi\u1EBFt.
+- Danh s\xE1ch file \u2014 l\u1EC7ch ngay h\xF4m sau.
+- T\u1ED5ng k\u1EBFt v\u0103n xu\xF4i c\u1EE7a phi\xEAn tr\u01B0\u1EDBc.
+- \u0110i\u1EC1u ki\u1EC3m ch\u1EE9ng \u0111\u01B0\u1EE3c: c\xE1i \u0111\xF3 ghi th\xE0nh fact c\xF3 probe trong \`.ganas/\`, \u1EDF \u0111\xE2y
+  ch\u1EC9 tr\u1ECF id.
+
+## V\xEC sao nh\u1ED3i h\u1EBFt v\xE0o file g\u1ED1c th\xEC sinh \u1EA3o gi\xE1c
+
+Ch\u1EEF trong file h\u01B0\u1EDBng d\u1EABn kh\xF4ng c\xF3 anchor, kh\xF4ng c\xF3 \`last_verified_at\`, kh\xF4ng
+hook n\xE0o b\u1EAFt n\xF3 ph\u1EA3i c\xF2n \u0111\xFAng. C\xE0ng d\xE0i th\xEC c\xE0ng nhi\u1EC1u d\xF2ng \u0111\xE3 l\u1ED7i th\u1EDDi \u0111\u01B0\u1EE3c
+tr\xECnh cho m\u1ECDi phi\xEAn nh\u01B0 s\u1EF1 th\u1EADt \u2014 trong khi Codex c\u1EAFt c\u1EE9ng \u1EDF 32 KiB v\xE0 Windsurf
+\u1EDF 12.000 k\xFD t\u1EF1 m\u1ED7i file, **c\u1EAFt im l\u1EB7ng, kh\xF4ng b\xE1o l\u1ED7i**. **File h\u01B0\u1EDBng d\u1EABn kh\xF4ng
+ph\u1EA3i kho tri th\u1EE9c**; kho \u1EDF \`.ganas/\` \u2014 xem \`.claude/rules/ganas-knowledge.md\`.
+
+## C\xE1i gi\xE1 c\u1EE7a vi\u1EC7c \u0111\u1EB7t g\u1EA7n code, ph\u1EA3i bi\u1EBFt tr\u01B0\u1EDBc
+
+File \u1EDF th\u01B0 m\u1EE5c con **kh\xF4ng \u0111\u01B0\u1EE3c n\u1EA1p l\u1EA1i sau khi context b\u1ECB n\xE9n** \u2014 ph\u1EA3i \u0111\u1ECDc l\u1EA1i
+m\u1ED9t file trong v\xF9ng \u0111\xF3 th\xEC n\xF3 m\u1EDBi quay v\u1EC1. N\xEAn chia \u0111\xFAng: th\u1EE9 ch\u1EC9 \u0111\xFAng khi \u0111ang
+s\u1EEDa v\xF9ng \u0111\xF3 th\xEC \u0111\u1EB7t g\u1EA7n code; th\u1EE9 ph\u1EA3i LU\xD4N \u0111\xFAng th\xEC \u0111\u1EC3 \u1EDF \`.claude/rules/\`
+kh\xF4ng c\xF3 \`paths:\`.
+
+Ch\u01B0a x\xE1c minh \u0111\u01B0\u1EE3c: import \`@file\` trong file h\u01B0\u1EDBng d\u1EABn \u1EDF th\u01B0 m\u1EE5c con n\u1EA1p l\u01B0\u1EDDi
+hay n\u1EA1p ngay l\xFAc m\u1EDF phi\xEAn \u2014 t\xE0i li\u1EC7u kh\xF4ng n\xF3i. \u0110\u1EEBng d\u1EF1a v\xE0o n\xF3 \u0111\u1EC3 ti\u1EBFt ki\u1EC7m
+context.
+
+## \u0110\xE2y l\xE0 h\u01B0\u1EDBng d\u1EABn, kh\xF4ng ph\u1EA3i lu\u1EADt m\xE1y ki\u1EC3m
+
+Kh\xF4ng l\u1EC7nh n\xE0o ch\u1EA5m \u0111\u01B0\u1EE3c "th\xF4ng tin c\xF3 v\u1EEBa \u0111\u1EE7 kh\xF4ng" \u2014 kh\xE1c lu\u1EADt ghi tri th\u1EE9c,
+\u1EDF \u0111\xE2y kh\xF4ng c\xF3 hook n\xE0o ch\u1EB7n. T\u1EF1 ki\u1EC3m r\u1EBB nh\u1EA5t: \`wc -l ${guide}\`.
+`;
+}
 function gitRuleMd() {
   return `# Lu\u1EADt git: tag, k\xFD commit (ganas)
 
@@ -15621,15 +15731,20 @@ function gitRuleMd() {
 Tag c\u1EE7a D\u1EF0 \xC1N N\xC0Y l\xE0 \`vX.Y.Z\` (semver) \u2014 vd \`v1.2.0\`. KH\xD4NG ph\u1EA3i
 \`<t\xEAn>--vX.Y.Z\`.
 
-\u0110\u1ECBnh d\u1EA1ng \`<t\xEAn>--vX.Y.Z\` l\xE0 quy \u01B0\u1EDBc RI\xCANG c\u1EE7a \`claude plugin tag\` \u2014 ch\u1EC9 \xE1p
-d\u1EE5ng khi CH\xCDNH d\u1EF1 \xE1n n\xE0y l\xE0 m\u1ED9t Claude Code plugin, d\xF9ng \u0111\u1EC3 marketplace ph\xE2n
-gi\u1EA3i version (ganas d\xF9ng \u0111\xFAng c\xE1ch n\xE0y cho ch\xEDnh repo ganas). D\u1EF1 \xE1n d\xF9ng
-ganas kh\xF4ng c\xF3 ngh\u0129a l\xE0 ph\u1EA3i tag theo ki\u1EC3u \u0111\xF3.
+\u0110\u1ECBnh d\u1EA1ng \`<t\xEAn>--vX.Y.Z\` l\xE0 quy \u01B0\u1EDBc RI\xCANG c\u1EE7a \`claude plugin tag\`. Ngay c\u1EA3
+repo ganas \u2014 b\u1EA3n th\xE2n n\xF3 L\xC0 m\u1ED9t Claude Code plugin \u2014 c\u0169ng kh\xF4ng tag ki\u1EC3u \u0111\xF3:
+entry marketplace c\u1EE7a n\xF3 khai \`source: ./plugin\` (\u0111\u01B0\u1EDDng d\u1EABn trong ch\xEDnh repo),
+n\xEAn version l\u1EA5y t\u1EEB \`plugin/.claude-plugin/plugin.json\`, kh\xF4ng ph\u1EA3i t\u1EEB tag. M\u1ECDi
+tag c\u1EE7a ganas \u0111\u1EC1u tr\u1EA7n. D\u1EF1 \xE1n ch\u1EC9 D\xD9NG ganas th\xEC l\u1EA1i c\xE0ng kh\xF4ng c\xF3 l\xFD do g\xEC.
 
 \`\`\`
 git tag -a v1.2.0 -m "..."
 git push origin v1.2.0
 \`\`\`
+
+T\u1ED1t h\u01A1n: \u0111\u1EEBng g\xF5 tay. Cho l\u1EC7nh n\xE2ng version c\u1EE7a d\u1EF1 \xE1n t\u1EA1o tag (\`npm version\`
+t\u1EA1o \u0111\xFAng \`vX.Y.Z\`), \u0111\u1EC3 s\u1ED1 hi\u1EC7u trong code v\xE0 tag kh\xF4ng th\u1EC3 l\u1EC7ch nhau \u2014 g\xF5 tay
+th\xEC l\u1EC7ch l\xE0 chuy\u1EC7n s\u1EDBm mu\u1ED9n, v\xE0 tag \u0111\xE3 \u0111\u1EA9y \u0111i th\xEC kh\xF4ng r\xFAt l\u1EA1i s\u1EA1ch \u0111\u01B0\u1EE3c.
 
 ## K\xFD commit: c\u1EA5u h\xECnh theo T\u1EEANG repo, kh\xF4ng \`--global\`
 
@@ -15662,6 +15777,63 @@ nh\u01B0ng host v\u1EABn b\xE1o "Unverified".
   \`attribution.commit\` ch\u1EC9 ch\u1EB7n \u0111\u01B0\u1EE3c \u0111\u01B0\u1EDDng t\u1EF1 \u0111\u1ED9ng, kh\xF4ng ch\u1EB7n \u0111\u01B0\u1EE3c ng\u01B0\u1EDDi
   t\u1EF1 g\xF5 \u2014 hook ch\u1EB7n \u0111\u01B0\u1EE3c c\u1EA3 hai v\xEC n\xF3 ch\u1EA1y sau c\xF9ng, tr\xEAn ch\xEDnh n\u1ED9i dung
   message, b\u1EA5t k\u1EC3 ngu\u1ED3n.
+`;
+}
+function namingRuleMd() {
+  return `# Lu\u1EADt \u0111\u1EB7t t\xEAn: n\xF3i ti\u1EBFng Vi\u1EC7t, vi\u1EBFt code ti\u1EBFng Anh (ganas)
+
+Chat, t\xE0i li\u1EC7u v\xE0 commit message b\u1EB1ng ti\u1EBFng Vi\u1EC7t. M\u1ECDi \u0110\u1ECANH DANH trong code b\u1EB1ng
+ti\u1EBFng Anh. \u0110\xE2y l\xE0 hai chuy\u1EC7n kh\xE1c nhau; tr\u1ED9n ch\xFAng l\u1EA1i ch\xEDnh l\xE0 ch\u1ED7 h\u1ECFng.
+
+## Ranh gi\u1EDBi
+
+| Ti\u1EBFng Anh \u2014 \u0111\u1ECBnh danh | Ti\u1EBFng Vi\u1EC7t c\xF3 d\u1EA5u \u2014 v\u0103n xu\xF4i v\xE0 d\u1EEF li\u1EC7u |
+|---|---|
+| t\xEAn bi\u1EBFn, h\xE0m, l\u1EDBp, ki\u1EC3u | comment, docstring |
+| t\xEAn file v\xE0 th\u01B0 m\u1EE5c | t\xE0i li\u1EC7u, commit message |
+| b\u1EA3ng v\xE0 c\u1ED9t DB, kho\xE1 JSON/YAML | chu\u1ED7i hi\u1EC3n th\u1ECB cho ng\u01B0\u1EDDi d\xF9ng |
+| bi\u1EBFn m\xF4i tr\u01B0\u1EDDng, \u0111\u01B0\u1EDDng d\u1EABn API | th\xF4ng b\xE1o l\u1ED7i |
+| t\xEAn nh\xE1nh git, t\xEAn h\xE0m test | m\u1ECDi v\u0103n b\u1EA3n trong \`.ganas/\` |
+
+## V\xEC sao: b\u1ECF d\u1EA5u l\xE0 M\u1EA4T TH\xD4NG TIN, kh\xF4ng ph\u1EA3i \u0111\u1ED5i ki\u1EC3u ch\u1EEF
+
+\`thuoc\` l\xE0 thu\u1ED1c, th\u01B0\u1EDBc, hay thu\u1ED9c? Ba ngh\u0129a kh\xF4ng li\xEAn quan g\xEC t\u1EDBi nhau, v\xE0
+\u0111\u1ECBnh danh th\xEC kh\xF4ng c\xF3 ch\u1ED7 n\xE0o mang d\u1EA5u quay v\u1EC1. Ng\u01B0\u1EDDi \u0111\u1ECDc sau ph\u1EA3i \u0111o\xE1n; agent
+\u0111\u1ECDc code c\u0169ng \u0111o\xE1n; \u0111o\xE1n sai th\xEC **kh\xF4ng c\xF3 l\u1ED7i n\xE0o n\u1ED5i l\xEAn** \u2014 ch\u1EC9 c\xF3 m\u1ED9t h\xE0m
+l\xE0m vi\u1EC7c kh\xE1c \u0111i\u1EC1u t\xEAn n\xF3 h\u1EE9a. Ti\u1EBFng Anh kh\xF4ng c\xF3 chuy\u1EC7n \u0111\xF3: \`ruler\`,
+\`medicine\`, \`belongsTo\` m\u1ED7i c\xE1i \u0111\xFAng m\u1ED9t ngh\u0129a.
+
+## Ba d\u1EA1ng sai
+
+\`\`\`ts
+// Chi\u1EC1u d\xE0i th\u01B0\u1EDBc \u0111o, \u0111\u01A1n v\u1ECB mm
+const rulerLengthMm = 300;   // \u2705
+const thuocLengthMm = 300;   // \u274C thu\u1ED1c? th\u01B0\u1EDBc? thu\u1ED9c?
+const chi\u1EC1uD\xE0iTh\u01B0\u1EDBc = 300;   // \u274C d\u1EA5u trong \u0111\u1ECBnh danh
+function getDonHang() {}     // \u274C n\u1EEDa Anh n\u1EEDa Vi\u1EC7t
+
+throw new Error("Kh\xF4ng t\xECm th\u1EA5y \u0111\u01A1n h\xE0ng"); // \u2705 chu\u1ED7i hi\u1EC3n th\u1ECB l\xE0 d\u1EEF li\u1EC7u
+\`\`\`
+
+## Kh\xF4ng c\xF3 ngo\u1EA1i l\u1EC7 cho \u0111\u1ECBnh danh
+
+Thu\u1EADt ng\u1EEF nghi\u1EC7p v\u1EE5 Vi\u1EC7t Nam v\u1EABn d\u1ECBch: \`taxCode\`, \`citizenId\`,
+\`redInvoice\`. B\u1EA3n d\u1ECBch l\xE0m m\u1EA5t m\u1ED9t s\u1EAFc th\xE1i ph\xE1p l\xFD th\xEC ghi comment ti\u1EBFng
+Vi\u1EC7t gi\u1EA3i ngh\u0129a **ngay ch\u1ED7 khai b\xE1o l\u1EA7n \u0111\u1EA7u** \u2014 \u0111\u1EEBng gi\u1EEF t\xEAn phi\xEAn \xE2m \u0111\u1EC3 "cho
+s\xE1t nghi\u1EC7p v\u1EE5". T\xEAn phi\xEAn \xE2m kh\xF4ng gi\u1EEF \u0111\u01B0\u1EE3c nghi\u1EC7p v\u1EE5; n\xF3 ch\u1EC9 gi\u1EA5u nghi\u1EC7p v\u1EE5
+\u0111i, k\u1EC3 c\u1EA3 kh\u1ECFi ch\xEDnh ng\u01B0\u1EDDi vi\u1EBFt s\xE1u th\xE1ng sau.
+
+## Chu\u1ED7i hi\u1EC3n th\u1ECB l\xE0 d\u1EEF li\u1EC7u, kh\xF4ng ph\u1EA3i \u0111\u1ECBnh danh
+
+ganas in ti\u1EBFng Vi\u1EC7t c\xF3 d\u1EA5u ra terminal, v\xE0 \u0111i\u1EC1u \u0111\xF3 \u0111\xFAng lu\u1EADt. Ranh gi\u1EDBi n\u1EB1m \u1EDF
+ch\u1ED7: th\u1EE9 M\xC1Y tra c\u1EE9u b\u1EB1ng t\xEAn (bi\u1EBFn, kho\xE1, c\u1ED9t) th\xEC ti\u1EBFng Anh; th\u1EE9 NG\u01AF\u1EDCI \u0111\u1ECDc
+(n\u1ED9i dung) th\xEC ti\u1EBFng Vi\u1EC7t.
+
+## M\xE1y ki\u1EC3m \u0111\u01B0\u1EE3c t\u1EDBi \u0111\xE2u
+
+Ch\u1EEF C\xD3 D\u1EA4U trong \u0111\u1ECBnh danh th\xEC grep ra \u0111\u01B0\u1EE3c. Ch\u1EEF B\u1ECE D\u1EA4U th\xEC kh\xF4ng \u2014 kh\xF4ng l\u1EC7nh
+n\xE0o ph\xE2n bi\u1EC7t n\u1ED5i \`thuoc\` v\u1EDBi m\u1ED9t t\u1EEB vi\u1EBFt t\u1EAFt ti\u1EBFng Anh. N\xEAn \u0111\xE2y l\xE0 h\u01B0\u1EDBng
+d\u1EABn, **kh\xF4ng c\xF3 hook n\xE0o ch\u1EB7n**; ch\u1ED7 b\u1EAFt th\u1EADt l\xE0 l\xFAc review.
 `;
 }
 function commitMsgHook() {
@@ -15701,19 +15873,20 @@ fi
 exit 0
 `;
 }
-function agentsMd(v) {
+function guidePointerMd(v, guide) {
   return `# ${v.project}
 
-H\u01B0\u1EDBng d\u1EABn chung cho c\xE1c coding agent (Claude Code, Codex, Cursor\u2026).
+H\u01B0\u1EDBng d\u1EABn th\u1EADt cho agent n\u1EB1m \u1EDF **\`${guide}\`** \u2014 \u0111\u1ECDc file \u0111\xF3 tr\u01B0\u1EDBc khi s\u1EEDa g\xEC.
+File n\xE0y ch\u1EC9 l\xE0 c\u1EEDa tr\u1ECF, c\u1ED1 \xFD kh\xF4ng ch\xE9p l\u1EA1i n\u1ED9i dung \u0111\u1EC3 hai b\u1EA3n kh\xF4ng tr\xF4i
+l\u1EC7ch nhau.
 
 D\u1EF1 \xE1n d\xF9ng **ganas**: tr\u1EA1ng th\xE1i c\xF4ng vi\u1EC7c v\xE0 tri th\u1EE9c \u0111\xE3 ki\u1EC3m ch\u1EE9ng n\u1EB1m \u1EDF
-\`.ganas/\`. Tr\u01B0\u1EDBc khi s\u1EEDa g\xEC, ch\u1EA1y \`ganas next\` \u0111\u1EC3 l\u1EA5y task hi\u1EC7n t\u1EA1i v\xE0 brief.
+\`.ganas/\`. Ch\u1EA1y \`ganas next\` \u0111\u1EC3 l\u1EA5y task hi\u1EC7n t\u1EA1i, \`ganas validate\` tr\u01B0\u1EDBc
+khi commit. Lu\u1EADt ghi tri th\u1EE9c: \`.claude/rules/ganas-knowledge.md\` \u2014 m\u1ECDi ph\xE1t
+bi\u1EC3u ghi v\xE0o \`.ganas/\` ph\u1EA3i k\xE8m b\u1EB1ng ch\u1EE9ng.
 
-Lu\u1EADt ghi tri th\u1EE9c: xem \`.claude/rules/ganas-knowledge.md\`. T\xF3m t\u1EAFt: m\u1ECDi ph\xE1t
-bi\u1EC3u ghi v\xE0o \`.ganas/\` ph\u1EA3i k\xE8m b\u1EB1ng ch\u1EE9ng (anchor \`file:line\`, commit, ho\u1EB7c
-URL k\xE8m th\u1EDDi \u0111i\u1EC3m l\u1EA5y). Kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng th\xEC kh\xF4ng ghi.
-
-Tr\u01B0\u1EDBc khi commit: \`ganas validate\`.
+D\xF9ng Codex v\xE0 mu\u1ED1n n\xF3 \u0111\u1ECDc th\u1EB3ng \`${guide}\`: khai
+\`project_doc_fallback_filenames = ["${guide}"]\` trong \`~/.codex/config.toml\`.
 `;
 }
 function gitignoreAddition() {
@@ -15776,6 +15949,7 @@ var init_project = __esm({
   "src/templates/project.ts"() {
     "use strict";
     init_paths();
+    init_config();
   }
 });
 
@@ -15819,7 +15993,15 @@ async function run2(argv) {
   const project = option(argv, "project") ?? (noninteractive ? basename(cwd) : await prompt("T\xEAn d\u1EF1 \xE1n", basename(cwd)));
   const ownerRaw = option(argv, "owner") ?? (noninteractive ? "" : await prompt("Handle ng\u01B0\u1EDDi duy\u1EC7t m\u1EE5c ti\xEAu (vd @nguyen-a), b\u1ECF tr\u1ED1ng n\u1EBFu ch\u01B0a c\xF3"));
   const owner = ownerRaw ? ownerRaw.startsWith("@") ? ownerRaw : `@${ownerRaw}` : void 0;
-  const vars = { project, owner };
+  const harnessRaw = option(argv, "harness") ?? "claude-code";
+  if (!HARNESS.includes(harnessRaw)) {
+    throw new GanasError(
+      `harness "${harnessRaw}" kh\xF4ng c\xF3. Ch\u1ECDn m\u1ED9t trong: ${HARNESS.join(", ")}.
+  Field n\xE0y quy\u1EBFt \u0111\u1ECBnh t\xEAn file h\u01B0\u1EDBng d\u1EABn \u0111\u01B0\u1EE3c sinh ra, kh\xF4ng ch\u1EC9 c\xE1ch giao task.`
+    );
+  }
+  const harness = harnessRaw;
+  const vars = { project, owner, harness };
   const written = [];
   const kept = [];
   const track = (rel, result) => {
@@ -15851,10 +16033,21 @@ async function run2(argv) {
     ".claude/rules/ganas-git.md",
     await writeNew(join8(cwd, ".claude", "rules", "ganas-git.md"), gitRuleMd(), force)
   );
-  const claudeMdPath = join8(cwd, "CLAUDE.md");
-  const claudeMdResult = await writeNew(claudeMdPath, claudeMd(vars), force);
-  track("CLAUDE.md", claudeMdResult);
-  track("AGENTS.md", await writeNew(join8(cwd, "AGENTS.md"), agentsMd(vars), force));
+  track(
+    ".claude/rules/naming.md",
+    await writeNew(join8(cwd, ".claude", "rules", "naming.md"), namingRuleMd(), force)
+  );
+  track(
+    ".claude/rules/agent-guide.md",
+    await writeNew(join8(cwd, ".claude", "rules", "agent-guide.md"), guideRuleMd(harness), force)
+  );
+  const guideFile = guideFileName(harness);
+  const guideResult = await writeNew(join8(cwd, guideFile), guideMd(vars), force);
+  track(guideFile, guideResult);
+  const pointer = pointerFileName(harness);
+  if (pointer) {
+    track(pointer, await writeNew(join8(cwd, pointer), guidePointerMd(vars, guideFile), force));
+  }
   const goalId = "G-001";
   track(
     `${GANAS_DIR}/${DIRS.goals}/${goalId}.yaml`,
@@ -15872,10 +16065,10 @@ async function run2(argv) {
 `);
   if (kept.length) process.stdout.write(`  gi\u1EEF nguy\xEAn: ${kept.join("\n              ")}
 `);
-  if (claudeMdResult === "kept") {
+  if (guideResult === "kept") {
     process.stdout.write(
       `
-  \u26A0 CLAUDE.md \u0111\xE3 c\xF3 s\u1EB5n n\xEAn kh\xF4ng b\u1ECB \u0111\xE8.
+  \u26A0 ${guideFile} \u0111\xE3 c\xF3 s\u1EB5n n\xEAn kh\xF4ng b\u1ECB \u0111\xE8.
     N\u1ED9i dung \u1EDF \u0111\xF3 CH\u01AFA \u0111\u01B0\u1EE3c \u0111\u1ED1i ch\u1EA5t v\u1EDBi code th\u1EADt. Mu\u1ED1n \u0111\u01B0a v\xE0o kho tri
     th\u1EE9c th\xEC ghi th\xE0nh claim \u1EDF .ganas/legacy/imported/ (ti\u1EC1n t\u1ED1 LC-,
     provenance: imported) r\u1ED3i verify d\u1EA7n \u2014 \u0111\u1EEBng coi n\xF3 l\xE0 s\u1EF1 th\u1EADt s\u1EB5n c\xF3.
@@ -15923,6 +16116,7 @@ var init_init = __esm({
   "src/commands/init.ts"() {
     "use strict";
     init_paths();
+    init_config();
     init_project();
     init_args();
     init_errors();

@@ -5,15 +5,20 @@
 Tag của DỰ ÁN NÀY là `vX.Y.Z` (semver) — vd `v1.2.0`. KHÔNG phải
 `<tên>--vX.Y.Z`.
 
-Định dạng `<tên>--vX.Y.Z` là quy ước RIÊNG của `claude plugin tag` — chỉ áp
-dụng khi CHÍNH dự án này là một Claude Code plugin, dùng để marketplace phân
-giải version (ganas dùng đúng cách này cho chính repo ganas). Dự án dùng
-ganas không có nghĩa là phải tag theo kiểu đó.
+Định dạng `<tên>--vX.Y.Z` là quy ước RIÊNG của `claude plugin tag`. Ngay cả
+repo ganas — bản thân nó LÀ một Claude Code plugin — cũng không tag kiểu đó:
+entry marketplace của nó khai `source: ./plugin` (đường dẫn trong chính repo),
+nên version lấy từ `plugin/.claude-plugin/plugin.json`, không phải từ tag. Mọi
+tag của ganas đều trần. Dự án chỉ DÙNG ganas thì lại càng không có lý do gì.
 
 ```
 git tag -a v1.2.0 -m "..."
 git push origin v1.2.0
 ```
+
+Tốt hơn: đừng gõ tay. Cho lệnh nâng version của dự án tạo tag (`npm version`
+tạo đúng `vX.Y.Z`), để số hiệu trong code và tag không thể lệch nhau — gõ tay
+thì lệch là chuyện sớm muộn, và tag đã đẩy đi thì không rút lại sạch được.
 
 ## Ký commit: cấu hình theo TỪNG repo, không `--global`
 

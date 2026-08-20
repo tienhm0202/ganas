@@ -43,12 +43,63 @@ export type ModelTier = (typeof MODEL_TIER)[number];
  * MCP không có khái niệm sinh agent con hay đổi model của phiên, model do
  * NGƯỜI chọn trong picker.
  *
+ * Field này còn quyết định TÊN FILE HƯỚNG DẪN mà `ganas init` sinh ra
+ * (`guideFileName()` ngay dưới) — mỗi harness đọc một tên khác nhau.
+ *
  * Đánh đổi đã biết: một repo mở bằng nhiều editor chỉ khai được một giá trị.
  * Khai cái mà bạn thật sự giao việc từ đó; khai sai thì hậu quả là brief
- * hướng dẫn nhầm cách giao, không phải hỏng dữ liệu.
+ * hướng dẫn nhầm cách giao và file hướng dẫn mang tên công cụ khác, không
+ * phải hỏng dữ liệu.
  */
-export const HARNESS = ["claude-code", "cursor", "zed", "windsurf", "other"] as const;
+export const HARNESS = [
+  "claude-code",
+  "codex",
+  "cursor",
+  "zed",
+  "windsurf",
+  "gemini",
+  "other",
+] as const;
 export type Harness = (typeof HARNESS)[number];
+
+/**
+ * Tên file hướng dẫn mà mỗi harness THẬT SỰ tự đọc.
+ *
+ * Không có một tên dùng chung được cho tất cả — xem claim `C-002` với URL và
+ * `fetched_at` của từng dòng. Hai điểm vỡ khiến bảng này phải tồn tại thay vì
+ * đóng cứng một tên: Claude Code chỉ tự tìm `CLAUDE.md`/`CLAUDE.local.md` và
+ * KHÔNG đọc `AGENTS.md` ở bất kỳ cấp thư mục nào; còn Zed lấy file ĐẦU TIÊN
+ * khớp trong danh sách fallback của nó, nên `AGENTS.md` có thể bị bỏ qua im
+ * lặng khi repo đã có `.rules`.
+ *
+ * `other` lấy `AGENTS.md`: đó là tên mà nhiều công cụ nhất đọc được, nên là
+ * phỏng đoán ít sai nhất khi không biết harness là gì.
+ */
+const GUIDE_FILE: Record<Harness, string> = {
+  "claude-code": "CLAUDE.md",
+  codex: "AGENTS.md",
+  cursor: "AGENTS.md",
+  zed: "AGENTS.md",
+  windsurf: "AGENTS.md",
+  gemini: "GEMINI.md",
+  other: "AGENTS.md",
+};
+
+/** Tên file hướng dẫn `ganas init` phải sinh cho harness này. */
+export function guideFileName(harness: Harness): string {
+  return GUIDE_FILE[harness];
+}
+
+/**
+ * Tên file CỬA TRỎ cần ghi thêm, hoặc `undefined` nếu không cần.
+ *
+ * Chỉ khi file chính không phải `AGENTS.md`: người mở repo bằng Codex/Cursor
+ * phải có đường tìm ra hướng dẫn thật. Cố ý KHÔNG chép nội dung sang — hai bản
+ * đầy đủ song song thì bản sai luôn là bản không ai đọc.
+ */
+export function pointerFileName(harness: Harness): string | undefined {
+  return guideFileName(harness) === "AGENTS.md" ? undefined : "AGENTS.md";
+}
 
 /** Harness tạo được sub-agent và chỉ định được model cho nó ngay trong phiên. */
 export function canDispatchSubagent(harness: Harness): boolean {

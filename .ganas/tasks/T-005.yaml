@@ -1,0 +1,45 @@
+id: T-005
+title: "Đồng bộ version: sinh cái suy được, test chặn cái không suy được"
+serves:
+  - G-001
+implements: D-003
+scope: P-release
+status: done
+done_at: 2026-08-20T17:00:27Z
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "release/CLAUDE.md"
+      why: "File hướng dẫn của vùng: bất biến, cạm bẫy đã trả giá, lệnh chạy test riêng"
+    - path: "CHANGELOG.md"
+      why: "Tiêu đề trên cùng là chỗ duy nhất không suy được, phải chốt quy ước Chưa phát hành"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-build
+
+exit_contract:
+  - kind: artifact
+    path: "release/version.mjs"
+    must_contain: "package.json"
+  - kind: command
+    run: "npx tsx --test 'release/version.test.ts'"
+  - kind: command
+    run: "grep -q '\"preversion\"' package.json && grep -q '\"version\":' package.json"
+  - kind: verification
+    target: "M-build/V-build-version-sync"
+
+notes: >-
+  Câu hỏi mở về định dạng tag đã được @tienhm trả lời ngày 2026-08-21: tag TRẦN,
+  và luật .claude/rules/ganas-git.md được sửa cho khớp thực tế (nó từng khai
+  ganas tag kiểu <tên>--vX.Y.Z, sai — mọi tag của repo đều trần từ v0.1.1).
+  Ghi ở đây chứ không tạo file trong .ganas/decisions/: luật ghi tri thức cấm
+  model tự tạo hay sửa decision, đó là việc của người.
+
+  Lệnh vận hành và lớp cưỡng chế của nó ở CHUNG một thư mục release/, kèm file
+  hướng dẫn của vùng — theo đúng luật agent-guide vừa viết. Test phải bắt được
+  cả trường hợp khó nhất: bump package.json mà quên chạy npm run build, khiến
+  bundle đã ship vẫn in số cũ.

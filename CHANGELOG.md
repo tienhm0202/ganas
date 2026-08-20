@@ -4,6 +4,89 @@ Ghi theo tính năng, không theo từng commit — xem `git log` nếu cần ch
 từng bước (`P2 N<số>` trong commit message khớp số thứ tự trong lịch sử phát
 triển thật, không phải số phát minh ra sau).
 
+Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số version vào tiêu đề:
+`npm version <bump>` tự đổi tiêu đề đó thành `## vX.Y.Z — <ngày>` bằng
+`scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
+lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
+
+## Chưa phát hành
+
+- **Luật tag thôi mô tả sai chính repo này.** `.claude/rules/ganas-git.md` khai
+  *"ganas dùng đúng cách này [`<tên>--vX.Y.Z`] cho chính repo ganas"* — sai, và
+  sai ngược cả lịch sử của chính nó: `ganas--v0.1.0` từng tag nhầm rồi đổi lại
+  thành `v0.1.0` từ v0.1.1, mọi tag từ đó tới nay đều trần. Một luật mô tả sai
+  thực tế tệ hơn không có luật: người đọc làm theo rồi phải quay lại sửa tag đã
+  push.
+
+  Nay luật nói đúng thứ kiểm được trong repo: entry marketplace khai
+  `source: ./plugin`, nên version phân giải từ `plugin/.claude-plugin/plugin.json`
+  chứ không từ tag — kể cả khi dự án CHÍNH LÀ một Claude Code plugin. Thêm một
+  đoạn chỉ đường: đừng gõ tay `git tag`, để lệnh nâng version tạo tag, cho số
+  hiệu trong code và tag không thể lệch nhau. Có test chặn bản khai sai quay lại.
+
+- **Version thôi có bốn nguồn sự thật.** Số hiệu đang được khai độc lập ở
+  `package.json`, `package-lock.json`, `plugin/.claude-plugin/plugin.json` và
+  tiêu đề `CHANGELOG.md`, cộng một chỗ thứ năm nhúng lúc build
+  (`__GANAS_VERSION__` trong `plugin/dist/*`) — mà **không lệnh nào bắt chúng
+  khớp**. Lệch thì im lặng: bản cài qua marketplace vẫn chạy, chỉ khai sai số,
+  nên người báo lỗi báo kèm một version không tồn tại.
+
+  Nay `package.json` là nguồn duy nhất. Chỗ suy được thì **sinh ra**: manifest
+  plugin do `release/version.mjs sync` ghi (và `scripts/build.mjs` gọi nó mỗi
+  lần build, nên nó không thể trôi sau một bản ship), bundle do build nhúng.
+  Chỗ không suy được vì người viết — tiêu đề CHANGELOG — thì để mục
+  **`## Chưa phát hành`** trong lúc làm, và `npm version` tự đổi tên nó thành
+  `## vX.Y.Z — <ngày>`. Không còn quãng nào mà lệch là "hợp lệ".
+
+  Lệnh vận hành và lớp cưỡng chế của nó nằm chung một thư mục `release/`, kèm
+  `release/CLAUDE.md` mô tả bất biến và cạm bẫy của vùng:
+  `npm run release -- bump minor` là đường DUY NHẤT để nâng version — nó chạy
+  test, đồng bộ, build, rồi tạo commit và tag `vX.Y.Z`.
+  `release/version.test.ts` chạy trong `npm test` và bắt cả trường hợp khó
+  nhất: bump rồi **quên `npm run build`**, khiến bundle đã ship vẫn in số cũ.
+  Đo thật: sửa `package.json` lên `0.6.0` mà chưa làm gì khác thì năm test đỏ.
+
+- **Tên file hướng dẫn cho agent thôi bị đóng cứng là `CLAUDE.md`.** `ganas
+  init` trước đây luôn ghi cả `CLAUDE.md` lẫn `AGENTS.md`, với hai nội dung
+  khác nhau và không gì giữ chúng khớp. Hai hệ quả thật: người dùng Codex nhận
+  một `CLAUDE.md` mà Codex **không bao giờ đọc**, và hai file hướng dẫn song
+  song thì bản sai luôn là bản không ai đọc.
+
+  Nay `harness` trong `.ganas/config.yaml` quyết định luôn tên file: `CLAUDE.md`
+  cho `claude-code`, `AGENTS.md` cho `codex`/`cursor`/`zed`/`windsurf`,
+  `GEMINI.md` cho `gemini`. Enum `HARNESS` được bổ sung `codex` và `gemini` —
+  `codex` trước đây **thiếu hẳn**. Thêm cờ `ganas init --harness <tên>`; tên
+  ngoài danh sách thì báo lỗi chứ không đoán.
+
+  Không chọn `AGENTS.md` làm chuẩn chung, dù nó là tên nhiều công cụ đọc nhất,
+  vì cơ chế nạp **không giống nhau**: Claude Code chỉ tự tìm `CLAUDE.md` và
+  `CLAUDE.local.md` — không đọc `AGENTS.md` ở bất kỳ cấp thư mục nào, kể cả
+  thư mục con, là đúng chỗ luật mới cần nó nhất; Zed lấy FILE ĐẦU TIÊN khớp
+  trong danh sách fallback nên `AGENTS.md` có thể bị bỏ qua im lặng; và luật
+  ghép cũng khác nhau (Codex/Cursor: file gần hơn ĐÈ; Claude Code/Gemini: NỐI
+  vào nhau). Bằng chứng từng dòng nằm ở claim `C-002`, có URL và `fetched_at`.
+
+  Khi tên file chính không phải `AGENTS.md`, `init` ghi thêm một `AGENTS.md`
+  **cửa trỏ** dài bốn dòng — cố ý không chép nội dung, chỉ để agent đọc
+  `AGENTS.md` tìm ra file thật thay vì kết luận dự án không có hướng dẫn.
+
+- **Hai luật mới, phát kèm `ganas init` như ba luật cũ.**
+
+  `.claude/rules/naming.md` — nói tiếng Việt, viết code tiếng Anh. Định danh
+  (biến, hàm, file, cột DB, khoá JSON, nhánh git) bằng tiếng Anh; comment, tài
+  liệu, commit message, chuỗi hiển thị và mọi văn bản trong `.ganas/` bằng
+  tiếng Việt có dấu. Lý do là mất thông tin, không phải thẩm mỹ: `thuoc` có thể
+  là thuốc, thước hay thuộc, và đoán sai thì **không có lỗi nào nổi lên**.
+
+  `.claude/rules/agent-guide.md` — file hướng dẫn ngắn ở gốc, đặt gần code.
+  Thông tin riêng một vùng nằm trong file hướng dẫn của chính thư mục đó (đúng
+  vai `README.md` ngày xưa), ranh giới lấy từ `paths` của khối trong
+  `.ganas/modules/`. Nhồi hết vào file gốc là đường sinh ảo giác: chữ ở đó
+  không có anchor, không có `last_verified_at`, không hook nào bắt nó phải còn
+  đúng — mà Codex còn cắt cứng ở 32 KiB và Windsurf ở 12.000 ký tự, **cắt im
+  lặng**. Luật này tự khai là **không có hook cưỡng chế**, giống
+  `architecture.md`.
+
 ## v0.5.0 — 2026-08-18
 
 - **`ganas id` thôi cấp trùng số cho hai phiên song song.** Lệnh này trước đây

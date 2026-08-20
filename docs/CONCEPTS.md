@@ -207,9 +207,14 @@ Có thể ghi đè riêng từng luật qua `enforcement_rules` (4 luật khai t
 — đây là nơi `Task.model` (tier) được resolve thành model id cụ thể lúc
 render brief.
 
-`config.harness` (`claude-code` | `cursor` | `zed` | `windsurf` | `other`,
-mặc định `claude-code`) khai harness đang giao việc. Nó cần thiết vì tier chỉ
-là dữ liệu, còn biến dữ liệu đó thành hành động thì mỗi harness một kiểu:
+`config.harness` (`claude-code` | `codex` | `cursor` | `zed` | `windsurf` |
+`gemini` | `other`, mặc định `claude-code`) khai harness đang giao việc. Nó
+quyết định hai thứ. Thứ nhất là **tên file hướng dẫn** `ganas init` sinh ra
+(`guideFileName()` trong `src/model/config.ts`): Claude Code chỉ tự đọc
+`CLAUDE.md` và không đọc `AGENTS.md` ở bất kỳ cấp thư mục nào, Codex/Cursor/
+Zed/Windsurf đọc `AGENTS.md`, Gemini CLI đọc `GEMINI.md` — không có một tên
+dùng chung được cho tất cả, xem claim `C-002`. Thứ hai là cách giao task, và
+điều đó cần thiết vì tier chỉ là dữ liệu, còn biến dữ liệu đó thành hành động thì mỗi harness một kiểu:
 Claude Code tạo được sub-agent và chỉ định model ngay trong tool call
 (`canDispatchSubagent()` trả `true`), còn Cursor/Zed/Windsurf chỉ nối với
 ganas qua MCP — MCP không có khái niệm sinh agent con hay đổi model của

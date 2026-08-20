@@ -1,0 +1,38 @@
+id: T-002
+title: "HARNESS thêm codex/gemini và bảng harness → tên file hướng dẫn"
+serves:
+  - G-001
+implements: D-002
+scope: P-graph-core
+status: done
+done_at: 2026-08-20T16:44:47Z
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-001
+
+context_contract:
+  must_read:
+    - path: "src/model/config.ts"
+      why: "HARNESS và canDispatchSubagent nằm ở đây; enum thiếu codex là lỗ cần vá"
+    - path: ".ganas/claims/C-002.yaml"
+      why: "Bảng tên file lấy từ claim này — mỗi dòng có URL và fetched_at, không viết theo trí nhớ"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+
+exit_contract:
+  - kind: command
+    run: "grep -q '\"codex\"' src/model/config.ts && grep -q '\"gemini\"' src/model/config.ts"
+  - kind: command
+    run: "grep -q guideFileName src/model/config.ts && grep -q guideFileName test/init.test.ts"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+
+notes: >-
+  canDispatchSubagent() GIỮ NGUYÊN chỉ claude-code: Codex và Gemini nối qua MCP,
+  không sinh sub-agent chọn model được. Bảng GUIDE_FILE phải có docstring dẫn
+  nguồn, và test phải phủ cạn enum để harness thêm sau không lọt qua với tên
+  file mặc định sai.

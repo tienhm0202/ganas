@@ -1,0 +1,69 @@
+- id: C-002
+  statement: >-
+    Mỗi harness đọc một TÊN FILE hướng dẫn khác nhau và nạp theo cơ chế khác
+    nhau, nên không có một tên file nào dùng chung được cho tất cả. Claude Code
+    chỉ tự tìm CLAUDE.md/CLAUDE.local.md — không đọc AGENTS.md ở bất kỳ cấp thư
+    mục nào; Codex CLI đọc AGENTS.md ghép từ git root xuống thư mục hiện tại,
+    file gần hơn đè lên, và cắt im lặng khi tổng vượt 32 KiB; Cursor đọc
+    .cursor/rules/*.mdc và AGENTS.md (kể cả thư mục con); Windsurf/Devin đọc
+    .devin/rules → .windsurf/rules → AGENTS.md, file ở thư mục con nạp lười;
+    Zed lấy FILE ĐẦU TIÊN khớp trong một danh sách fallback nên AGENTS.md có
+    thể bị bỏ qua im lặng; Gemini CLI đọc GEMINI.md, đổi tên được bằng
+    context.fileName. Khuyến nghị độ dài cũng khác nhau: Claude Code dưới 200
+    dòng, Cursor dưới 500 dòng, Windsurf 12.000 ký tự mỗi file, Copilot "không
+    quá 2 trang".
+  scope: P-cli
+  provenance: session
+  trust: unverified
+  anchors:
+    - kind: url
+      url: "https://code.claude.com/docs/en/memory"
+      fetched_at: "2026-08-20T00:00:00Z"
+      quote: >-
+        Claude Code reads CLAUDE.md files by walking up the directory tree from
+        your current working directory, checking each directory along the way
+        for CLAUDE.md and CLAUDE.local.md files.
+    - kind: url
+      url: "https://learn.chatgpt.com/docs/agent-configuration/agents-md"
+      fetched_at: "2026-08-20T00:00:00Z"
+      quote: >-
+        Codex concatenates files from the root down... Files closer to your
+        current directory override earlier guidance because they appear later
+        in the combined prompt.
+    - kind: url
+      url: "https://cursor.com/docs/context/rules"
+      fetched_at: "2026-08-20T00:00:00Z"
+      quote: >-
+        Cursor supports AGENTS.md in the project root and subdirectories.
+    - kind: url
+      url: "https://zed.dev/docs/ai/instructions"
+      fetched_at: "2026-08-20T00:00:00Z"
+      quote: >-
+        Zed uses the first matching file in this list of project instruction
+        files.
+    - kind: url
+      url: "https://docs.devin.ai/desktop/cascade/agents-md"
+      fetched_at: "2026-08-20T00:00:00Z"
+      quote: >-
+        Rules can exist at multiple levels in your project, not just the root.
+    - kind: url
+      url: "https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/gemini-md.md"
+      fetched_at: "2026-08-20T00:00:00Z"
+      quote: >-
+        The CLI automatically scans for GEMINI.md files in that directory and
+        its ancestors up to a trusted root.
+    - kind: url
+      url: "https://agents.md/"
+      fetched_at: "2026-08-20T00:00:00Z"
+      quote: >-
+        Agents automatically read the nearest file in the directory tree, so
+        the closest one takes precedence.
+  notes: >-
+    CỐ Ý là claim chứ không phải fact. Phát biểu nói về hành vi của SÁU CÔNG CỤ
+    BÊN NGOÀI repo này — không lệnh shell nào chạy trong repo quan sát được nó,
+    nên không có probe nào chứng minh được, chỉ có tài liệu của từng hãng tại
+    một thời điểm. Tài liệu đổi thì claim này sai mà không ai biết: muốn dựa
+    vào thì đọc lại URL và cập nhật fetched_at.
+    Đường tốt nghiệp có thật cho MỘT NỬA: dựng thư mục tạm rồi chạy từng CLI
+    thật với một file hướng dẫn có chuỗi mồi, quan sát nó có nhắc lại chuỗi đó
+    không. Nửa đó thành fact được; phần "Zed bỏ qua im lặng" thì không.

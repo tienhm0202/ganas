@@ -6,6 +6,7 @@ paths:
   - "src/commands/**"
 depends_on:
   - M-cli
+  - M-templates
 status: surveyed
 verify:
   - id: V-commands-smoke

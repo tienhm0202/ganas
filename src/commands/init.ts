@@ -10,6 +10,7 @@ import {
   ganasPath,
   STATE_FILE,
 } from "../graph/paths.js";
+import { guideFileName, HARNESS, type Harness, pointerFileName } from "../model/config.js";
 import * as T from "../templates/project.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
@@ -82,7 +83,16 @@ export async function run(argv: Argv): Promise<number> {
       : await prompt("Handle người duyệt mục tiêu (vd @nguyen-a), bỏ trống nếu chưa có"));
   const owner = ownerRaw ? (ownerRaw.startsWith("@") ? ownerRaw : `@${ownerRaw}`) : undefined;
 
-  const vars: T.InitVars = { project, owner };
+  const harnessRaw = option(argv, "harness") ?? "claude-code";
+  if (!(HARNESS as readonly string[]).includes(harnessRaw)) {
+    throw new GanasError(
+      `harness "${harnessRaw}" không có. Chọn một trong: ${HARNESS.join(", ")}.\n` +
+        `  Field này quyết định tên file hướng dẫn được sinh ra, không chỉ cách giao task.`,
+    );
+  }
+  const harness = harnessRaw as Harness;
+
+  const vars: T.InitVars = { project, owner, harness };
   const written: string[] = [];
   const kept: string[] = [];
 
@@ -125,12 +135,34 @@ export async function run(argv: Argv): Promise<number> {
     await writeNew(join(cwd, ".claude", "rules", "ganas-git.md"), T.gitRuleMd(), force),
   );
 
-  // CLAUDE.md và AGENTS.md: không đè nếu dự án đã có — nội dung cũ là của người
-  // dùng, trộn vào là mất thứ họ viết mà không hỏi.
-  const claudeMdPath = join(cwd, "CLAUDE.md");
-  const claudeMdResult = await writeNew(claudeMdPath, T.claudeMd(vars), force);
-  track("CLAUDE.md", claudeMdResult);
-  track("AGENTS.md", await writeNew(join(cwd, "AGENTS.md"), T.agentsMd(vars), force));
+  // Luật đặt tên (định danh tiếng Anh, văn xuôi tiếng Việt) — cùng lý do không
+  // có `paths:` frontmatter: nó áp dụng cho mọi file code, không riêng một vùng.
+  track(
+    ".claude/rules/naming.md",
+    await writeNew(join(cwd, ".claude", "rules", "naming.md"), T.namingRuleMd(), force),
+  );
+
+  // Luật viết file hướng dẫn cho agent — nhận `harness` vì TÊN FILE do harness
+  // quyết định. Cùng lý do không có `paths:` frontmatter.
+  track(
+    ".claude/rules/agent-guide.md",
+    await writeNew(join(cwd, ".claude", "rules", "agent-guide.md"), T.guideRuleMd(harness), force),
+  );
+
+  // File hướng dẫn: TÊN phụ thuộc harness — Claude Code chỉ tự đọc CLAUDE.md,
+  // Codex/Cursor/Zed đọc AGENTS.md, Gemini CLI đọc GEMINI.md. Không đè nếu dự
+  // án đã có file đó — nội dung cũ là của người dùng, trộn vào là mất thứ họ
+  // viết mà không hỏi.
+  const guideFile = guideFileName(harness);
+  const guideResult = await writeNew(join(cwd, guideFile), T.guideMd(vars), force);
+  track(guideFile, guideResult);
+
+  // Cửa trỏ, chỉ khi file chính không tên AGENTS.md: người mở repo bằng một
+  // công cụ khác phải tìm được hướng dẫn thật. Cố ý KHÔNG chép nội dung sang.
+  const pointer = pointerFileName(harness);
+  if (pointer) {
+    track(pointer, await writeNew(join(cwd, pointer), T.guidePointerMd(vars, guideFile), force));
+  }
 
   // Goal mẫu để graph có hình hài ngay, và để `validate` có gì mà kiểm. Phạm vi
   // KHÔNG sinh mẫu: nó cần ranh giới code thật, mà `ganas scope new` mới hỏi
@@ -151,9 +183,9 @@ export async function run(argv: Argv): Promise<number> {
   if (written.length) process.stdout.write(`  tạo mới:  ${written.join("\n            ")}\n`);
   if (kept.length) process.stdout.write(`  giữ nguyên: ${kept.join("\n              ")}\n`);
 
-  if (claudeMdResult === "kept") {
+  if (guideResult === "kept") {
     process.stdout.write(
-      `\n  ⚠ CLAUDE.md đã có sẵn nên không bị đè.\n` +
+      `\n  ⚠ ${guideFile} đã có sẵn nên không bị đè.\n` +
         `    Nội dung ở đó CHƯA được đối chất với code thật. Muốn đưa vào kho tri\n` +
         `    thức thì ghi thành claim ở .ganas/legacy/imported/ (tiền tố LC-,\n` +
         `    provenance: imported) rồi verify dần — đừng coi nó là sự thật sẵn có.\n`,

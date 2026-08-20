@@ -12,12 +12,17 @@ Brief của task hiện tại được bơm tự động lúc mở phiên. Nếu
 ganas next
 ```
 
-## Luật quan trọng nhất
+## Luật
 
-Đọc `.claude/rules/ganas-knowledge.md`. Tóm tắt một dòng: **không có bằng chứng
-thì không được ghi vào kho tri thức**.
+Đọc trước khi sửa gì — mỗi file một luật, đều nằm ở `.claude/rules/`:
 
-Kiến trúc: đọc `.claude/rules/architecture.md` — tách lõi nghiệp vụ khỏi I/O.
+| File | Luật |
+|---|---|
+| `ganas-knowledge.md` | **Không có bằng chứng thì không được ghi vào kho tri thức.** Luật quan trọng nhất, và là luật duy nhất có hook chặn. |
+| `architecture.md` | Tách lõi nghiệp vụ khỏi I/O. |
+| `naming.md` | Định danh trong code bằng tiếng Anh, văn xuôi bằng tiếng Việt. |
+| `agent-guide.md` | Viết file hướng dẫn cho agent: ngắn ở gốc, đặt gần code. |
+| `ganas-git.md` | Tag semver, ký commit theo repo, không nhắc AI trong commit. |
 
 ## Lệnh hay dùng
 
@@ -29,5 +34,6 @@ Kiến trúc: đọc `.claude/rules/architecture.md` — tách lõi nghiệp v�
 | `ganas gate` | Chấm điều kiện hoàn thành của task đang làm |
 | `ganas commit` | Commit task đã đạt gate — chỉ khi thật sự xong |
 
-<!-- Giữ file này dưới ~200 dòng. Quy trình nhiều bước → chuyển thành skill.
-     Luật theo vùng code → chuyển thành .claude/rules/*.md có `paths:`. -->
+<!-- Giữ CLAUDE.md dưới ~200 dòng. Thông tin riêng một vùng code → CLAUDE.md
+     trong chính thư mục đó. Quy trình nhiều bước → chuyển thành skill.
+     Xem .claude/rules/agent-guide.md. -->

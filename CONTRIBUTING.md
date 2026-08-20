@@ -111,11 +111,17 @@ Script trong `package.json`:
   `typescript-eslint` type-checked); `lint:fix` tự sửa những gì sửa được.
 - `npm run format` / `npm run format:check` — Prettier ghi đè / chỉ kiểm tra
   không sửa.
-- `npm test` — chạy toàn bộ test bằng `node:test` (`tsx --test test/**/*.test.ts`).
+- `npm test` — chạy toàn bộ test bằng `node:test` (`test/` và `release/`).
 - `npm run test:coverage` — chạy test qua `c8` với ngưỡng coverage
   (`--lines 88 --branches 80`); **hiện chỉ gate `src/graph/` và `src/verify/`**
   (phần lõi kiểm chứng), không bắt buộc cho `src/commands/`.
-- `npm run build` — biên dịch ra `dist/` (`tsc -p tsconfig.json`).
+- `npm run build` — bundle bản ship ra `plugin/dist/` bằng esbuild
+  (`scripts/build.mjs`), và ghi lại `version` trong manifest plugin theo
+  `package.json`.
+- `npm run release -- <check|sync|bump>` — lệnh vận hành phát hành. **Nâng
+  version chỉ bằng `npm run release -- bump <patch|minor|major>`**: nó chạy
+  test, đồng bộ mọi chỗ khai lại số hiệu, build lại, rồi tạo commit + tag.
+  Đừng sửa tay `version` ở bất kỳ đâu — xem `release/CLAUDE.md`.
 
 ## 6. Test convention
 

@@ -1,0 +1,42 @@
+id: T-001
+title: "Luật đặt tên: định danh tiếng Anh, văn xuôi tiếng Việt — phát kèm ganas init"
+serves:
+  - G-001
+implements: D-002
+scope: P-cli
+status: done
+done_at: 2026-08-20T16:44:47Z
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/templates/project.ts"
+      why: "Ba luật hiện có sinh từ đây — luật mới phải cùng khuôn, không frontmatter paths:"
+    - path: "test/init.test.ts"
+      why: "Khuôn test đôi: một test nội dung thuần, một test tích hợp so với file init ghi ra"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-templates
+  - M-commands
+
+exit_contract:
+  - kind: artifact
+    path: ".claude/rules/naming.md"
+    must_contain: "thuoc"
+  - kind: command
+    run: "grep -q namingRuleMd src/templates/project.ts && grep -q namingRuleMd src/commands/init.ts"
+  - kind: command
+    run: "grep -q naming.md test/init.test.ts && grep -q naming.md docs/COMMANDS.md && grep -q naming.md docs/WORKFLOW.md"
+  - kind: verification
+    target: "M-templates/V-templates-init"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Ranh giới người dùng đã chốt: tiếng Anh cho định danh (biến, hàm, file, cột
+  DB, khoá JSON, nhánh git); tiếng Việt có dấu cho comment, tài liệu, commit
+  message, chuỗi hiển thị và mọi văn bản trong .ganas/. Không có ngoại lệ cho
+  định danh.

@@ -14,8 +14,11 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "release": "node release/version.mjs",
+    "preversion": "npm test",
+    "version": "node release/version.mjs sync && node release/version.mjs stamp && npm run build && git add -A CHANGELOG.md plugin package-lock.json",
     "dev": "tsx src/cli.ts",
-    "test": "tsx --test test/**/*.test.ts",
+    "test": "tsx --test test/**/*.test.ts release/*.test.ts",
     "test:coverage": "c8 --include=src/graph/**/*.ts --include=src/verify/**/*.ts --check-coverage --lines 88 --branches 80 -- tsx --test test/**/*.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",

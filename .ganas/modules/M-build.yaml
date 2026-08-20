@@ -1,0 +1,15 @@
+id: M-build
+scope: P-release
+title: "Giữ mọi nơi khai version khớp package.json, và dựng bản ship"
+nature: io
+paths:
+  - "release/**"
+  - "scripts/build.mjs"
+  - "package.json"
+  - "plugin/.claude-plugin/plugin.json"
+status: surveyed
+verify:
+  - id: V-build-version-sync
+    kind: probe
+    run: "npx tsx --test 'release/version.test.ts'"
+    expect: exit_zero

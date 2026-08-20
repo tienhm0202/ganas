@@ -9,10 +9,13 @@
  */
 
 import { LOCAL_ONLY } from "../graph/paths.js";
+import { guideFileName, type Harness } from "../model/config.js";
 
 export interface InitVars {
   project: string;
   owner?: string | undefined;
+  /** Harness khai lúc init — quyết định tên file hướng dẫn và dòng `harness:`. */
+  harness?: Harness | undefined;
 }
 
 export function configYaml(v: InitVars): string {
@@ -33,12 +36,15 @@ enforcement_rules: {}
   # exit_contract: enforce
   # task_link: enforce
 
-# Harness giao việc: claude-code | cursor | zed | windsurf | other
-# Quyết định brief hướng dẫn giao task kiểu nào: claude-code thì tạo sub-agent
-# với model của tier; các harness còn lại chỉ nối qua MCP nên brief chỉ khuyến
-# nghị đổi model trong picker. Repo mở bằng nhiều editor thì khai cái bạn thật
-# sự giao việc từ đó.
-harness: claude-code
+# Harness giao việc:
+#   claude-code | codex | cursor | zed | windsurf | gemini | other
+# Quyết định HAI thứ. Một: brief hướng dẫn giao task kiểu nào — claude-code thì
+# tạo sub-agent với model của tier; các harness còn lại chỉ nối qua MCP nên
+# brief chỉ khuyến nghị đổi model trong picker. Hai: TÊN FILE HƯỚNG DẪN mà
+# \`ganas init\` sinh (CLAUDE.md / AGENTS.md / GEMINI.md) — mỗi công cụ đọc một
+# tên khác nhau. Repo mở bằng nhiều editor thì khai cái bạn thật sự giao việc
+# từ đó, rồi trỏ công cụ còn lại sang đúng file đó thay vì chép file thứ hai.
+harness: ${v.harness ?? "claude-code"}
 
 # Model thật cho từng tier. Task khai \`model: <tier>\` lúc chẻ, brief tra ở đây.
 #   main     — việc khó/mơ hồ, cần phán đoán
@@ -51,7 +57,14 @@ models:
 `;
 }
 
-export function claudeMd(v: InitVars): string {
+/**
+ * File hướng dẫn ở gốc dự án — TÊN FILE phụ thuộc harness (`guideFileName()`).
+ *
+ * Ngắn, chỉ đường. Nạp mọi phiên nên mỗi dòng đều tốn context; luật đầy đủ nằm
+ * ở `.claude/rules/*.md`, không nhét vào đây.
+ */
+export function guideMd(v: InitVars): string {
+  const guide = guideFileName(v.harness ?? "claude-code");
   return `# ${v.project}
 
 Dự án này dùng **ganas** để kiểm soát phiên làm việc. Trạng thái công việc và tri
@@ -66,12 +79,17 @@ Brief của task hiện tại được bơm tự động lúc mở phiên. Nếu
 ganas next
 \`\`\`
 
-## Luật quan trọng nhất
+## Luật
 
-Đọc \`.claude/rules/ganas-knowledge.md\`. Tóm tắt một dòng: **không có bằng chứng
-thì không được ghi vào kho tri thức**.
+Đọc trước khi sửa gì — mỗi file một luật, đều nằm ở \`.claude/rules/\`:
 
-Kiến trúc: đọc \`.claude/rules/architecture.md\` — tách lõi nghiệp vụ khỏi I/O.
+| File | Luật |
+|---|---|
+| \`ganas-knowledge.md\` | **Không có bằng chứng thì không được ghi vào kho tri thức.** Luật quan trọng nhất, và là luật duy nhất có hook chặn. |
+| \`architecture.md\` | Tách lõi nghiệp vụ khỏi I/O. |
+| \`naming.md\` | Định danh trong code bằng tiếng Anh, văn xuôi bằng tiếng Việt. |
+| \`agent-guide.md\` | Viết file hướng dẫn cho agent: ngắn ở gốc, đặt gần code. |
+| \`ganas-git.md\` | Tag semver, ký commit theo repo, không nhắc AI trong commit. |
 
 ## Lệnh hay dùng
 
@@ -83,8 +101,9 @@ Kiến trúc: đọc \`.claude/rules/architecture.md\` — tách lõi nghiệp v
 | \`ganas gate\` | Chấm điều kiện hoàn thành của task đang làm |
 | \`ganas commit\` | Commit task đã đạt gate — chỉ khi thật sự xong |
 
-<!-- Giữ file này dưới ~200 dòng. Quy trình nhiều bước → chuyển thành skill.
-     Luật theo vùng code → chuyển thành .claude/rules/*.md có \`paths:\`. -->
+<!-- Giữ ${guide} dưới ~200 dòng. Thông tin riêng một vùng code → ${guide}
+     trong chính thư mục đó. Quy trình nhiều bước → chuyển thành skill.
+     Xem .claude/rules/agent-guide.md. -->
 `;
 }
 
@@ -188,6 +207,91 @@ hook nào chặn. Áp dụng khi viết code, và khi gán \`nature\` cho khối
 `;
 }
 
+/**
+ * Luật viết file hướng dẫn cho agent — TÊN FILE do harness quyết định, nên
+ * luật phải nhận `harness` chứ không nói chung chung "CLAUDE.md".
+ *
+ * Không có frontmatter `paths:` — cùng lý do với các luật khác: luật phải sống
+ * suốt phiên, không chỉ khi đang đọc một file khớp pattern.
+ */
+export function guideRuleMd(harness: Harness): string {
+  const guide = guideFileName(harness);
+  return `# Luật viết file hướng dẫn cho agent (ganas)
+
+File hướng dẫn là thứ agent đọc TRƯỚC KHI đọc code. Nó không phải kho tri thức,
+và không phải chỗ chép lại những gì đọc code là biết.
+
+## Tên file phụ thuộc môi trường, không đóng cứng
+
+Dự án này khai \`harness: ${harness}\` trong \`.ganas/config.yaml\`, nên file
+hướng dẫn của nó tên \`${guide}\`. Không có tên nào dùng chung được cho mọi
+công cụ:
+
+| Harness | File nó TỰ đọc |
+|---|---|
+| \`claude-code\` | \`CLAUDE.md\` — **không** đọc \`AGENTS.md\`, kể cả ở thư mục con |
+| \`codex\`, \`cursor\`, \`zed\`, \`windsurf\` | \`AGENTS.md\` |
+| \`gemini\` | \`GEMINI.md\` (đổi được bằng \`context.fileName\`) |
+
+Muốn công cụ thứ hai đọc được thì **cấu hình công cụ đó**, đừng chép file:
+Codex có \`project_doc_fallback_filenames\`, Gemini có \`context.fileName\`, VS
+Code Copilot có \`chat.useClaudeMdFile\`. Hai bản đầy đủ song song thì bản sai
+luôn là bản không ai đọc.
+
+## Ba chỗ đặt, ba loại nội dung
+
+- **\`${guide}\` ở gốc** — bảng chỉ đường. Nạp MỌI phiên nên mỗi dòng đều tốn
+  context. Giữ dưới **200 dòng**. Chỉ nói: dự án là gì, gõ gì để bắt đầu, luật
+  nằm ở đâu.
+- **\`${guide}\` trong THƯ MỤC CON** — đúng vai \`README.md\` ngày xưa. Chỉ
+  được nạp khi agent đụng vào file trong thư mục đó, nên phiên không liên quan
+  không phải trả context cho nó.
+- **\`.claude/rules/*.md\` không có \`paths:\`** — luật phải sống suốt phiên.
+
+## Đặt ở thư mục nào thì hết mơ hồ
+
+Ranh giới đã có sẵn trong graph: \`paths\` của khối trong \`.ganas/modules/\`. Một
+khối → một \`${guide}\` ở thư mục gốc của khối đó. Chưa có khối thì chưa cần file.
+
+## Viết gì
+
+Cổng vào thật của vùng (hàm nào là entry), bất biến dễ phá, cạm bẫy đã trả giá
+bằng một lần hỏng, lệnh chạy test riêng của vùng.
+
+## Không viết gì
+
+- Thứ đọc code ba mươi giây là biết.
+- Danh sách file — lệch ngay hôm sau.
+- Tổng kết văn xuôi của phiên trước.
+- Điều kiểm chứng được: cái đó ghi thành fact có probe trong \`.ganas/\`, ở đây
+  chỉ trỏ id.
+
+## Vì sao nhồi hết vào file gốc thì sinh ảo giác
+
+Chữ trong file hướng dẫn không có anchor, không có \`last_verified_at\`, không
+hook nào bắt nó phải còn đúng. Càng dài thì càng nhiều dòng đã lỗi thời được
+trình cho mọi phiên như sự thật — trong khi Codex cắt cứng ở 32 KiB và Windsurf
+ở 12.000 ký tự mỗi file, **cắt im lặng, không báo lỗi**. **File hướng dẫn không
+phải kho tri thức**; kho ở \`.ganas/\` — xem \`.claude/rules/ganas-knowledge.md\`.
+
+## Cái giá của việc đặt gần code, phải biết trước
+
+File ở thư mục con **không được nạp lại sau khi context bị nén** — phải đọc lại
+một file trong vùng đó thì nó mới quay về. Nên chia đúng: thứ chỉ đúng khi đang
+sửa vùng đó thì đặt gần code; thứ phải LUÔN đúng thì để ở \`.claude/rules/\`
+không có \`paths:\`.
+
+Chưa xác minh được: import \`@file\` trong file hướng dẫn ở thư mục con nạp lười
+hay nạp ngay lúc mở phiên — tài liệu không nói. Đừng dựa vào nó để tiết kiệm
+context.
+
+## Đây là hướng dẫn, không phải luật máy kiểm
+
+Không lệnh nào chấm được "thông tin có vừa đủ không" — khác luật ghi tri thức,
+ở đây không có hook nào chặn. Tự kiểm rẻ nhất: \`wc -l ${guide}\`.
+`;
+}
+
 export function gitRuleMd(): string {
   // Không có frontmatter `paths:` — cùng lý do với knowledgeRuleMd()/
   // architectureRuleMd(): quy ước git áp dụng bất kể đang sửa file nào.
@@ -198,15 +302,20 @@ export function gitRuleMd(): string {
 Tag của DỰ ÁN NÀY là \`vX.Y.Z\` (semver) — vd \`v1.2.0\`. KHÔNG phải
 \`<tên>--vX.Y.Z\`.
 
-Định dạng \`<tên>--vX.Y.Z\` là quy ước RIÊNG của \`claude plugin tag\` — chỉ áp
-dụng khi CHÍNH dự án này là một Claude Code plugin, dùng để marketplace phân
-giải version (ganas dùng đúng cách này cho chính repo ganas). Dự án dùng
-ganas không có nghĩa là phải tag theo kiểu đó.
+Định dạng \`<tên>--vX.Y.Z\` là quy ước RIÊNG của \`claude plugin tag\`. Ngay cả
+repo ganas — bản thân nó LÀ một Claude Code plugin — cũng không tag kiểu đó:
+entry marketplace của nó khai \`source: ./plugin\` (đường dẫn trong chính repo),
+nên version lấy từ \`plugin/.claude-plugin/plugin.json\`, không phải từ tag. Mọi
+tag của ganas đều trần. Dự án chỉ DÙNG ganas thì lại càng không có lý do gì.
 
 \`\`\`
 git tag -a v1.2.0 -m "..."
 git push origin v1.2.0
 \`\`\`
+
+Tốt hơn: đừng gõ tay. Cho lệnh nâng version của dự án tạo tag (\`npm version\`
+tạo đúng \`vX.Y.Z\`), để số hiệu trong code và tag không thể lệch nhau — gõ tay
+thì lệch là chuyện sớm muộn, và tag đã đẩy đi thì không rút lại sạch được.
 
 ## Ký commit: cấu hình theo TỪNG repo, không \`--global\`
 
@@ -239,6 +348,66 @@ nhưng host vẫn báo "Unverified".
   \`attribution.commit\` chỉ chặn được đường tự động, không chặn được người
   tự gõ — hook chặn được cả hai vì nó chạy sau cùng, trên chính nội dung
   message, bất kể nguồn.
+`;
+}
+
+export function namingRuleMd(): string {
+  // Không có frontmatter `paths:` — cùng lý do với ba luật trên: quy ước đặt
+  // tên áp dụng cho mọi file code, không riêng một vùng.
+  return `# Luật đặt tên: nói tiếng Việt, viết code tiếng Anh (ganas)
+
+Chat, tài liệu và commit message bằng tiếng Việt. Mọi ĐỊNH DANH trong code bằng
+tiếng Anh. Đây là hai chuyện khác nhau; trộn chúng lại chính là chỗ hỏng.
+
+## Ranh giới
+
+| Tiếng Anh — định danh | Tiếng Việt có dấu — văn xuôi và dữ liệu |
+|---|---|
+| tên biến, hàm, lớp, kiểu | comment, docstring |
+| tên file và thư mục | tài liệu, commit message |
+| bảng và cột DB, khoá JSON/YAML | chuỗi hiển thị cho người dùng |
+| biến môi trường, đường dẫn API | thông báo lỗi |
+| tên nhánh git, tên hàm test | mọi văn bản trong \`.ganas/\` |
+
+## Vì sao: bỏ dấu là MẤT THÔNG TIN, không phải đổi kiểu chữ
+
+\`thuoc\` là thuốc, thước, hay thuộc? Ba nghĩa không liên quan gì tới nhau, và
+định danh thì không có chỗ nào mang dấu quay về. Người đọc sau phải đoán; agent
+đọc code cũng đoán; đoán sai thì **không có lỗi nào nổi lên** — chỉ có một hàm
+làm việc khác điều tên nó hứa. Tiếng Anh không có chuyện đó: \`ruler\`,
+\`medicine\`, \`belongsTo\` mỗi cái đúng một nghĩa.
+
+## Ba dạng sai
+
+\`\`\`ts
+// Chiều dài thước đo, đơn vị mm
+const rulerLengthMm = 300;   // ✅
+const thuocLengthMm = 300;   // ❌ thuốc? thước? thuộc?
+const chiềuDàiThước = 300;   // ❌ dấu trong định danh
+function getDonHang() {}     // ❌ nửa Anh nửa Việt
+
+throw new Error("Không tìm thấy đơn hàng"); // ✅ chuỗi hiển thị là dữ liệu
+\`\`\`
+
+## Không có ngoại lệ cho định danh
+
+Thuật ngữ nghiệp vụ Việt Nam vẫn dịch: \`taxCode\`, \`citizenId\`,
+\`redInvoice\`. Bản dịch làm mất một sắc thái pháp lý thì ghi comment tiếng
+Việt giải nghĩa **ngay chỗ khai báo lần đầu** — đừng giữ tên phiên âm để "cho
+sát nghiệp vụ". Tên phiên âm không giữ được nghiệp vụ; nó chỉ giấu nghiệp vụ
+đi, kể cả khỏi chính người viết sáu tháng sau.
+
+## Chuỗi hiển thị là dữ liệu, không phải định danh
+
+ganas in tiếng Việt có dấu ra terminal, và điều đó đúng luật. Ranh giới nằm ở
+chỗ: thứ MÁY tra cứu bằng tên (biến, khoá, cột) thì tiếng Anh; thứ NGƯỜI đọc
+(nội dung) thì tiếng Việt.
+
+## Máy kiểm được tới đâu
+
+Chữ CÓ DẤU trong định danh thì grep ra được. Chữ BỎ DẤU thì không — không lệnh
+nào phân biệt nổi \`thuoc\` với một từ viết tắt tiếng Anh. Nên đây là hướng
+dẫn, **không có hook nào chặn**; chỗ bắt thật là lúc review.
 `;
 }
 
@@ -298,19 +467,28 @@ exit 0
 `;
 }
 
-export function agentsMd(v: InitVars): string {
+/**
+ * File CỬA TRỎ — ghi khi file hướng dẫn chính không tên `AGENTS.md`.
+ *
+ * CỐ Ý ngắn và CỐ Ý không chép nội dung: hai bản hướng dẫn đầy đủ song song thì
+ * bản sai luôn là bản không ai đọc. Nó chỉ tồn tại để một agent đọc `AGENTS.md`
+ * (Codex, Cursor, Zed…) tìm được file thật thay vì kết luận dự án không có
+ * hướng dẫn nào.
+ */
+export function guidePointerMd(v: InitVars, guide: string): string {
   return `# ${v.project}
 
-Hướng dẫn chung cho các coding agent (Claude Code, Codex, Cursor…).
+Hướng dẫn thật cho agent nằm ở **\`${guide}\`** — đọc file đó trước khi sửa gì.
+File này chỉ là cửa trỏ, cố ý không chép lại nội dung để hai bản không trôi
+lệch nhau.
 
 Dự án dùng **ganas**: trạng thái công việc và tri thức đã kiểm chứng nằm ở
-\`.ganas/\`. Trước khi sửa gì, chạy \`ganas next\` để lấy task hiện tại và brief.
+\`.ganas/\`. Chạy \`ganas next\` để lấy task hiện tại, \`ganas validate\` trước
+khi commit. Luật ghi tri thức: \`.claude/rules/ganas-knowledge.md\` — mọi phát
+biểu ghi vào \`.ganas/\` phải kèm bằng chứng.
 
-Luật ghi tri thức: xem \`.claude/rules/ganas-knowledge.md\`. Tóm tắt: mọi phát
-biểu ghi vào \`.ganas/\` phải kèm bằng chứng (anchor \`file:line\`, commit, hoặc
-URL kèm thời điểm lấy). Không có bằng chứng thì không ghi.
-
-Trước khi commit: \`ganas validate\`.
+Dùng Codex và muốn nó đọc thẳng \`${guide}\`: khai
+\`project_doc_fallback_filenames = ["${guide}"]\` trong \`~/.codex/config.toml\`.
 `;
 }
 

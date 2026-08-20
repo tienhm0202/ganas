@@ -29,3 +29,65 @@
     - test/cli-help.test.ts#L99
   scope: P-cli
   status: open
+- id: ICE-003
+  title: verify/probe-unrelated báo nhiễu cho khối vì so probe với TÊN khối, không
+    phải phát biểu
+  found_at: 2026-08-18T10:55:56.745Z
+  review_after_days: 30
+  weight: 2
+  ease: 3
+  why_deferred: "Luật này đúng và quý với fact — hôm nay nó đã bắt được lỗi thật
+    trong dữ liệu vừa viết (probe chạy cả file test không ghim đúng điều fact
+    khẳng định). Nhưng nhánh module ở validate.ts:466 truyền statement: m.title,
+    mà tiêu đề khối là một cái TÊN chứ không phải một phát biểu, nên heuristic
+    đang so probe với sai loại dữ liệu. Bằng chứng smoke của một khối đúng là
+    chạy test của khối đó; đòi tên lệnh phải chứa từ trong tiêu đề khối là đòi
+    sai chỗ. Chưa làm vì phải tách nhánh luật cho module khác fact (đụng
+    validate.ts) rồi chấm điểm lại trong debt.ts, mà tổng 5 đang thấp hơn hai
+    mục đã nằm trong sổ."
+  anchors:
+    - src/graph/validate.ts#L466
+    - src/graph/validate.ts#L673
+    - src/verify/lint.ts#L117
+  scope: P-graph-core
+  status: open
+
+- id: ICE-004
+  title: "Luật của ganas chỉ nằm ở .claude/rules/ — harness khác không tự nạp"
+  found_at: 2026-08-20T04:00:00Z
+  review_after_days: 30
+  weight: 3
+  ease: 2
+  why_deferred: "ganas init ghi luật vào .claude/rules/*.md bất kể harness nào,
+    mà thư mục đó chỉ Claude Code tự nạp. Cursor đọc .cursor/rules/*.mdc (file
+    .md không frontmatter bị bỏ qua), Windsurf/Devin đọc .devin/rules/ rồi
+    .windsurf/rules/ — nên dự án khai harness: cursor nhận đủ file luật mà
+    không công cụ nào nạp; chúng chỉ được đọc khi file hướng dẫn trỏ tay tới.
+    Chưa làm vì mỗi harness một định dạng khác nhau (Cursor cần frontmatter
+    .mdc, Windsurf có trần 12.000 ký tự/file), tức là một cổng xuất riêng cho
+    từng harness chứ không phải chép file — việc lớn hơn hẳn hai luật đang
+    thêm, và chưa ai dùng ganas bằng Cursor để biết nó đau tới đâu."
+  anchors:
+    - src/commands/init.ts#L109
+    - src/commands/init.ts#L126
+    - .ganas/claims/C-002.yaml
+  scope: P-cli
+  status: open
+
+- id: ICE-005
+  title: "install-target.mjs chưa có cờ --codex/--gemini cho hai harness mới"
+  found_at: 2026-08-20T04:00:00Z
+  review_after_days: 30
+  weight: 2
+  ease: 3
+  why_deferred: "HARNESS nay có codex và gemini, khai được trong config.yaml,
+    nhưng scripts/install-target.mjs vẫn chỉ biết bốn cờ cũ nên hai harness mới
+    không có đường cài MCP tự động — người dùng phải tự sửa config của công cụ.
+    Chưa làm vì mỗi công cụ đặt file cấu hình MCP một chỗ khác nhau và Codex CLI
+    dùng TOML chứ không phải JSON như .cursor/mcp.json, tức phải thêm một bộ
+    ghi cấu hình mới; việc này độc lập với luật đang thêm và chưa chặn ai."
+  anchors:
+    - scripts/install-target.mjs#L246
+    - src/model/config.ts#L52
+  scope: P-cli
+  status: open

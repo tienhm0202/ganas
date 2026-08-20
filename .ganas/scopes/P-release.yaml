@@ -1,0 +1,16 @@
+id: P-release
+title: "Phát hành: version, bundle ship, manifest plugin"
+version: 0.1.0
+owner: "@tienhm"
+status: active
+
+# Ranh giới code của phạm vi. Fact/claim chỉ được coi là đúng BÊN TRONG đây.
+modules:
+  - M-build
+entry: M-build
+
+acceptance:
+  - id: V-release-version-sync
+    kind: probe
+    run: "npx tsx --test 'release/version.test.ts'"
+    expect: exit_zero

@@ -8,6 +8,7 @@ status: active
 modules:
   - M-cli
   - M-commands
+  - M-templates
 entry: M-cli
 
 acceptance:

@@ -1,0 +1,42 @@
+id: T-003
+title: "ganas init sinh đúng file hướng dẫn cho harness, kèm cờ --harness"
+serves:
+  - G-001
+implements: D-002
+scope: P-cli
+status: done
+done_at: 2026-08-20T16:44:47Z
+estimated_context: medium
+model: verifier
+blocked_by:
+  - T-002
+
+context_contract:
+  must_read:
+    - path: "src/commands/init.ts"
+      why: "Chỗ đang ghi cứng CLAUDE.md + AGENTS.md, và chỗ thêm tuỳ chọn --harness"
+    - path: "src/templates/project.ts"
+      why: "claudeMd()/agentsMd() phải đổi thành guideMd()/guidePointerMd() theo tên file động"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-templates
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "grep -q 'harness' src/commands/init.ts && grep -q guideFileName src/commands/init.ts"
+  - kind: command
+    run: "grep -q 'harness codex' test/init.test.ts || grep -q 'harness: \"codex\"' test/init.test.ts"
+  - kind: command
+    run: "grep -q -- '--harness' docs/COMMANDS.md"
+  - kind: verification
+    target: "M-templates/V-templates-init"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Sinh ĐÚNG MỘT file hướng dẫn đầy đủ, tên lấy từ guideFileName(harness). Chỉ
+  khi tên đó khác AGENTS.md mới ghi thêm AGENTS.md dạng CỬA TRỎ 3-4 dòng —
+  không phải bản sao, vì hai bản đầy đủ song song chắc chắn trôi lệch.

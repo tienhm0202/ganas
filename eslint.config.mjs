@@ -12,7 +12,7 @@ import tseslint from "typescript-eslint";
 export default defineConfig([
   globalIgnores(["dist/**", "plugin/dist/**", "node_modules/**", "plugin/bin/**"]),
   {
-    files: ["src/**/*.ts", "test/**/*.ts"],
+    files: ["src/**/*.ts", "test/**/*.ts", "release/**/*.ts"],
     extends: [js.configs.recommended, tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
@@ -35,7 +35,7 @@ export default defineConfig([
     // `node:test`: gọi `test(name, async fn)` ở top-level KHÔNG await là đúng
     // idiom — test runner tự quản lý việc chạy/tuần tự hoá, không phải promise
     // bị rơi. Bật `no-floating-promises` ở đây chỉ tạo hàng trăm false positive.
-    files: ["test/**/*.ts"],
+    files: ["test/**/*.ts", "release/**/*.test.ts"],
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
     },

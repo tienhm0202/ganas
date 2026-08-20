@@ -1,0 +1,16 @@
+id: D-003
+title: "Một nguồn version duy nhất; chỗ nào không suy được thì test chặn"
+serves:
+  - G-001
+summary: >-
+  Version của dự án đang được khai ở bốn chỗ độc lập (package.json,
+  package-lock.json, plugin/.claude-plugin/plugin.json, tiêu đề CHANGELOG) cộng
+  một chỗ thứ năm nhúng lúc build (__GANAS_VERSION__ trong plugin/dist/cli.js),
+  và KHÔNG có lệnh nào bắt chúng phải khớp. Lệch thì im lặng: bản cài qua
+  marketplace vẫn chạy, chỉ báo sai số hiệu.
+  Cách chữa: package.json là nguồn duy nhất. Thứ suy được thì SINH RA
+  (plugin.json và bundle do build ghi lại từ package.json); thứ không suy được
+  vì người viết — tiêu đề CHANGELOG — thì để mục "Chưa phát hành" trong lúc
+  làm và đổi tên tự động lúc `npm version`. Lớp cưỡng chế thật là một test
+  chạy trong `npm test`, không phải kỷ luật của người nhớ bump đủ bốn chỗ.
+status: active

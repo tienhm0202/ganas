@@ -11,7 +11,16 @@
 import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 
+import { syncPluginManifest } from "../release/version.mjs";
+
 const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+
+// Manifest plugin khai lại version cho marketplace đọc. Ghi nó ở ĐÂY, mỗi lần
+// build, để nó không thể trôi khỏi package.json: build là việc bắt buộc phải
+// chạy trước khi ship, nên đây là chỗ hẹp nhất mà mọi bản ship đều đi qua.
+if (await syncPluginManifest(pkg.version)) {
+  console.log(`plugin.json: version → ${pkg.version}`);
+}
 
 // zod/yaml (và @modelcontextprotocol/sdk) có nhánh CJS bên trong: bundle ESM
 // phải cấp một `require` thật, nếu không sẽ nổ "Dynamic require of 'process'

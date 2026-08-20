@@ -267,14 +267,20 @@ sẵn trong file, skill luôn ghi lại đúng bản mới nhất.
 ### `harness` trong `.ganas/config.yaml`
 
 Cài đúng **một** cờ thì script ghi luôn `harness:` vào `.ganas/config.yaml`
-(sửa theo dòng, giữ nguyên comment của file). Field này quyết định brief
-hướng dẫn giao task kiểu nào: `claude-code` thì bảo tạo sub-agent với model
+(sửa theo dòng, giữ nguyên comment của file). Field này quyết định **tên file
+hướng dẫn** `ganas init` sinh ra (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` —
+mỗi công cụ đọc một tên khác nhau) và brief hướng dẫn giao task kiểu nào: `claude-code` thì bảo tạo sub-agent với model
 của tier; các harness khác chỉ nối qua MCP nên brief chỉ khuyến nghị đổi
 model trong picker và tự khai là không cưỡng chế được.
 
 Cài nhiều cờ cùng lúc thì script **không đoán** — nó in ra danh sách để bạn
 tự khai một giá trị, vì `harness` chỉ trả lời được một câu: bạn giao việc từ
 đâu. Chưa chạy `ganas init` thì cũng chỉ nhắc, không tạo config thay bạn.
+
+`--codex` và `--gemini` chưa có: hai harness đó khai được trong `config.yaml`
+(và `ganas init --harness codex|gemini` sinh đúng file hướng dẫn cho chúng),
+nhưng script chưa biết ghi config MCP của chúng — xem `ICE-005` trong sổ
+icebox.
 
 ### Cưỡng chế đủ như Claude Code plugin
 

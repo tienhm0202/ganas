@@ -49,10 +49,13 @@ ganas đã khởi tạo tại <cwd>
             .claude/rules/ganas-knowledge.md
             .claude/rules/architecture.md
             .claude/rules/ganas-git.md
+            .claude/rules/naming.md
+            .claude/rules/agent-guide.md
             CLAUDE.md
             AGENTS.md
             .ganas/goals/G-001.yaml
             .githooks/commit-msg
+            .githooks/pre-commit
 
 Tiếp theo:
   1. Sửa .ganas/goals/G-001.yaml — mục tiêu thật và tiêu chí nghiệm thu thật
@@ -612,7 +615,7 @@ phục vụ G-001 · design D-001 — Chuẩn hoá payload trước khi ghi sổ
 `T-001: Viết parseWebhook + appendPayment cho webhook thanh toán`. Message
 không có dòng "Co-Authored-By" hay nhắc AI/Claude — đây là quy ước cứng của
 `ganas commit`, không phải tuỳ chọn. Phạm vi `git add` KHÔNG phải `-A`: file
-scaffold của `init` (`CLAUDE.md`, `AGENTS.md`, `.claude/`, `.gitignore`) vẫn
+scaffold của `init` (file hướng dẫn, `.claude/`, `.gitignore`) vẫn
 đứng ngoài staging vì không nằm trong `touches` của T-001 — commit của một
 task chỉ chứa đúng phạm vi task đó.
 

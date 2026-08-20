@@ -1,0 +1,12 @@
+id: M-templates
+scope: P-cli
+title: "Nội dung ganas init sinh ra: config, luật, file hướng dẫn, git hook"
+nature: code
+paths:
+  - "src/templates/**"
+status: surveyed
+verify:
+  - id: V-templates-init
+    kind: probe
+    run: "npx tsx --test 'test/init.test.ts'"
+    expect: exit_zero

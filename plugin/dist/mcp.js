@@ -25747,7 +25747,15 @@ var init_config = __esm({
       "task_link"
     ];
     MODEL_TIER = ["main", "verifier", "scribe"];
-    HARNESS = ["claude-code", "cursor", "zed", "windsurf", "other"];
+    HARNESS = [
+      "claude-code",
+      "codex",
+      "cursor",
+      "zed",
+      "windsurf",
+      "gemini",
+      "other"
+    ];
     LATEST_SCHEMA_VERSION = 1;
     zConfig = external_exports.object({
       version: external_exports.literal(LATEST_SCHEMA_VERSION).default(LATEST_SCHEMA_VERSION).describe("phi\xEAn b\u1EA3n schema .ganas/"),

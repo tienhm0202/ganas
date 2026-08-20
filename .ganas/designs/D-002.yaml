@@ -1,0 +1,13 @@
+id: D-002
+title: "Luật viết cho agent nằm trong thứ ganas init phát, tên file theo harness"
+serves:
+  - G-001
+summary: >-
+  Luật mà một phiên phải tuân không được nằm trong trí nhớ của phiên đó: nó
+  phải là file `ganas init` sinh ra, hệt như luật ghi tri thức và luật kiến
+  trúc. Thêm hai luật còn thiếu — cách viết file hướng dẫn cho agent (ngắn ở
+  gốc, đặt gần code) và cách đặt tên (định danh tiếng Anh, văn xuôi tiếng
+  Việt). Kèm theo: tên file hướng dẫn KHÔNG được đóng cứng là CLAUDE.md, vì
+  mỗi harness đọc một tên khác nhau và cơ chế nạp cũng khác nhau — suy từ
+  `config.harness`, một bảng duy nhất trong code.
+status: active
