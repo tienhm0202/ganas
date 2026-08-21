@@ -33,6 +33,7 @@ const EXPECTED_COMMANDS = [
   "trace",
   "debt",
   "icebox",
+  "proposal",
   "search",
   "commit",
   "note",

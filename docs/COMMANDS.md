@@ -644,6 +644,88 @@ ganas icebox promote ICE-004            # in khung, chưa có --task
 ganas icebox promote ICE-004 --task T-042
 ```
 
+### `ganas proposal [new|list|show|approve|reject]`
+
+**Chỗ lệch CHƯA ai quyết** (`src/model/proposal.ts`). Ba thực thể "việc chưa
+làm" của ganas khác nhau ở chỗ AI đã quyết cái gì:
+
+| Thực thể | Ai đã quyết gì |
+|---|---|
+| `Task` | người đã quyết **LÀM** — có `exit_contract`, được `candidates()` giao |
+| `Icebox` | người đã quyết **CHƯA làm** — có `why_deferred` và ngày xem lại |
+| `Proposal` | **chưa ai quyết gì** — đang chờ một con người trả lời có/không |
+
+Trước khi có nó, câu "chỗ này lệch, nên refactor" chỉ tồn tại trong chat và
+chết theo context, nên agent chỉ còn hai đường đều sai: im lặng bỏ qua, hoặc
+tự refactor thứ không ai duyệt. Ghi vào `.ganas/proposals/PR-00N.yaml` — **một
+file một đề xuất**, nạp bằng `collectSingle` như goal/design/task.
+
+**Cạnh chỉ đi MỘT CHIỀU.** `promoted_to` trỏ tới thực thể sinh ra từ đề xuất
+(`D-`/`T-`/`ICE-`); design/task/icebox **không** có trường nào trỏ ngược lại.
+Muốn hỏi "design này sinh từ đề xuất nào" thì duyệt proposals — lưu cả hai
+chiều là tạo hai nguồn sự thật cho cùng một quan hệ, và chúng lệch nhau ngay
+lần sửa tay đầu tiên.
+
+**`scope` bắt buộc** (khác `Icebox.scope` tuỳ chọn): brief chỉ nhắc đề xuất
+cùng phạm vi với task đang làm, nên đề xuất không khai phạm vi thì không bao
+giờ tới tay phiên nào — ghi mà không ai đọc còn tệ hơn không ghi.
+
+#### `ganas proposal new`
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--title <chuỗi>` | **Bắt buộc.** Tiêu đề ngắn. |
+| `--problem <chuỗi>` | **Bắt buộc.** Chỗ LỆCH là gì. Tách khỏi `--change` có chủ đích: nêu giải pháp mà không nêu vấn đề thì mọi đề xuất đều "nghe hợp lý". |
+| `--change <chuỗi>` | **Bắt buộc.** Đề nghị làm gì. |
+| `--anchor <chuỗi>` | **Bắt buộc, lặp lại được.** Bằng chứng — không chỉ được nguồn thì không phải phát hiện, chỉ là ý kiến. |
+| `--weight <1-5>` | **Bắt buộc.** Bỏ qua thì hại đến đâu. |
+| `--ease <1-5>` | **Bắt buộc.** Sửa dễ đến đâu. |
+| `--scope <P-...>` | Phạm vi. Thiếu thì suy từ task đang claim (`scopeFromClaimedTask()`, dùng chung với `ganas debt`). |
+| `--json` | Xuất `{ id, file }`. |
+
+#### `ganas proposal list`
+
+Mặc định chỉ hiện `pending`, lọc theo phạm vi của task đang claim (`--all` để
+xem toàn dự án, `--all-status` để thấy cả cái đã quyết).
+
+**Sắp giảm dần theo `weight + ease`**, tie-break theo id. Đây là chỗ **duy
+nhất** hai điểm đó được đọc: PR-001 (bị từ chối 2026-08-21) chốt rằng đề xuất
+KHÔNG vào bảng `ganas debt`, vì bảng nợ chứa thứ đã được **công nhận** là nợ
+còn đề xuất thì chưa ai công nhận. Bỏ phép sắp này đi là biến `weight`/`ease`
+thành hai trường người dùng phải điền mà không có tác dụng gì.
+
+#### `ganas proposal show <id>`
+
+In đủ: vấn đề, đề nghị, bằng chứng, và — nếu đã quyết — ai quyết, lúc nào, lý
+do từ chối. Còn `pending` thì in luôn hai lệnh bấm được cho người quyết.
+
+#### `ganas proposal approve <id>` / `ganas proposal reject <id>`
+
+Ranh giới MÁY/NGƯỜI: cả hai đòi `--by @ai-đó`, **không có mặc định và không
+suy từ `git config`** — suy từ đó thì mọi lượt agent chạy sẽ mang tên chủ máy,
+và bản ghi "ai duyệt" mất nghĩa đúng lúc nó cần có nghĩa nhất.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--by <@ten>` | **Bắt buộc cho cả hai.** Người trả lời. |
+| `--why <chuỗi>` | **Bắt buộc cho `reject`.** Từ chối không nói lý do thì phiên sau đề xuất lại đúng thứ vừa bị loại — và luật `knowledge/proposal-repeats-rejected` sẽ trả lại nguyên văn lý do này. |
+| `--promoted-to <id>` | Chỉ cho `approve`. Thực thể sinh ra từ đề xuất; phải TỒN TẠI THẬT trong graph. |
+
+Đã quyết rồi thì **không quyết lại**: đổi ý là một đề xuất MỚI khai
+`supersedes: [PR-cũ]`, để lịch sử giữ đủ cả hai lần quyết.
+
+```bash
+ganas proposal new --title "Tách khối trùng vùng code" \
+  --problem "M-a và M-b cùng trỏ src/a.ts" \
+  --change "tách src/a.ts ra khối riêng" \
+  --anchor src/a.ts:12 --weight 4 --ease 3
+ganas proposal list                     # pending trong phạm vi task đang làm
+ganas proposal list --all --all-status
+ganas proposal show PR-001
+ganas proposal reject PR-001 --by @tienhm --why "hệ cũ đang chạy, chưa đụng"
+ganas proposal approve PR-002 --by @tienhm --promoted-to D-007
+```
+
 ### `ganas search <chuỗi>`
 
 BM25 trên fact (`src/search.ts`) — trả lời câu hỏi mà `context_contract.facts`

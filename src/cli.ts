@@ -30,6 +30,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   trace: () => import("./commands/trace.js"),
   debt: () => import("./commands/debt.js"),
   icebox: () => import("./commands/icebox.js"),
+  proposal: () => import("./commands/proposal.js"),
   search: () => import("./commands/search.js"),
   commit: () => import("./commands/commit.js"),
   note: () => import("./commands/note.js"),
@@ -59,6 +60,9 @@ Lệnh:
   icebox [add|list|review|close|promote]
                        Sổ việc đã quyết CHƯA làm: ghi, xem lại khi tới hạn, đóng, thăng cấp
                        Việc đã quyết CHƯA làm — ghi, xem, xem lại quá hạn, đóng, hoặc lên task
+  proposal [new|list|show|approve|reject]
+                       Đề xuất chờ NGƯỜI duyệt: ghi chỗ lệch, xem, duyệt, từ chối
+                       (list sắp theo weight + ease; approve/reject đòi --by @ten)
   search <chuỗi>       Tìm fact liên quan (BM25) — hoặc --task để dùng chính task làm truy vấn
   commit [task]        Commit task đã đạt gate — message dựng từ dữ liệu đã kiểm chứng
   note "..."           Ghi chú thô của phiên vào .ganas/runs/notes/ (chưa kiểm, không phải fact)

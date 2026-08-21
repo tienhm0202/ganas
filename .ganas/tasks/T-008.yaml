@@ -1,0 +1,60 @@
+id: T-008
+title: "Lệnh ganas proposal: new, list, show, approve, reject"
+serves:
+  - G-001
+implements: D-004
+scope: P-cli
+status: done
+estimated_context: medium
+model: main
+blocked_by:
+  - T-007
+
+context_contract:
+  must_read:
+    - path: "src/commands/icebox.ts"
+      why: "Khuôn lệnh con gần nhất: add/list/review/close/promote trên một thực thể
+        nhẹ"
+    - path: "src/commands/scope.ts"
+      why: "writeNewYaml + cấp id nguyên tử — không được ghi đè file đã có"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-commands
+  - M-cli
+
+exit_contract:
+  - kind: artifact
+    path: "src/commands/proposal.ts"
+    must_contain: "approve"
+  - kind: artifact
+    path: "docs/COMMANDS.md"
+    must_contain: "ganas proposal"
+  - kind: command
+    run: "npx tsx --test 'test/proposal-cli.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts proposal list"
+  - kind: command
+    run: "npx tsx src/cli.ts proposal show PR-001"
+  - kind: command
+    run: "npx tsx --test 'test/cli-help.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-cli/V-cli-smoke"
+
+notes: >-
+  `approve` CHỈ chạy được từ tay người: lệnh đòi --by @ai-do và ghi decided_at
+  bằng đồng hồ máy. `reject` đòi --why, và gợi ý `ganas icebox add` cho thứ
+  người muốn xem lại sau — từ chối không phải xoá.
+
+  RÀNG BUỘC TỪ PR-001 (bị từ chối ngày 2026-08-21, đường "c"): đề xuất KHÔNG vào
+  bảng `ganas debt`. Bù lại, `proposal list` phải TỰ SẮP theo `weight + ease`
+  giảm dần — đó là chỗ duy nhất hai trường đó được đọc, và là điều kiện để chúng
+  không thành trường chết. Cắt bớt danh sách thì phải ghi chú số dòng đã bỏ,
+  cùng quy ước `ganas debt`/`ganas search`.
+done_at: 2026-08-21T07:02:55.862Z
