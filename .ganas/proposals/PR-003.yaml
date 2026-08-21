@@ -1,0 +1,15 @@
+id: PR-003
+title: "M-hooks khai nature: code nhưng nó là ranh giới I/O thật"
+scope: P-hook
+problem: >-
+  MODULE_NATURE định nghĩa io là nơi CHẠM I/O thật (API, hàng đợi, filesystem), còn code/data/llm là lõi và lõi không được tự mở file hay tự gọi ra ngoài. M-hooks đang khai nature: code, nhưng nó đọc JSON từ stdin, ghi JSON ra stdout, nạp graph từ đĩa, đặt chỗ claim bằng file khoá, và ghi file handoff. Nhãn hiện tại nói ngược với hành vi thật, nên bất kỳ ai đọc bản đồ để trả lời câu hỏi lõi-hay-vỏ đều nhận câu trả lời sai. Tài liệu vùng src/hooks/CLAUDE.md vừa viết ở T-015 phải ghi chú mâu thuẫn này thay vì khẳng định một trong hai.
+proposed_change: >-
+  Đổi nature của M-hooks từ code sang io. Kiểm trước hai hệ quả: (1) luật kiến trúc muốn adapter phụ thuộc lõi, mà M-hooks đang depends_on M-claim — chiều này vẫn đúng; (2) không validator nào cưỡng chế nature, nên đổi nhãn không làm đỏ gì, đúng như .claude/rules/architecture.md đã tự thú. Nếu người quyết cho rằng M-hooks nên tiếp tục là lõi thì phải tách phần chạm stdin/stdout ra một khối io riêng, và đó là việc lớn hơn nhiều.
+anchors:
+  - "src/model/module.ts:21"
+  - "src/hooks/io.ts:1"
+  - ".ganas/modules/M-hooks.yaml:4"
+weight: 3
+ease: 5
+found_at: "2026-08-21T10:37:33.063Z"
+status: pending
