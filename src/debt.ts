@@ -197,6 +197,15 @@ const SCORES: Record<string, DebtScore> = {
   // lặng biến mất khỏi chỗ người thật sự nhìn.
   "icebox/without-scope": { weight: 3, ease: 5 },
 
+  /* --- bản đồ code: tài liệu vùng, vùng chồng nhau ------------------------ */
+  // Thiếu tài liệu vùng: không sai gì cả, nhưng mỗi phiên đụng vào vùng đó
+  // phải tự suy lại — nợ lãi kép, và viết một file là xong.
+  "scope/module-missing-guide": { weight: 2, ease: 4 },
+  // Hai khối cùng nhận một vùng: `parallelCandidates` có thể xếp hai task
+  // "rời nhau" mà thật ra cùng file — hỏng im lặng, nhưng sửa là chuyện tách
+  // vài dòng glob.
+  "scope/module-paths-overlap": { weight: 4, ease: 4 },
+
   /* --- proposal: chỗ lệch chưa ai quyết ---------------------------------- */
   // Liên kết treo, cùng hạng với các `*-missing-*` khác: sai một id, sửa nhanh.
   "scope/proposal-scope-not-found": { weight: 3, ease: 5 },

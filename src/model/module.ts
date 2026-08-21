@@ -133,3 +133,94 @@ export const zModule = z
   });
 
 export type Module = z.infer<typeof zModule>;
+
+/* ------------------------------------------------------------------------- *
+ * Thư mục gốc của khối
+ * ------------------------------------------------------------------------- */
+
+/** Glob dạng "nhận cả cây con" (`src/render/**`) → thư mục nó nhận. Còn lại `undefined`. */
+function subtreeClaim(glob: string): string | undefined {
+  const normalized = glob.split("\\").join("/").replace(/^\.\//, "");
+  const m = /^([^*?[{]+)\/\*\*(\/.*)?$/.exec(normalized);
+  const dir = m?.[1]?.replace(/\/+$/, "");
+  return dir ? dir : undefined;
+}
+
+/**
+ * Thư mục gốc của một khối — nơi đặt file hướng dẫn của vùng
+ * (`.claude/rules/agent-guide.md`: "một khối → một file hướng dẫn ở thư mục gốc
+ * của khối đó").
+ *
+ * Quy tắc: khối có thư mục gốc khi và chỉ khi nó **NHẬN CẢ MỘT THƯ MỤC** bằng
+ * glob cây con (`src/render/**`), và mọi glob cây con của nó cùng trỏ một thư
+ * mục. File lẻ khai thêm ngoài thư mục đó không làm mất tư cách — `M-build`
+ * nhận `release/**` rồi kèm `package.json`, và file hướng dẫn của nó nằm đúng
+ * ở `release/`.
+ *
+ * Khối CHỈ liệt kê file lẻ thì trả `undefined`, và đó là câu trả lời đúng chứ
+ * không phải thiếu sót: `M-cli` trỏ `src/cli.ts` + `src/util/args.ts` — tiền tố
+ * chung của hai đường đó là `src`, mà `src` là nhà của mười khối khác. Đặt file
+ * hướng dẫn của riêng `M-cli` ở đó là nói dối về phạm vi, nên ganas không đòi,
+ * cũng không sinh.
+ */
+export function moduleGuideDir(paths: readonly string[]): string | undefined {
+  const claims = new Set<string>();
+  for (const p of paths) {
+    const dir = subtreeClaim(p);
+    if (dir !== undefined) claims.add(dir);
+  }
+  // Không nhận thư mục nào, hoặc nhận HAI thư mục rời nhau ⇒ không có một chỗ
+  // duy nhất đúng để đặt file. Im lặng chọn bừa một cái là chọn sai một nửa số lần.
+  return claims.size === 1 ? [...claims][0] : undefined;
+}
+
+/**
+ * Một mẩu `paths` nhận cái gì: đúng MỘT file, hay cả một cây con.
+ *
+ * Phân biệt này là toàn bộ lý do hàm dưới tồn tại. `pathsOverlap()` trong
+ * `graph/select.ts` cố ý thô theo hướng AN TOÀN — nó chỉ so tiền tố thư mục,
+ * nên `src/cli.ts` thành `src/` và MỌI khối trong `src/` đều bị coi là chồng
+ * nhau. Thô như thế là đúng cho câu hỏi "hai task này có giao được song song
+ * không" (kết luận sai theo hướng "rời nhau" mới nguy hiểm), nhưng đem đi làm
+ * luật cảnh báo thì nó nổ 87 cảnh báo trên chính repo này — mà cảnh báo thường
+ * trực là thứ người ta quen mắt rồi ngừng đọc.
+ */
+interface PathClaim {
+  kind: "file" | "subtree";
+  value: string;
+}
+
+function claimsOf(paths: readonly string[]): PathClaim[] {
+  return paths.map((raw) => {
+    const normalized = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
+    const cut = normalized.search(/[*?[{]/);
+    if (cut === -1) return { kind: "file", value: normalized } as const;
+    const head = normalized.slice(0, cut);
+    const slash = head.lastIndexOf("/");
+    return { kind: "subtree", value: slash === -1 ? "" : head.slice(0, slash) } as const;
+  });
+}
+
+function inside(file: string, dir: string): boolean {
+  return dir === "" || file === dir || file.startsWith(`${dir}/`);
+}
+
+function claimsTouch(a: PathClaim, b: PathClaim): boolean {
+  if (a.kind === "file" && b.kind === "file") return a.value === b.value;
+  if (a.kind === "file") return inside(a.value, b.value);
+  if (b.kind === "file") return inside(b.value, a.value);
+  return inside(a.value, b.value) || inside(b.value, a.value);
+}
+
+/**
+ * Hai khối có nhận chung vùng code không — phép so CHÍNH XÁC theo đoạn đường
+ * dẫn, dùng cho luật `scope/module-paths-overlap`.
+ *
+ * Chồng nhau là hỏng im lặng: `taskBoundary()` trả cùng một vùng cho hai task
+ * khác nhau, và `parallelCandidates()` vẫn có thể xếp chúng chạy song song.
+ */
+export function modulePathsOverlap(a: readonly string[], b: readonly string[]): boolean {
+  const ca = claimsOf(a);
+  const cb = claimsOf(b);
+  return ca.some((x) => cb.some((y) => claimsTouch(x, y)));
+}

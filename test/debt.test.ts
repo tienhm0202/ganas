@@ -284,14 +284,15 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
   // scope/proposal-scope-not-found, spine/proposal-missing-target,
   // spine/proposal-duplicate-target, spine/proposal-missing-supersede,
   // spine/proposal-cycle, knowledge/proposal-repeats-rejected,
-  // knowledge/proposal-problem-equals-change), cộng 3 mã DUY NHẤT trong
-  // load.ts (spine/config-unknown-key, load/yaml, load/duplicate-id — hai mã
-  // sau xuất hiện hai lần trong file nhưng cùng literal nên `Set` chỉ giữ
-  // một) → tổng 56.
+  // knowledge/proposal-problem-equals-change + 2 mã bản đồ code:
+  // scope/module-missing-guide, scope/module-paths-overlap), cộng 3 mã DUY
+  // NHẤT trong load.ts (spine/config-unknown-key, load/yaml, load/duplicate-id
+  // — hai mã sau xuất hiện hai lần trong file nhưng cùng literal nên `Set` chỉ
+  // giữ một) → tổng 58.
   assert.equal(
     codes.size,
-    56,
-    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 56 (53 + 3) — kiểm lại pattern grep hoặc số đếm`,
+    58,
+    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 58 (55 + 3) — kiểm lại pattern grep hoặc số đếm`,
   );
 
   const missing = [...codes].filter((c) => !isExplicitlyScored(c));

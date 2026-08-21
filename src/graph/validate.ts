@@ -2,7 +2,14 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ExitCriterion, Proposal } from "../model/index.js";
-import { evalWeakness, formatAnchor, freshnessOf } from "../model/index.js";
+import {
+  evalWeakness,
+  formatAnchor,
+  freshnessOf,
+  guideFileName,
+  moduleGuideDir,
+  modulePathsOverlap,
+} from "../model/index.js";
 import { lineOfPath } from "../util/yaml.js";
 import { defHash, entryAt, LEDGER_FILE, ledgerCorruption, verifyChain } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
@@ -794,6 +801,57 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
     }
   }
 
+
+  /* --- Bản đồ code: tài liệu vùng và vùng chồng nhau ---------------------- *
+   * Cả hai đều `warning`, KHÔNG `error`, và đó là một quyết định chứ không
+   * phải sự dè dặt: ganas phải cài được lên dự án CŨ vốn có cấu trúc khác.
+   * Một dự án legacy vừa `ganas init` sẽ vi phạm cả hai luật này ngay giây
+   * đầu; chặn cứng ở đó thì ganas không cài được, chứ không cải thiện gì. Cửa
+   * ra khi người không muốn sửa là `ganas proposal reject --why` hoặc
+   * `ganas icebox add`. */
+
+  const guideFile = guideFileName(graph.config.harness);
+  const modulesWithPaths = [...graph.modules.values()].filter((m) => m.value.paths.length > 0);
+
+  for (const mod of modulesWithPaths) {
+    const dir = moduleGuideDir(mod.value.paths);
+    if (dir === undefined) continue;
+
+    if (!existsSync(join(graph.root, dir, guideFile))) {
+      diags.push({
+        severity: "warning",
+        code: "scope/module-missing-guide",
+        message: `khối ${mod.value.id} nhận cả thư mục \`${dir}\` nhưng ở đó không có \`${guideFile}\``,
+        file: mod.file,
+        line: at(graph, mod, "paths"),
+        hint:
+          `Agent đọc file hướng dẫn TRƯỚC khi đọc code. Thiếu nó, mọi phiên đụng vào ` +
+          `\`${dir}\` phải tự suy lại cổng vào và cạm bẫy của vùng. Tạo ` +
+          `\`${dir}/${guideFile}\` — cổng vào, bất biến, cạm bẫy, lệnh test riêng.`,
+      });
+    }
+  }
+
+  // Hai khối cùng nhận một vùng code = hai bản đồ cho một chỗ, và `taskBoundary()`
+  // sẽ trả về vùng đó cho CẢ HAI task chạm hai khối — hai phiên song song tưởng
+  // mình đang ở hai chỗ rời nhau (xem `parallelCandidates`, graph/select.ts).
+  for (let i = 0; i < modulesWithPaths.length; i++) {
+    for (let j = i + 1; j < modulesWithPaths.length; j++) {
+      const a = modulesWithPaths[i]!;
+      const b = modulesWithPaths[j]!;
+      if (!modulePathsOverlap(a.value.paths, b.value.paths)) continue;
+      diags.push({
+        severity: "warning",
+        code: "scope/module-paths-overlap",
+        message: `khối ${a.value.id} và ${b.value.id} có thể cùng nhận một vùng code`,
+        file: a.file,
+        line: at(graph, a, "paths"),
+        hint:
+          `Tách \`paths\` cho rời nhau, hoặc gộp hai khối. Chồng nhau thì hai task ` +
+          `song song có thể cùng sửa một file mà \`parallelCandidates\` vẫn coi là an toàn.`,
+      });
+    }
+  }
 
   /* --- Đề xuất: chỗ lệch CHƯA ai quyết ----------------------------------- */
 

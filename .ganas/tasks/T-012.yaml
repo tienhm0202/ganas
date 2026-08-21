@@ -1,0 +1,57 @@
+id: T-012
+title: "Hai cảnh báo mức warning: khối thiếu tài liệu vùng, hai khối chung vùng code"
+serves:
+  - G-001
+implements: D-004
+scope: P-graph-core
+status: done
+estimated_context: small
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/debt.ts"
+      why: "SCORES: mã mới phải có điểm tường minh, có guard test bắt mã chưa chấm
+        điểm"
+    - path: "src/graph/select.ts"
+      why: "pathsOverlap/staticPrefix đã có sẵn — dùng lại, đừng viết bản thứ hai"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-validate
+  - M-model
+  - M-graph-read
+
+exit_contract:
+  - kind: artifact
+    path: "src/model/module.ts"
+    must_contain: "moduleGuideDir"
+  - kind: command
+    run: "npx tsx --test 'test/validate-module-guide.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/debt.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npx tsx src/cli.ts debt --all"
+
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-graph-read/V-graph-read-trace"
+
+notes: >-
+  ĐI TRƯỚC T-011 (đảo thứ tự ngày 2026-08-21). Lý do đúng bằng lý do của PR-001:
+  hàm suy "thư mục gốc của khối" từ `paths` được CẢ HAI phía cần — validate
+  (P-graph-core) và `scope new` (P-cli) — nên nó phải nằm ở
+  `src/model/module.ts` (M-model, P-graph-core). Task ở P-cli không được tạo nó.
+  Đặt nó ở phía templates rồi cho validate import ngược lại là bắt lõi phụ thuộc
+  phần trình bày của CLI.
+
+  Mức `warning`, KHÔNG phải `error` — người dùng chốt ganas phải cài được lên hệ
+  thống cũ có cấu trúc khác, chặn cứng ở đó thì không cài được. Cửa ra khi người
+  từ chối sửa là `ganas proposal reject --why` hoặc `ganas icebox add`.
+done_at: 2026-08-21T10:26:52.435Z
