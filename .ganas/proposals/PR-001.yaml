@@ -1,0 +1,73 @@
+id: PR-001
+title: "Bảng nợ muốn hiện đề xuất thì phải sửa hai file ở hai phạm vi — luật cấm"
+scope: P-graph-core
+problem: >-
+  `ganas debt` xếp hạng mọi thứ dự án đang nợ. Đề xuất đang chờ duyệt CHƯA vào
+  bảng đó, nên hai điểm `weight`/`ease` mà người ghi đề xuất bắt buộc phải chấm
+  hiện không xếp hạng gì cả — bắt người điền một thứ không có tác dụng.
+
+  Đưa nó vào bảng thì phải sửa hai file, và hai file đó ở hai phạm vi:
+  `src/debt.ts` (dựng dữ liệu hàng — khối M-validate, phạm vi P-graph-core) và
+  `src/commands/debt.ts` (in bảng ra màn hình — khối M-commands, phạm vi
+  P-cli). Bắt buộc cùng lúc, vì file thứ hai có `switch` với nhánh
+  `default: never` đặt CỐ Ý: thêm loại hàng mới mà quên xử lý ở đó thì
+  TypeScript gãy lúc biên dịch. Comment tại chỗ ghi rõ lưới này từng cứu một
+  bug thật khi loại hàng `icebox` được thêm vào.
+
+  Luật `scope/task-touches-outside-scope` cấm một task chạm khối ngoài phạm vi
+  của nó — vì một task là một đơn vị bàn giao có MỘT người ký nghiệm thu. Nên
+  không khai được task hợp lệ nào cho thay đổi này.
+
+  Gốc rễ: bản đồ code của ganas chia theo TẦNG (model/, commands/, graph/),
+  còn "bảng nợ" là một TÍNH NĂNG nằm vắt qua hai tầng.
+proposed_change: >-
+  Chọn một trong ba, người chốt chứ không phải model:
+
+  (a) Gộp phần in bảng nợ vào khối M-validate — "bảng nợ" thành một khối gồm
+  cả lõi lẫn hiển thị. Đúng hướng chia theo tính năng, nhưng mở tiền lệ: gate,
+  commit, verify đều có cặp lõi/hiển thị y hệt, tức là bước đầu của việc chia
+  lại toàn bộ bản đồ.
+
+  (b) Nới luật: cho task chạm nhiều phạm vi khi các phạm vi đó CÙNG `owner` và
+  CÙNG bộ `acceptance` (ở repo này cả bốn phạm vi đều thoả), kèm cảnh báo chứ
+  không im lặng. Rẻ nhất, nhưng ranh giới "một task một người ký" yếu đi một
+  bậc.
+
+  (c) Từ chối: đề xuất không vào bảng nợ, mà `ganas proposal list` (T-008) tự
+  SẮP theo `weight + ease` của chính nó. Hai trường đó có người đọc ngay trong
+  P-cli, không thành lời hứa suông, không cần đổi bản đồ cũng không cần nới
+  luật. Đổi lại: đề xuất không xếp chung hạng với các loại nợ khác — có lý lẽ
+  riêng, vì bảng nợ chứa thứ đã được CÔNG NHẬN là nợ, còn đề xuất thì chưa ai
+  công nhận. Đây cũng là chỗ Proposal khác Icebox: icebox đã được quyết là
+  đáng làm (chỉ hoãn), nên nó nằm trong bảng nợ là đúng.
+anchors:
+  - "src/debt.ts#L274"
+  - "src/commands/debt.ts#L40"
+  - "commit:d4b63ed"
+weight: 3
+ease: 2
+found_at: "2026-08-21T00:00:00Z"
+status: rejected
+decided_by: "@tienhm"
+decided_at: "2026-08-21T00:00:00Z"
+why_rejected: >-
+  Chọn đường (c): đề xuất KHÔNG vào bảng nợ. `ganas proposal list` tự sắp theo
+  `weight + ease`, nên hai trường đó vẫn có người đọc — không phải đổi bản đồ
+  (a), không phải nới luật một-task-một-phạm-vi (b).
+
+  Lý lẽ giữ lại cho phiên sau: bảng nợ chứa thứ đã được CÔNG NHẬN là nợ. Icebox
+  nằm trong đó vì đã có người quyết là đáng làm, chỉ hoãn. Đề xuất thì chưa ai
+  công nhận, và có cái sẽ bị từ chối — trộn vào bảng xếp hạng nợ là làm bảng đó
+  phồng lên bằng thứ có thể không bao giờ là nợ.
+
+  Câu hỏi lớn hơn — chia bản đồ theo TÍNH NĂNG thay vì theo TẦNG (đường a) —
+  không bị bác, chỉ là không giải quyết ở đây: nó xứng đáng một mục tiêu và một
+  design riêng, không phải tác dụng phụ của chuyện một cái bảng.
+notes: >-
+  Phát hiện trong lúc làm T-007: bản vá đã viết xong rồi phải lùi lại
+  (`git checkout src/debt.ts`) vì đúng luật này.
+
+  Bản viết đầu của chính đề xuất này bị người dùng phản hồi là đọc không hiểu —
+  đã viết lại ngày 2026-08-21, thêm đường (c) vốn bị bỏ sót. Ghi lại ở đây thay
+  vì sửa im lặng, vì lần bỏ sót đó là một dữ kiện về chất lượng đề xuất, không
+  phải vết bẩn cần xoá.
