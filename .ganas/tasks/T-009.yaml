@@ -1,0 +1,38 @@
+id: T-009
+title: "Brief in MỘT DÒNG đếm proposal pending cùng phạm vi, không in nội dung"
+serves:
+  - G-001
+implements: D-004
+scope: P-cli
+status: done
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-006
+  - T-007
+
+context_contract:
+  must_read:
+    - path: "src/render/brief.ts"
+      why: "overdueIceboxSection là khuôn có sẵn: lọc theo scope, cắt bớt có ghi chú,
+        rỗng thì biến mất hoàn toàn"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-render
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/proposal-brief.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/scope-brief.test.ts'"
+
+  - kind: verification
+    target: "M-render/V-render-brief"
+
+notes: >-
+  Ràng buộc (1) của D-004 nằm hết ở đây: brief KHÔNG in problem/proposed_change.
+  Test phải chặn cả hai chiều — có proposal cùng scope thì hiện đúng một dòng
+  kèm lệnh tra; proposal khác scope thì brief không nhắc một chữ nào.
+done_at: 2026-08-21T10:24:08.006Z

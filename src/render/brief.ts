@@ -222,6 +222,36 @@ function overdueIceboxSection(graph: Graph, t: Task, now: number): string {
 }
 
 /**
+ * Mục "Đề xuất đang chờ duyệt": ràng buộc (1) của D-004 — "cách ly theo phạm
+ * vi, nạp khi cần". Đúng ĐÚNG MỘT DÒNG ĐẾM cho proposal `status: "pending"`
+ * CÙNG PHẠM VI với task (`p.scope === t.scope`), kèm lệnh tra chi tiết. KHÔNG
+ * bao giờ in `problem`/`proposed_change`/`title` — đó là văn xuôi không anchor,
+ * và nằm sẵn trong brief (nạp mọi phiên) chính là nguyên liệu của ảo giác.
+ * Muốn đọc thật thì gọi `ganas proposal list` — nạp có chủ ý, không nạp mặc
+ * định. Cùng nguyên tắc cách ly đã áp cho fact (BM25 bó theo scope, xem
+ * `suggestedFactsSection`), icebox (`overdueIceboxSection`) và legacy claim
+ * (`relevantLegacyClaims`).
+ *
+ * Proposal khác phạm vi thì hàm này không nhắc một chữ nào — lọc `scope`
+ * trước khi đếm, không sau. Không có proposal pending nào cùng phạm vi thì
+ * trả `""`, cùng khuôn `overdueIceboxSection`: mục biến mất hoàn toàn, không
+ * in tiêu đề rỗng.
+ */
+function pendingProposalsSection(graph: Graph, t: Task): string {
+  const count = [...graph.proposals.values()].filter(
+    (s) => s.value.status === "pending" && s.value.scope === t.scope,
+  ).length;
+
+  if (count === 0) return "";
+
+  return (
+    `## Đề xuất đang chờ duyệt\n\n` +
+    `${count} đề xuất \`pending\` cùng phạm vi \`${t.scope}\` — nội dung không in ở đây, ` +
+    `xem \`ganas proposal list\`.`
+  );
+}
+
+/**
  * Design nào khai `supersedes` chứa `designId`? Model không có cạnh ngược
  * `superseded_by` — phải quét toàn bộ `graph.designs` mỗi lần hỏi. Trả về
  * `undefined` nếu không design nào thay thế nó (dữ liệu thiếu, không phải lỗi).
@@ -731,6 +761,12 @@ export function renderBrief(input: BriefInput): string {
 
   const icebox = overdueIceboxSection(graph, t, now);
   if (icebox) parts.push(icebox);
+
+  /* --- Đề xuất đang chờ duyệt: cùng phần ổn định, trước `volatile` — xem
+   * docstring `pendingProposalsSection` cho ràng buộc (1) của D-004. --------- */
+
+  const proposals = pendingProposalsSection(graph, t);
+  if (proposals) parts.push(proposals);
 
   parts.push(RULE_REMINDER);
 
