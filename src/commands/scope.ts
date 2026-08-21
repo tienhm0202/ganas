@@ -7,7 +7,8 @@ import { parseDocument } from "yaml";
 import { DIRS, ganasPath } from "../graph/paths.js";
 import { computeDebt } from "../graph/trace.js";
 import type { Graph } from "../graph/types.js";
-import { ID_PATTERNS } from "../model/index.js";
+import { guideFileName, ID_PATTERNS, moduleGuideDir } from "../model/index.js";
+import { moduleGuideMd } from "../templates/project.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { matchesAny } from "../util/glob.js";
@@ -248,6 +249,56 @@ export function looksLikeIoGlob(glob: string): boolean {
   return IO_SEGMENT.test(glob.replace(/\*+/g, ""));
 }
 
+
+/**
+ * Sinh khung file hướng dẫn ở thư mục gốc của khối vừa tạo.
+ *
+ * Ba lần KHÔNG ghi, mỗi lần một lý do:
+ *
+ *  - Khối không nhận cả một thư mục (`moduleGuideDir` trả `undefined`) — không
+ *    có chỗ nào đúng để đặt, xem docstring của hàm đó.
+ *  - Thư mục chưa tồn tại — khối vừa khai một vùng code CHƯA có code. Tạo cây
+ *    thư mục rỗng chỉ để chứa một file TODO là bày rác trước khi có việc.
+ *  - File đã có — không bao giờ đè. Một file hướng dẫn viết tay bị khung TODO
+ *    ghi đè là mất chữ không lấy lại được, và đây là lệnh người ta chạy lại
+ *    nhiều lần.
+ *
+ * Lỗi ghi file KHÔNG được làm hỏng `scope new`: phạm vi và khối đã vào đĩa rồi,
+ * ném ở đây thì người dùng thấy lệnh "thất bại" trong khi phần quan trọng đã
+ * xong. Báo ra stdout rồi đi tiếp.
+ */
+async function writeModuleGuide(
+  root: string,
+  graph: Graph,
+  mod: Parameters<typeof moduleYaml>[0],
+): Promise<void> {
+  const dir = moduleGuideDir(mod.paths);
+  if (dir === undefined) return;
+
+  const absDir = join(root, dir);
+  if (!existsSync(absDir)) return;
+
+  const file = join(absDir, guideFileName(graph.config.harness));
+  if (existsSync(file)) return;
+
+  const body = moduleGuideMd({
+    id: mod.id,
+    title: mod.title,
+    dir,
+    nature: mod.nature ?? "code",
+    probes: [],
+  });
+
+  try {
+    await writeFile(file, body, { encoding: "utf8", flag: "wx" });
+    process.stdout.write(`  ${relative(root, file)} (khung file hướng dẫn của vùng)\n`);
+  } catch {
+    process.stdout.write(
+      `  ⚠ không ghi được ${relative(root, file)} — tạo tay, hoặc \`ganas validate\` sẽ nhắc.\n`,
+    );
+  }
+}
+
 async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
   const interactive = process.stdin.isTTY && !flag(argv, "yes", "y");
 
@@ -307,6 +358,7 @@ async function runNew(argv: Argv, root: string, graph: Graph): Promise<number> {
       await mkdir(dirname(file), { recursive: true });
       await writeNewYaml(file, moduleYaml(mod), `khối ${mod.id}`);
       created.push(relative(root, file));
+      await writeModuleGuide(root, graph, mod);
     };
 
     if (split) {

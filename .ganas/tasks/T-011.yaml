@@ -1,0 +1,52 @@
+id: T-011
+title: "Tài liệu vùng nằm trong thư mục khối: template + scope new sinh khung"
+serves:
+  - G-001
+implements: D-004
+scope: P-cli
+status: done
+estimated_context: medium
+model: main
+blocked_by:
+  - T-012
+
+context_contract:
+  must_read:
+    - path: ".claude/rules/agent-guide.md"
+      why: "Luật đã có: một khối một file hướng dẫn ở thư mục gốc khối, và cái giá của
+        file ở thư mục con"
+    - path: "src/templates/project.ts"
+      why: "guideFileName(harness) quyết định tên file — không được đóng cứng
+        CLAUDE.md"
+    - path: "release/CLAUDE.md"
+      why: "Ví dụ DUY NHẤT đang có trong repo về file hướng dẫn cấp thư mục"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-templates
+  - M-commands
+
+exit_contract:
+  - kind: artifact
+    path: "src/templates/project.ts"
+    must_contain: "moduleGuideMd"
+  - kind: command
+    run: "npx tsx --test 'test/module-guide.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/init.test.ts'"
+
+  - kind: verification
+    target: "M-templates/V-templates-init"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Dùng `moduleGuideDir()` do T-012 dựng ở `src/model/module.ts` — KHÔNG viết bản
+  thứ hai của phép suy thư mục gốc.
+
+  Khung phải ép đúng chiều: mục "cổng vào", "bất biến", "cạm bẫy", "lệnh test
+  riêng", và mục trỏ id `.ganas/` cho thứ kiểm chứng được. KHÔNG có mục nào mời
+  người chép lại luật gốc hay mô tả khối khác — đó là chỗ cấu trúc mất một
+  chiều. Khối chỉ trỏ file lẻ (M-cli → src/cli.ts) thì không sinh gì.
+done_at: 2026-08-21T10:30:28.065Z

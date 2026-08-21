@@ -545,3 +545,93 @@ Kho trạng thái và tri thức của dự án, do \`ganas\` quản lý.
 Sửa tay được — đều là YAML. Sau khi sửa chạy \`ganas validate\`.
 `;
 }
+
+/**
+ * Khung file hướng dẫn cho MỘT KHỐI, đặt tại thư mục gốc của khối đó
+ * (`moduleGuideDir()`, src/model/module.ts).
+ *
+ * ## Vì sao khung này thiếu vài mục mà người ta hay muốn thêm
+ *
+ * Không có mục "tổng quan dự án", không có mục "quy ước chung", không có chỗ
+ * liệt kê file. Ba thứ đó là ba cách làm hỏng cùng một thứ:
+ *
+ *  - Tổng quan/quy ước đã nằm ở file hướng dẫn GỐC và ở `.claude/rules/`.
+ *    Chép lại ở đây là dựng bản thứ hai, và bản thứ hai luôn là bản lỗi thời
+ *    trước — nhưng người đọc không biết bản nào mới.
+ *  - Danh sách file lệch ngay hôm sau, còn `ls` thì không bao giờ lệch.
+ *
+ * Tham chiếu chỉ đi MỘT CHIỀU: gốc → khối. File này nói về vùng của chính nó,
+ * không mô tả khối khác và không nhắc lại luật gốc. Muốn nói về khối khác thì
+ * trỏ ID (`M-xxx`) để người đọc tự mở, đừng tóm tắt hộ.
+ *
+ * Thứ KIỂM CHỨNG ĐƯỢC thì không viết thành chữ ở đây — ghi thành fact có probe
+ * trong `.ganas/` rồi trỏ id, vì chữ trong file hướng dẫn không có
+ * `last_verified_at` và không hook nào bắt nó phải còn đúng.
+ */
+export function moduleGuideMd(v: {
+  /** ID khối, vd `M-render`. */
+  id: string;
+  title: string;
+  /** Thư mục gốc của khối — cũng là chỗ file này nằm. */
+  dir: string;
+  /** `Module.nature`: code | data | llm | io. */
+  nature: string;
+  /** Lệnh probe của khối, nếu đã khai. */
+  probes: readonly string[];
+}): string {
+  const io =
+    v.nature === "io"
+      ? `Khối này là \`nature: io\` — **đây là nơi chạm ra ngoài thật** (file, mạng, tiến ` +
+        `trình con, DB). Lõi không được tự làm việc đó; nếu bạn thấy một khối lõi gọi thẳng ` +
+        `ra ngoài, đó là chỗ lệch đáng ghi \`ganas proposal new\`.
+`
+      : `Khối này là \`nature: ${v.nature}\` — **lõi**. Không tự mở file, không tự gọi mạng, ` +
+        `không tự query DB ở đây; chạm ra ngoài thì đi qua một khối \`io\`.
+`;
+
+  const testBlock = v.probes.length
+    ? v.probes.map((run) => `${run}`).join("\n")
+    : `# khối này chưa khai probe nào — \`ganas validate\` đang báo verify/module-unverified`;
+
+  return `# ${v.dir}/ — ${v.title}
+
+<!-- Khối \`${v.id}\`. File này chỉ được nạp khi agent đụng vào file trong thư mục
+     này, nên nó KHÔNG phải chỗ chép lại luật gốc hay tổng quan dự án. Viết ở đây
+     đúng thứ chỉ đúng khi đang sửa vùng này. -->
+
+${io}
+## Cổng vào
+
+<!-- Hàm/file nào là cửa vào thật của vùng, và ai gọi nó. Một đoạn, không phải
+     danh sách file — \`ls\` làm việc đó tốt hơn và không bao giờ lệch. -->
+
+TODO
+
+## Bất biến dễ phá
+
+<!-- Điều phải luôn đúng ở vùng này mà code không tự bảo vệ được. Mỗi mục một
+     dòng, nói rõ HỎNG RA SAO nếu phá — "phải cẩn thận" thì không ai làm gì được. -->
+
+TODO
+
+## Cạm bẫy đã trả giá
+
+<!-- CHỈ ghi thứ đã hỏng thật một lần. Cạm bẫy tưởng tượng làm loãng cạm bẫy
+     thật, và người đọc sẽ ngừng đọc cả hai. -->
+
+TODO
+
+## Chạy test riêng của vùng
+
+\`\`\`
+${testBlock}
+\`\`\`
+
+## Tri thức kiểm chứng được
+
+<!-- Đừng viết kết luận thành chữ ở đây. Ghi fact có probe trong \`.ganas/\` rồi
+     trỏ id — chữ ở file này không có last_verified_at, không ai bắt nó còn đúng. -->
+
+- (chưa có — \`ganas search\` để tìm fact của phạm vi này)
+`;
+}
