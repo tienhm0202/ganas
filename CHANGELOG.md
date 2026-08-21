@@ -9,7 +9,7 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
-## Chưa phát hành
+## v0.6.0 — 2026-08-21
 
 - **Luật tag thôi mô tả sai chính repo này.** `.claude/rules/ganas-git.md` khai
   *"ganas dùng đúng cách này [`<tên>--vX.Y.Z`] cho chính repo ganas"* — sai, và

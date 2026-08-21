@@ -1,6 +1,6 @@
 {
   "name": "ganas",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Control layer cho các phiên Claude Code — spine goal/sprint/design/task, tri thức có provenance, cưỡng chế bằng hook",
   "type": "module",
   "bin": {
