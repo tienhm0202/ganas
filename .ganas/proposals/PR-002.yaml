@@ -1,0 +1,15 @@
+id: PR-002
+title: "gate chấm trên working tree, không phải trên cây sắp được commit"
+scope: P-cli
+problem: >-
+  ganas gate chạy lệnh trong exit_contract (npm run typecheck, npm test) trên WORKING TREE hiện tại. Nhưng ganas commit chỉ stage những file nằm trong ranh giới của task. Hai tập đó khác nhau, nên gate có thể xanh trong khi commit sinh ra một cây KHÔNG biên dịch được. Đã xảy ra thật với T-010: hook mới dùng khoá enforcement proposal_decision khai ở src/model/config.ts, file đó thuộc M-model (P-graph-core) nên nằm ngoài ranh giới của T-010 (M-hooks, P-hook), bị bỏ lại; gate vẫn xanh vì working tree có nó, còn commit fc99e87 thì tsc gãy. Phải amend tay mới sửa được.
+proposed_change: >-
+  ganas commit chấm lại exit_contract trên chính CÂY SẮP COMMIT trước khi commit thật (git stash phần chưa stage, hoặc dựng worktree tạm từ index rồi chạy lệnh ở đó), và từ chối commit nếu đỏ. Cách rẻ hơn nếu cách trên quá đắt: cảnh báo khi có file đang đổi nằm NGOÀI ranh giới mà lại được import bởi file TRONG ranh giới.
+anchors:
+  - "src/commands/gate.ts:24"
+  - "src/commands/commit.ts:215"
+  - "commit:6d1f0a0"
+weight: 5
+ease: 2
+found_at: "2026-08-21T10:25:14.873Z"
+status: pending

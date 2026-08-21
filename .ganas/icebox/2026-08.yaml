@@ -58,15 +58,15 @@
   review_after_days: 30
   weight: 3
   ease: 2
-  why_deferred: "ganas init ghi luật vào .claude/rules/*.md bất kể harness nào,
-    mà thư mục đó chỉ Claude Code tự nạp. Cursor đọc .cursor/rules/*.mdc (file
-    .md không frontmatter bị bỏ qua), Windsurf/Devin đọc .devin/rules/ rồi
-    .windsurf/rules/ — nên dự án khai harness: cursor nhận đủ file luật mà
-    không công cụ nào nạp; chúng chỉ được đọc khi file hướng dẫn trỏ tay tới.
-    Chưa làm vì mỗi harness một định dạng khác nhau (Cursor cần frontmatter
-    .mdc, Windsurf có trần 12.000 ký tự/file), tức là một cổng xuất riêng cho
-    từng harness chứ không phải chép file — việc lớn hơn hẳn hai luật đang
-    thêm, và chưa ai dùng ganas bằng Cursor để biết nó đau tới đâu."
+  why_deferred: "ganas init ghi luật vào .claude/rules/*.md bất kể harness nào, mà
+    thư mục đó chỉ Claude Code tự nạp. Cursor đọc .cursor/rules/*.mdc (file .md
+    không frontmatter bị bỏ qua), Windsurf/Devin đọc .devin/rules/ rồi
+    .windsurf/rules/ — nên dự án khai harness: cursor nhận đủ file luật mà không
+    công cụ nào nạp; chúng chỉ được đọc khi file hướng dẫn trỏ tay tới. Chưa làm
+    vì mỗi harness một định dạng khác nhau (Cursor cần frontmatter .mdc,
+    Windsurf có trần 12.000 ký tự/file), tức là một cổng xuất riêng cho từng
+    harness chứ không phải chép file — việc lớn hơn hẳn hai luật đang thêm, và
+    chưa ai dùng ganas bằng Cursor để biết nó đau tới đâu."
   anchors:
     - src/commands/init.ts#L109
     - src/commands/init.ts#L126
@@ -84,10 +84,24 @@
     nhưng scripts/install-target.mjs vẫn chỉ biết bốn cờ cũ nên hai harness mới
     không có đường cài MCP tự động — người dùng phải tự sửa config của công cụ.
     Chưa làm vì mỗi công cụ đặt file cấu hình MCP một chỗ khác nhau và Codex CLI
-    dùng TOML chứ không phải JSON như .cursor/mcp.json, tức phải thêm một bộ
-    ghi cấu hình mới; việc này độc lập với luật đang thêm và chưa chặn ai."
+    dùng TOML chứ không phải JSON như .cursor/mcp.json, tức phải thêm một bộ ghi
+    cấu hình mới; việc này độc lập với luật đang thêm và chưa chặn ai."
   anchors:
     - scripts/install-target.mjs#L246
     - src/model/config.ts#L52
+  scope: P-cli
+  status: open
+- id: ICE-006
+  title: ganas commit liệt kê file ĐANG stage vào cả danh sách "để lại"
+  found_at: 2026-08-21T05:49:05.035Z
+  review_after_days: 30
+  weight: 2
+  ease: 4
+  why_deferred: Chỉ sai ở phần HIỂN THỊ, không sai ở phần stage — commit vẫn đúng
+    file. Sửa nó là đụng src/commit.ts, ngoài phạm vi chuỗi task D-004 đang
+    chạy.
+  anchors:
+    - src/commit.ts:228
+    - commit:d4b63ed
   scope: P-cli
   status: open
