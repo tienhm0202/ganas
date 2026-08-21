@@ -1,0 +1,42 @@
+id: T-014
+title: "Tài liệu vùng cho src/render/ và src/mcp/"
+serves:
+  - G-001
+implements: D-004
+scope: P-cli
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/commands/CLAUDE.md"
+      why: "Bản mẫu viết ở T-011 — giữ cùng giọng và cùng bố cục"
+    - path: ".claude/rules/agent-guide.md"
+      why: "Viết gì và KHÔNG viết gì"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-render
+  - M-mcp
+
+exit_contract:
+  - kind: artifact
+    path: "src/render/CLAUDE.md"
+    must_contain: "## Cạm bẫy đã trả giá"
+  - kind: artifact
+    path: "src/mcp/CLAUDE.md"
+    must_contain: "## Cạm bẫy đã trả giá"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: verification
+    target: "M-render/V-render-brief"
+  - kind: verification
+    target: "M-mcp/V-mcp-selfcontained"
+
+notes: >-
+  Cạm bẫy có thật của M-render đáng ghi: brief đi thẳng vào context mọi phiên
+  nên mọi thứ BIẾN ĐỘNG (thời gian, git status) phải nằm ở cuối, không thì hỏng
+  prompt cache — xem `volatileStatus` và comment đầu `renderBrief`.
+done_at: 2026-08-21T10:36:54.328Z
