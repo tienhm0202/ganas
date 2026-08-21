@@ -1,0 +1,37 @@
+id: T-015
+title: "Tài liệu vùng cho src/hooks/"
+serves:
+  - G-001
+implements: D-004
+scope: P-hook
+status: done
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/commands/CLAUDE.md"
+      why: "Bản mẫu viết ở T-011 — giữ cùng giọng và cùng bố cục"
+    - path: ".claude/rules/agent-guide.md"
+      why: "Viết gì và KHÔNG viết gì"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hooks
+
+exit_contract:
+  - kind: artifact
+    path: "src/hooks/CLAUDE.md"
+    must_contain: "## Cạm bẫy đã trả giá"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: verification
+    target: "M-hooks/V-hooks-smoke"
+
+notes: >-
+  Vùng này là chỗ DUY NHẤT của ganas chặn được thao tác sai, nên bất biến đáng
+  ghi nhất là: hook không bao giờ được ném lỗi ra ngoài (hỏng hook = hỏng cả
+  phiên), và mọi luật chặn phải đi qua `enforcementFor()` để dự án cũ hạ được
+  xuống `warn`.
+done_at: 2026-08-21T10:37:51.391Z
