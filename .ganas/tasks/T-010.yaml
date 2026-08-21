@@ -1,0 +1,37 @@
+id: T-010
+title: "Hook chặn model tự đặt proposal status: approved"
+serves:
+  - G-001
+implements: D-004
+scope: P-hook
+status: done
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-007
+
+context_contract:
+  must_read:
+    - path: "src/hooks/handlers.ts"
+      why: "denyPreTool + ENTITY_OVERWRITE_REASON: khuôn chặn ghi đã có, thêm luật mới
+        đi cùng đường"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hooks
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/hooks.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+
+  - kind: verification
+    target: "M-hooks/V-hooks-smoke"
+
+notes: >-
+  Lớp cứng DUY NHẤT của D-004, cùng lý lẽ đã áp cho decision: duyệt là việc của
+  người. Phải đi qua ENFORCEMENT_RULES để dự án cũ tắt riêng được, chứ không
+  chặn vô điều kiện.
+done_at: 2026-08-21T10:24:09.336Z

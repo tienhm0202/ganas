@@ -608,6 +608,95 @@ test("Write vào .ganas/state.json → allow (không phải thư mục thực th
   }
 });
 
+/* --- PreToolUse: chặn model tự đặt status: approved/rejected cho proposal - */
+
+const PROPOSAL_PENDING = `id: PR-001
+title: "Đề xuất thử"
+scope: P-thu
+problem: "Vấn đề"
+proposed_change: "Sửa chỗ này"
+anchors: ["src/a.ts:1"]
+weight: 3
+ease: 3
+found_at: "2026-01-01T00:00:00Z"
+status: pending
+`;
+
+test("⭐ Edit đặt status: approved cho proposal → deny, đường đúng là ganas proposal approve", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Edit",
+      tool_input: {
+        file_path: ".ganas/proposals/PR-001.yaml",
+        old_string: "status: pending",
+        new_string: 'status: approved\ndecided_by: "@ai"\ndecided_at: "2026-01-01T00:00:00Z"',
+      },
+    });
+    const h = out.hookSpecificOutput as Record<string, string>;
+    assert.equal(h["permissionDecision"], "deny");
+    assert.match(h["permissionDecisionReason"]!, /NGƯỜI/);
+    assert.match(h["permissionDecisionReason"]!, /ganas proposal approve/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Write đè proposal sang status: rejected → deny, cùng luật với approved", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: {
+        file_path: ".ganas/proposals/PR-001.yaml",
+        content: PROPOSAL_PENDING.replace("status: pending", "status: rejected"),
+      },
+    });
+    const h = out.hookSpecificOutput as Record<string, string>;
+    assert.equal(h["permissionDecision"], "deny");
+    assert.match(h["permissionDecisionReason"]!, /ganas proposal reject/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("Write proposal MỚI ở trạng thái pending → allow (ganas proposal new không bị chặn)", async () => {
+  const root = await project();
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Write",
+      tool_input: { file_path: ".ganas/proposals/PR-001.yaml", content: PROPOSAL_PENDING },
+    });
+    assert.deepEqual(out, {}, "ghi proposal mới ở pending là việc hợp lệ, không phải quyết định");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("chế độ warn: đặt status: approved cho proposal chỉ cảnh báo, không deny", async () => {
+  const root = await project({}, `version: 1\nproject: "t"\nenforcement: warn\n`);
+  try {
+    const out = await handlers.preToolUse({
+      cwd: root,
+      tool_name: "Edit",
+      tool_input: {
+        file_path: ".ganas/proposals/PR-001.yaml",
+        old_string: "status: pending",
+        new_string: "status: approved",
+      },
+    });
+    const h = out.hookSpecificOutput as Record<string, string> | undefined;
+    assert.equal(h?.["permissionDecision"], undefined, "chế độ warn không được deny");
+    assert.match(out.systemMessage!, /warn/);
+    assert.match(out.systemMessage!, /NGƯỜI/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
 /* --- Gate: tiêu chí artifact và handoff ----------------------------------- */
 
 test("gate chấm được tiêu chí artifact có must_contain", async () => {

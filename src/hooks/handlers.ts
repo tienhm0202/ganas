@@ -10,7 +10,7 @@ import { type Candidate, rankedCandidates, selectNextTask } from "../graph/selec
 import type { Diagnostic } from "../graph/types.js";
 import { validateGraph } from "../graph/validate.js";
 import { generateHandoff } from "../handoff.js";
-import { enforcementFor, type EnforcementRule } from "../model/index.js";
+import { type Enforcement, enforcementFor, type EnforcementRule } from "../model/index.js";
 import { renderBrief } from "../render/brief.js";
 import {
   bindSession,
@@ -197,6 +197,68 @@ const ENTITY_OVERWRITE_REASON =
   `Nếu tưởng đang tạo một thực thể MỚI: id này đã có chủ. Chạy \`ganas id <loại>\` để lấy ` +
   `một id khác, đừng tự đoán số kế tiếp.`;
 
+/**
+ * Đường dẫn một file proposal — `.ganas/proposals/PR-00N.yaml`.
+ *
+ * Cố ý KHÔNG gộp vào `ENTITY_DIRS`/`isEntityPath`: luật ở đó chặn TOÀN BỘ
+ * `Write` đè lên file đã tồn tại (sửa phải đi qua `Edit`), còn luật cho
+ * proposal hẹp hơn nhiều — sửa `problem`/`proposed_change` khi đề xuất còn
+ * `pending` vẫn là việc hợp lệ của agent; thứ duy nhất bị khoá là NỘI DUNG
+ * đặt `status: approved`/`rejected`, bất kể qua `Write` hay `Edit`.
+ */
+function isProposalPath(rel: string): boolean {
+  return rel.startsWith(`${GANAS_DIR}/${DIRS.proposals}/`) && rel.endsWith(".yaml");
+}
+
+/**
+ * Dòng YAML biến một proposal thành "đã có người trả lời": đổi `status` sang
+ * `approved`/`rejected`, hoặc điền `decided_by`/`decided_at` — ba trường mà
+ * schema (`zProposal`, xem `model/proposal.ts`) chỉ chấp nhận khi status đã
+ * chuyển khỏi `pending`. Bắt cả `decided_by`/`decided_at` riêng lẻ, không chỉ
+ * dòng `status`: ghi hai trường đó trước rồi đổi `status` ở một lượt Edit khác
+ * là cùng một việc giả mạo quyết định, chỉ chia làm hai bước để né luật.
+ */
+const PROPOSAL_DECISION_PATTERN =
+  /^[ \t]*(status:\s*["']?(approved|rejected)["']?\s*$|decided_by:\s*\S|decided_at:\s*\S)/m;
+
+/** Gom mọi đoạn nội dung MỚI mà tool call này sắp ghi — Write/Edit/MultiEdit mỗi cái một hình. */
+function writtenText(toolInput: Record<string, unknown>): string[] {
+  const texts: string[] = [];
+  if (typeof toolInput["content"] === "string") texts.push(toolInput["content"]);
+  if (typeof toolInput["new_string"] === "string") texts.push(toolInput["new_string"]);
+  const edits = toolInput["edits"];
+  if (Array.isArray(edits)) {
+    for (const edit of edits) {
+      if (edit && typeof edit === "object") {
+        const ns = (edit as Record<string, unknown>)["new_string"];
+        if (typeof ns === "string") texts.push(ns);
+      }
+    }
+  }
+  return texts;
+}
+
+function setsProposalDecision(toolInput: Record<string, unknown> | undefined): boolean {
+  if (!toolInput) return false;
+  return writtenText(toolInput).some((t) => PROPOSAL_DECISION_PATTERN.test(t));
+}
+
+const PROPOSAL_DECISION_REASON =
+  `Duyệt hay từ chối một đề xuất là việc của NGƯỜI — cùng luật đã áp cho ` +
+  `\`decision\` (\`.claude/rules/ganas-knowledge.md\`). Ghi thẳng \`status: approved\`/` +
+  `\`rejected\` (hay \`decided_by\`/\`decided_at\`) vào file proposal bằng Write/Edit là ` +
+  `giả mạo một quyết định chưa xảy ra.\n\n` +
+  `Đường đúng: \`ganas proposal approve <id> --by @ten\` hoặc \`ganas proposal reject <id> ` +
+  `--by @ten --why "..."\` — hai lệnh đó đòi người gõ \`--by\`, không có mặc định, và ghi lại ` +
+  `đúng ai đã quyết.`;
+
+/** Chặn khi enforce, chỉ cảnh báo khi warn — cùng khuôn nhánh warn/enforce của postToolUse. */
+function denyOrWarnPreTool(mode: Enforcement, reason: string): HookOutput {
+  return mode === "enforce"
+    ? denyPreTool(reason)
+    : { systemMessage: `ganas (chế độ warn — chưa chặn):\n${reason}` };
+}
+
 const PLAN_APPROVED_REASON =
   `Plan vừa được duyệt đang nằm trong context — và sẽ MẤT khi context bị compact. ` +
   `Chẻ ngay thành Task, đừng để sau.\n\n` +
@@ -279,6 +341,14 @@ async function pendingDispatchNudge(
  * Không theo cờ `warn`/`enforce` như luật quy trình: thứ bị đe doạ ở đây là
  * DỮ LIỆU, không phải thói quen — cùng lý lẽ với luật ledger phía trên.
  *
+ * Luật proposal (thêm ở đây, sau cùng): CÓ theo `enforcementFor` (khoá
+ * `proposal_decision`) — khác bốn luật trên, đây là luật QUY TRÌNH ("duyệt là
+ * việc của người"), không phải luật bảo toàn dữ liệu, nên dự án cũ phải hạ
+ * được xuống `warn` như mọi luật quy trình khác. Áp cho cả `Write` lẫn `Edit`/
+ * `MultiEdit` (không giới hạn ở `Write` như luật ghi-đè phía trên): việc cần
+ * chặn không phải "đè file" mà là "nội dung sắp ghi đặt status thành
+ * approved/rejected", và `Edit` làm được việc đó y hệt `Write`.
+ *
  * Giới hạn phải biết: hook này chỉ chạy khi plugin ganas được cài trong
  * Claude Code. Gọi `ganas` trần từ terminal (hoặc bất kỳ agent nào không đi
  * qua hook của plugin) không có lớp này — lúc đó chỉ còn `reserveId` (lớp 1)
@@ -302,6 +372,17 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
 
       if (input.tool_name === "Write" && isEntityPath(rel) && (await fileExists(abs))) {
         return denyPreTool(ENTITY_OVERWRITE_REASON);
+      }
+
+      // Duyệt/từ chối proposal: khác ba luật phía trên, luật này ĐI QUA
+      // enforcementFor — dự án cũ hạ được xuống warn, xem doc comment
+      // PROPOSAL_DECISION_REASON. `loadGraph` chỉ chạy khi thật sự cần (path
+      // là proposal VÀ nội dung ghi thật sự chứa dấu hiệu quyết định), cùng
+      // kiểu lazy đã dùng cho `fileExists` ở nhánh trên.
+      if (isProposalPath(rel) && setsProposalDecision(input.tool_input)) {
+        const graph = await loadGraph(root);
+        const mode = enforcementFor(graph.config, "proposal_decision");
+        return denyOrWarnPreTool(mode, PROPOSAL_DECISION_REASON);
       }
     }
     return ALLOW;

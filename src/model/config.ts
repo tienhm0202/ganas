@@ -23,6 +23,8 @@ export const ENFORCEMENT_RULES = [
   "exit_contract",
   /** Tạo/đóng task không neo được vào phạm vi/goal. */
   "task_link",
+  /** Model tự đặt status: approved/rejected cho proposal thay vì `ganas proposal approve/reject`. */
+  "proposal_decision",
 ] as const;
 export type EnforcementRule = (typeof ENFORCEMENT_RULES)[number];
 
