@@ -1,0 +1,17 @@
+id: M-graph-read
+scope: P-graph-core
+title: "Đọc đồ thị: chọn task, kiểm cạnh hợp đồng, kiểu dữ liệu và đường dẫn chuẩn"
+nature: code
+paths:
+  - "src/graph/select.ts"
+  - "src/graph/trace.ts"
+  - "src/graph/types.ts"
+  - "src/graph/paths.ts"
+depends_on:
+  - M-model
+status: surveyed
+verify:
+  - id: V-graph-read-trace
+    kind: probe
+    run: "npx tsx --test 'test/trace.test.ts'"
+    expect: exit_zero

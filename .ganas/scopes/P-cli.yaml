@@ -9,6 +9,9 @@ modules:
   - M-cli
   - M-commands
   - M-templates
+  - M-render
+  - M-workflow
+  - M-mcp
 entry: M-cli
 
 acceptance:

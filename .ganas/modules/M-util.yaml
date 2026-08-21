@@ -1,0 +1,14 @@
+id: M-util
+scope: P-graph-core
+title: "Tiện ích thuần: khớp glob, tách token shell, kiểu lỗi"
+nature: code
+paths:
+  - "src/util/errors.ts"
+  - "src/util/glob.ts"
+  - "src/util/shell.ts"
+status: surveyed
+verify:
+  - id: V-util-glob
+    kind: probe
+    run: "npx tsx --test 'test/glob.test.ts'"
+    expect: exit_zero

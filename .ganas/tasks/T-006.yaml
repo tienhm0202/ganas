@@ -1,0 +1,65 @@
+id: T-006
+title: "Vá bản đồ code: 24 file trong src/ chưa thuộc khối nào"
+serves:
+  - G-001
+implements: D-004
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/boundary.ts"
+      why: "taskBoundary() dựng ranh giới từ touches — file ngoài mọi khối thì không
+        task nào commit được nó"
+    - path: ".claude/rules/architecture.md"
+      why: "Chọn nature cho khối mới: io là nơi CHẠM I/O thật, code/data/llm là lõi"
+  facts: []
+  open_questions:
+    - "src/util/* dùng chung cho cả P-cli lẫn P-graph-core — đặt M-util ở
+      P-graph-core là chọn theo chiều phụ thuộc, cần người xác nhận"
+
+touches: []
+
+exit_contract:
+  - kind: artifact
+    path: ".ganas/modules/M-render.yaml"
+    must_contain: "src/render"
+  - kind: artifact
+    path: ".ganas/modules/M-verify.yaml"
+    must_contain: "src/verify"
+  - kind: artifact
+    path: ".ganas/modules/M-workflow.yaml"
+    must_contain: "src/boundary.ts"
+  - kind: artifact
+    path: ".ganas/modules/M-graph-read.yaml"
+    must_contain: "src/graph/select.ts"
+  - kind: artifact
+    path: ".ganas/modules/M-freshness.yaml"
+    must_contain: "src/graph/freshness.ts"
+  - kind: artifact
+    path: ".ganas/modules/M-util.yaml"
+    must_contain: "src/util/glob.ts"
+  - kind: artifact
+    path: ".ganas/modules/M-exec.yaml"
+    must_contain: "src/util/exec.ts"
+  - kind: artifact
+    path: ".ganas/modules/M-mcp.yaml"
+    must_contain: "src/mcp/**"
+  - kind: artifact
+    path: ".ganas/scopes/P-cli.yaml"
+    must_contain: "M-workflow"
+  - kind: artifact
+    path: ".ganas/modules/M-commands.yaml"
+    must_contain: "M-render"
+  - kind: command
+    run: "npx tsx --test 'test/module-map.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+
+notes: >-
+  Lớp cưỡng chế là test/module-map.test.ts: mọi file .ts trong src/ phải khớp
+  paths của đúng một khối. Không có test đó thì lỗ này quay lại ngay lần thêm
+  thư mục sau — đúng kiểu hỏng im lặng mà ganas tồn tại để chặn.
+done_at: 2026-08-21T05:48:27.994Z

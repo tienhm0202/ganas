@@ -9,6 +9,11 @@ modules:
   - M-model
   - M-load
   - M-validate
+  - M-graph-read
+  - M-freshness
+  - M-verify
+  - M-util
+  - M-exec
 entry: M-model
 
 acceptance:

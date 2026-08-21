@@ -1,0 +1,15 @@
+id: M-freshness
+scope: P-graph-core
+title: "Độ tươi của bằng chứng: fact còn tin được hay đã hết hạn"
+nature: io
+paths:
+  - "src/graph/freshness.ts"
+depends_on:
+  - M-graph-read
+  - M-verify
+status: surveyed
+verify:
+  - id: V-freshness-staleness
+    kind: probe
+    run: "npx tsx --test 'test/staleness.test.ts'"
+    expect: exit_zero

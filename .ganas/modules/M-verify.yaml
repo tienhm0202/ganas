@@ -1,0 +1,17 @@
+id: M-verify
+scope: P-graph-core
+title: "Chạy bằng chứng và ghi sổ cái: probe, eval, chuỗi hash của ledger"
+nature: io
+paths:
+  - "src/verify/**"
+depends_on:
+  - M-model
+  - M-graph-read
+  - M-util
+  - M-exec
+status: surveyed
+verify:
+  - id: V-verify-run
+    kind: probe
+    run: "npx tsx --test 'test/verify-run.test.ts'"
+    expect: exit_zero

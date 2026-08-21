@@ -1,0 +1,14 @@
+id: M-mcp
+scope: P-cli
+title: "Adapter MCP: phát lệnh ganas ra cho harness gọi qua stdio"
+nature: io
+paths:
+  - "src/mcp/**"
+depends_on:
+  - M-commands
+status: surveyed
+verify:
+  - id: V-mcp-selfcontained
+    kind: probe
+    run: "npx tsx --test 'test/plugin-selfcontained.test.ts'"
+    expect: exit_zero

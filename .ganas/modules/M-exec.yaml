@@ -1,0 +1,12 @@
+id: M-exec
+scope: P-graph-core
+title: "Chỗ DUY NHẤT sinh tiến trình con — mọi lệnh shell của ganas đi qua đây"
+nature: io
+paths:
+  - "src/util/exec.ts"
+status: surveyed
+verify:
+  - id: V-exec-run
+    kind: probe
+    run: "npx tsx --test 'test/verify-run.test.ts'"
+    expect: exit_zero

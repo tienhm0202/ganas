@@ -1,0 +1,14 @@
+id: M-render
+scope: P-cli
+title: "Dựng brief và bảng nhóm — chữ mà phiên làm việc thật sự đọc"
+nature: code
+paths:
+  - "src/render/**"
+depends_on:
+  - M-workflow
+status: surveyed
+verify:
+  - id: V-render-brief
+    kind: probe
+    run: "npx tsx --test 'test/scope-brief.test.ts'"
+    expect: exit_zero
