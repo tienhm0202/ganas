@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import type { ExitCriterion } from "../model/index.js";
+import type { ExitCriterion, Proposal } from "../model/index.js";
 import { evalWeakness, formatAnchor, freshnessOf } from "../model/index.js";
 import { lineOfPath } from "../util/yaml.js";
 import { defHash, entryAt, LEDGER_FILE, ledgerCorruption, verifyChain } from "../verify/ledger.js";
@@ -792,6 +792,136 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
           `còn thấy được dưới \`ganas debt --all\`, không nằm trong báo cáo sau commit của ai cả.`,
       });
     }
+  }
+
+
+  /* --- Đề xuất: chỗ lệch CHƯA ai quyết ----------------------------------- */
+
+  /**
+   * Chuẩn hoá để so hai đề xuất có phải là MỘT không: bỏ khoảng trắng thừa và
+   * phân biệt hoa thường. Cố ý thô — bắt được đúng ca đắt nhất (chép lại y
+   * nguyên một đề xuất đã bị từ chối) mà không giả vờ hiểu ngữ nghĩa.
+   */
+  const sameChange = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+  const rejectedChanges = new Map<string, Proposal>();
+  for (const sourced of graph.proposals.values()) {
+    const p = sourced.value;
+    if (p.status === "rejected") rejectedChanges.set(sameChange(p.proposed_change), p);
+  }
+
+  const promotedBy = new Map<string, string>();
+
+  for (const sourced of graph.proposals.values()) {
+    const p = sourced.value;
+
+    if (!graph.scopes.has(p.scope)) {
+      diags.push({
+        severity: "error",
+        code: "scope/proposal-scope-not-found",
+        message: `đề xuất ${p.id} thuộc phạm vi ${p.scope} không tồn tại`,
+        file: sourced.file,
+        line: at(graph, sourced, "scope"),
+        hint: `Trỏ lại đúng phạm vi, hoặc tạo phạm vi bằng \`ganas scope new\`.`,
+      });
+    }
+
+    if (p.promoted_to) {
+      const target = p.promoted_to;
+      const exists =
+        graph.designs.has(target) || graph.tasks.has(target) || graph.icebox.has(target);
+      if (!exists) {
+        diags.push({
+          severity: "error",
+          code: "spine/proposal-missing-target",
+          message: `đề xuất ${p.id} khai đã thành ${target} nhưng thực thể đó không tồn tại`,
+          file: sourced.file,
+          line: at(graph, sourced, "promoted_to"),
+          hint: `Sửa \`promoted_to\` trỏ đúng id, hoặc gỡ nó nếu chưa thật sự sinh ra gì.`,
+        });
+      }
+
+      // Hai đề xuất cùng trỏ một đích: một trong hai đang nhận công của cái
+      // kia, và cạnh chỉ đi một chiều nên không có gì bên phía đích cãi lại
+      // được. Người phải xử, máy chỉ chỉ chỗ.
+      const first = promotedBy.get(target);
+      if (first) {
+        diags.push({
+          severity: "warning",
+          code: "spine/proposal-duplicate-target",
+          message: `đề xuất ${p.id} và ${first} cùng khai đã thành ${target}`,
+          file: sourced.file,
+          line: at(graph, sourced, "promoted_to"),
+          hint: `Chỉ một đề xuất được sinh ra ${target}; cái còn lại nên là \`superseded\`.`,
+        });
+      } else {
+        promotedBy.set(target, p.id);
+      }
+    }
+
+    for (const oldId of p.supersedes) {
+      if (!graph.proposals.has(oldId)) {
+        diags.push({
+          severity: "error",
+          code: "spine/proposal-missing-supersede",
+          message: `đề xuất ${p.id} thay thế đề xuất ${oldId} không tồn tại`,
+          file: sourced.file,
+          line: at(graph, sourced, "supersedes"),
+          hint: `Trỏ đúng id đề xuất cũ, hoặc bỏ khỏi \`supersedes\`.`,
+        });
+      }
+    }
+
+    // Nêu giải pháp mà không nêu vấn đề: người duyệt chỉ còn cách tin lời
+    // người đề xuất. Đây là lý do `problem` và `proposed_change` là HAI trường
+    // tách rời (xem docstring `src/model/proposal.ts`) — chép cùng một câu vào
+    // cả hai là vô hiệu hoá đúng chỗ tách đó.
+    if (sameChange(p.problem) === sameChange(p.proposed_change)) {
+      diags.push({
+        severity: "warning",
+        code: "knowledge/proposal-problem-equals-change",
+        message: `đề xuất ${p.id} có \`problem\` trùng y hệt \`proposed_change\` — chưa nêu vấn đề, chỉ nêu giải pháp`,
+        file: sourced.file,
+        line: at(graph, sourced, "problem"),
+        hint:
+          `Viết \`problem\` là chỗ LỆCH quan sát được (kèm anchor), \`proposed_change\` là ` +
+          `việc đề nghị làm. Không tách được hai câu đó thì nhiều khả năng chưa có vấn đề thật.`,
+      });
+    }
+
+    // Đề nghị lại ĐÚNG thay đổi vừa bị từ chối: chính là chuyện `why_rejected`
+    // sinh ra để chặn. So `proposed_change` chứ không so `title` — cùng một
+    // thay đổi hay được đặt tên khác đi ở lần đề xuất sau.
+    if (p.status === "pending") {
+      const old = rejectedChanges.get(sameChange(p.proposed_change));
+      if (old) {
+        diags.push({
+          severity: "warning",
+          code: "knowledge/proposal-repeats-rejected",
+          message: `đề xuất ${p.id} đề nghị đúng thay đổi mà ${old.id} đã bị từ chối`,
+          file: sourced.file,
+          line: at(graph, sourced, "proposed_change"),
+          hint:
+            `${old.id} bị từ chối vì: ${old.why_rejected ?? "(không ghi lý do)"} — ` +
+            `nêu được điều gì đã khác đi thì hãy giữ, không thì đóng lại.`,
+        });
+      }
+    }
+  }
+
+  const proposalCycle = findCycle(
+    new Map([...graph.proposals.values()].map((p) => [p.value.id, p.value.supersedes])),
+  );
+  if (proposalCycle) {
+    const head = graph.proposals.get(proposalCycle[0]!);
+    diags.push({
+      severity: "error",
+      code: "spine/proposal-cycle",
+      message: `vòng lặp thay thế giữa các đề xuất: ${proposalCycle.join(" → ")}`,
+      file: head?.file ?? GANAS_DIR,
+      line: head ? at(graph, head, "supersedes") : undefined,
+      hint: `Cắt một cạnh \`supersedes\` — một đề xuất không thể vừa thay thế vừa bị thay thế.`,
+    });
   }
 
   /* --- Sổ cái hỏng ------------------------------------------------------ */

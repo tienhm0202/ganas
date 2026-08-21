@@ -7,6 +7,7 @@ import type {
   Goal,
   Icebox,
   Module,
+  Proposal,
   Scope,
   Task,
 } from "../model/index.js";
@@ -49,6 +50,8 @@ export interface Graph {
   decisions: Map<string, Sourced<Decision>>;
   /** Việc đã quyết CHƯA làm — xem docstring đầu `src/model/icebox.ts`. */
   icebox: Map<string, Sourced<Icebox>>;
+  /** Chỗ lệch CHƯA ai quyết — xem docstring đầu `src/model/proposal.ts`. */
+  proposals: Map<string, Sourced<Proposal>>;
   /**
    * Document YAML đã parse, theo đường dẫn file tương đối. Giữ lại để validator
    * chéo quy được lỗi về đúng dòng, không chỉ đúng file.

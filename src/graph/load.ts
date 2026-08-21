@@ -15,6 +15,7 @@ import {
   zGoal,
   zIcebox,
   zModule,
+  zProposal,
   zScope,
   zTask,
 } from "../model/index.js";
@@ -281,13 +282,14 @@ export async function loadGraph(root: string): Promise<Graph> {
   const gitignoreFile = join(root, ".gitignore");
   const gitignoreRaw = existsSync(gitignoreFile) ? await readFile(gitignoreFile, "utf8") : null;
 
-  const [goals, designs, tasks, scopes, modules, facts, claims, decisions, icebox] =
+  const [goals, designs, tasks, scopes, modules, proposals, facts, claims, decisions, icebox] =
     await Promise.all([
       collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
       collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
       collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
       collectSingle(ganasPath(root, DIRS.scopes), zScope, root, "phạm vi"),
       collectSingle(ganasPath(root, DIRS.modules), zModule, root, "khối"),
+      collectSingle(ganasPath(root, DIRS.proposals), zProposal, root, "đề xuất"),
       collectArray([ganasPath(root, DIRS.facts)], zFact, root, "fact"),
       collectArray(
         [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
@@ -307,6 +309,7 @@ export async function loadGraph(root: string): Promise<Graph> {
     tasks: tasks.items,
     scopes: scopes.items,
     modules: modules.items,
+    proposals: proposals.items,
     facts: facts.items,
     claims: claims.items,
     decisions: decisions.items,
@@ -332,6 +335,7 @@ export async function loadGraph(root: string): Promise<Graph> {
       ...tasks.diagnostics,
       ...scopes.diagnostics,
       ...modules.diagnostics,
+      ...proposals.diagnostics,
       ...facts.diagnostics,
       ...claims.diagnostics,
       ...decisions.diagnostics,

@@ -1,0 +1,59 @@
+id: T-007
+title: "Proposal thành thực thể: schema, loader, luật validate"
+serves:
+  - G-001
+implements: D-004
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/model/icebox.ts"
+      why: "Khuôn gần nhất: thực thể nhẹ có chấm điểm hai trục, why_deferred bắt buộc,
+        trạng thái open/closed/promoted"
+    - path: "src/graph/load.ts"
+      why: "collectSingle vs collectArray — proposal đi đường một file một bản ghi như
+        goal/design/task"
+    - path: ".claude/rules/ganas-knowledge.md"
+      why: "anchors bắt buộc: đề xuất không có bằng chứng chỉ là ý kiến"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-graph-read
+  - M-load
+  - M-validate
+
+exit_contract:
+  - kind: artifact
+    path: "src/model/proposal.ts"
+    must_contain: "zProposal"
+  - kind: command
+    run: "npx tsx --test 'test/proposal-model.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/debt.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm run typecheck"
+
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-graph-read/V-graph-read-trace"
+  - kind: verification
+    target: "M-load/V-load-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Bắt buộc: id (PR-00N), title, scope, problem, anchors không rỗng,
+  proposed_change, status (pending|approved|rejected|superseded), weight/ease
+  cùng thang DebtScore, found_at. approved đòi decided_by + decided_at; rejected
+  đòi why_rejected. promoted_to là cạnh MỘT CHIỀU tới D-/T-/IB-; không thêm
+  trường ngược ở design/task. Validate: promoted_to phải trỏ thực thể có thật,
+  hai proposal không được cùng promoted_to, scope phải tồn tại.
+done_at: 2026-08-21T06:51:58.131Z

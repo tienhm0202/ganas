@@ -21,6 +21,8 @@ export const ID_PATTERNS = {
   scope: /^P-[a-z0-9][a-z0-9-]*$/,
   /** Icebox = việc đã quyết CHƯA làm. Xem docstring đầu `src/model/icebox.ts`. */
   icebox: /^ICE-\d{3,}$/,
+  /** Đề xuất chờ người duyệt. Xem docstring đầu `src/model/proposal.ts`. */
+  proposal: /^PR-\d{3,}$/,
 } as const;
 
 export const zGoalId = z.string().regex(ID_PATTERNS.goal, "ID goal phải dạng G-001");
@@ -35,6 +37,7 @@ export const zDecisionId = z.string().regex(ID_PATTERNS.decision, "ID decision p
 export const zModuleId = z.string().regex(ID_PATTERNS.module, "ID khối phải dạng M-intent");
 export const zScopeId = z.string().regex(ID_PATTERNS.scope, "ID phạm vi phải dạng P-chat-core");
 export const zIceboxId = z.string().regex(ID_PATTERNS.icebox, "ID icebox phải dạng ICE-001");
+export const zProposalId = z.string().regex(ID_PATTERNS.proposal, "ID đề xuất phải dạng PR-001");
 
 /** Ngày giờ ISO 8601. Chuỗi rỗng không hợp lệ — thà thiếu field còn hơn ghi rỗng. */
 export const zIsoDate = z

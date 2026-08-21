@@ -6,6 +6,7 @@ export * from "./goal.js";
 export * from "./icebox.js";
 export * from "./knowledge.js";
 export * from "./module.js";
+export * from "./proposal.js";
 export * from "./scope.js";
 export * from "./task.js";
 export * from "./verification.js";

@@ -197,6 +197,21 @@ const SCORES: Record<string, DebtScore> = {
   // lặng biến mất khỏi chỗ người thật sự nhìn.
   "icebox/without-scope": { weight: 3, ease: 5 },
 
+  /* --- proposal: chỗ lệch chưa ai quyết ---------------------------------- */
+  // Liên kết treo, cùng hạng với các `*-missing-*` khác: sai một id, sửa nhanh.
+  "scope/proposal-scope-not-found": { weight: 3, ease: 5 },
+  "spine/proposal-missing-target": { weight: 3, ease: 5 },
+  "spine/proposal-missing-supersede": { weight: 3, ease: 5 },
+  // Hai đề xuất tranh công một đích: không sai dữ liệu, nhưng lịch sử "vì sao
+  // có D-00x" thành hai bản — người phải xử, nên ease thấp hơn.
+  "spine/proposal-duplicate-target": { weight: 3, ease: 4 },
+  // Vòng lặp supersedes: đồ thị tự mâu thuẫn, nhưng cắt một cạnh là xong.
+  "spine/proposal-cycle": { weight: 4, ease: 4 },
+  // Chất lượng nội dung đề xuất — không chặn gì, sửa bằng cách viết lại hai
+  // câu. Nhẹ nhất bảng, đúng vai một lời nhắc.
+  "knowledge/proposal-repeats-rejected": { weight: 2, ease: 5 },
+  "knowledge/proposal-problem-equals-change": { weight: 1, ease: 5 },
+
   /* --- computeDebt: nợ riêng của sơ đồ khối (DebtKind, không có "/") ------ */
   // Cạnh `depends_on` không cạnh contract nào kiểm — sơ đồ TRÔNG như đã nối
   // nhưng chưa ai kiểm tương thích thật.
