@@ -1,0 +1,46 @@
+id: T-013
+title: "Tài liệu vùng cho src/model/ và src/verify/"
+serves:
+  - G-001
+implements: D-004
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "release/CLAUDE.md"
+      why: "File hướng dẫn cấp thư mục viết ĐÚNG mẫu — cổng vào, bất biến, cạm bẫy đã
+        trả giá, lệnh test riêng"
+    - path: "src/commands/CLAUDE.md"
+      why: "Bản thứ hai, viết ở T-011 — giữ cùng giọng và cùng bố cục"
+    - path: ".claude/rules/agent-guide.md"
+      why: "Viết gì và KHÔNG viết gì: không danh sách file, không tổng quan dự án,
+        không điều đọc code ba mươi giây là biết"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-verify
+
+exit_contract:
+  - kind: artifact
+    path: "src/model/CLAUDE.md"
+    must_contain: "## Cạm bẫy đã trả giá"
+  - kind: artifact
+    path: "src/verify/CLAUDE.md"
+    must_contain: "## Cạm bẫy đã trả giá"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+
+notes: >-
+  Hai cảnh báo `scope/module-missing-guide` do T-012 sinh ra là đầu bài. Viết
+  nội dung THẬT, không để TODO — khung rỗng vẫn làm cảnh báo tắt nhưng không
+  giúp ai, và đó đúng là kiểu tài liệu mà luật agent-guide cấm.
+done_at: 2026-08-21T10:34:56.203Z
