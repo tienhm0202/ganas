@@ -37,7 +37,7 @@ import {
   shellLooksLikeWrite,
   WRITE_TOOLS,
 } from "../policy/index.js";
-import { ALLOW, type HookInput, type HookOutput } from "./io.js";
+import { ALLOW, type HookInput, type HookOutput } from "../policy/types.js";
 /* ------------------------------------------------------------------------- *
  * SessionStart — phiên mới biết phải làm gì
  * ------------------------------------------------------------------------- */

@@ -7,37 +7,18 @@
  * tệ hơn là không có.
  */
 
-export interface HookInput {
-  session_id?: string;
-  transcript_path?: string;
-  cwd?: string;
-  hook_event_name?: string;
-  permission_mode?: string;
-  /** SessionStart: "startup" | "resume" | "clear" | "compact" | "fork" */
-  source?: string;
-  /** PostToolUse */
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_response?: unknown;
-  /** Stop: cờ chống lặp vô hạn khi hook đã chặn một lần. */
-  stop_hook_active?: boolean;
-  last_assistant_message?: string;
-  stop_reason?: string;
-  /** Chỉ có khi tool call đến từ sub-agent — main session không có field này. */
-  agent_id?: string;
-  agent_type?: string;
-  [key: string]: unknown;
-}
+// Kiểu và hằng dữ liệu ĐÃ CHUYỂN sang `../policy/types.js` (T-041) — lõi không
+// được import ngược từ vỏ. Tái xuất ở đây để `src/commands/hook.ts` (khối
+// M-commands, phạm vi P-cli) không phải đổi chỗ import: sửa file đó là sửa
+// khối ngoài phạm vi của task đã chuyển.
+export {
+  ALLOW,
+  degraded,
+  type HookInput,
+  type HookOutput,
+} from "../policy/types.js";
 
-export interface HookOutput {
-  continue?: boolean;
-  stopReason?: string;
-  suppressOutput?: boolean;
-  systemMessage?: string;
-  decision?: "block";
-  reason?: string;
-  hookSpecificOutput?: Record<string, unknown>;
-}
+import type { HookInput, HookOutput } from "../policy/types.js";
 
 export async function readHookInput(): Promise<HookInput> {
   const chunks: Buffer[] = [];
@@ -53,15 +34,4 @@ export async function readHookInput(): Promise<HookInput> {
 
 export function writeHookOutput(output: HookOutput): void {
   process.stdout.write(JSON.stringify(output));
-}
-
-/** Cho phép đi tiếp, không nói gì. */
-export const ALLOW: HookOutput = {};
-
-/**
- * ganas gặp sự cố. Báo cho người dùng biết công cụ đang hỏng, nhưng KHÔNG chặn.
- * Người dùng cần biết là mình đang mất lớp bảo vệ, chứ không phải bị kẹt.
- */
-export function degraded(message: string): HookOutput {
-  return { systemMessage: `ganas không chạy được (đang bỏ qua kiểm soát): ${message}` };
 }

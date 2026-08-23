@@ -4,7 +4,7 @@ import { CONFIG_FILE, DIRS, GANAS_DIR } from "../../graph/paths.js";
 import type { Diagnostic } from "../../graph/types.js";
 import { type Enforcement, type EnforcementRule } from "../../model/index.js";
 import { LEDGER_FILE } from "../../verify/ledger.js";
-import type { HookOutput } from "../io/io.js";
+import type { HookOutput } from "./types.js";
 
 /**
  * QUYẾT ĐỊNH của hook — không đọc đĩa, không sinh tiến trình, không stdin/stdout.

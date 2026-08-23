@@ -1,0 +1,58 @@
+id: T-041
+title: "Đưa kiểu HookInput/HookOutput về lõi, cắt chu trình policy ↔ io"
+serves:
+  - G-001
+implements: D-007
+scope: P-hook
+status: done
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/hooks/policy/CLAUDE.md"
+      why: "Bất biến của khối lõi: không được import gì từ vỏ"
+    - path: ".ganas/proposals/PR-012.yaml"
+      why: "Vì sao kiểu dữ liệu thuộc lõi chứ không thuộc vỏ"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hook-policy
+  - M-hook-io
+
+exit_contract:
+  - kind: artifact
+    path: "src/hooks/policy/types.ts"
+    must_contain: "HookOutput"
+  - kind: command
+    run: "npx tsx --test 'test/hooks.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/hook-policy.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-hook-policy/V-hook-policy-pure"
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+
+notes: >-
+  `HookInput`/`HookOutput`/`ALLOW`/`degraded` là ĐỊNH NGHĨA DỮ LIỆU thuần — hình
+  dạng JSON Claude Code nhận. Chúng nằm ở vỏ chỉ vì lịch sử file, và vì thế lõi
+  phải import ngược từ vỏ.
+
+  `io/io.ts` PHẢI tái xuất mấy tên đó. `src/commands/hook.ts` (M-commands, phạm
+  vi P-cli) đang import chúng từ `hooks/io/io.js`; đổi chỗ import ở đó là sửa
+  khối ngoài phạm vi của task này. Tái xuất giữ toàn bộ thay đổi trong P-hook,
+  và đó là cách duy nhất hợp luật.
+
+  Điều kiện hoàn thành THẬT: `src/hooks/policy/**` không còn import gì từ
+  `src/hooks/io/**`.
+
+  `test/module-deps.test.ts` phải sửa theo: tập đóng MISSING_EDGES ngắn đi đúng
+  một dòng khi chu trình đứt. File đó không thuộc khối nào (test/ nằm ngoài
+  `paths`), nên nó vào ranh giới của task qua chính lệnh trong exit_contract —
+  đúng cơ chế `contractPathRefs` dựng ra cho việc này.
+done_at: 2026-08-23T13:34:31.995Z

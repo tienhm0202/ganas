@@ -104,10 +104,15 @@ test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó",
 
 test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đã khai", () => {
   /**
-   * 67 cạnh code CÓ mà bản đồ CHƯA khai (đo 2026-08-23).
+   * 66 cạnh code CÓ mà bản đồ CHƯA khai.
+   *
+   * Từ 67 xuống 66 ở T-041: `M-hook-io → M-hook-policy` biến mất vì kiểu
+   * `HookInput`/`HookOutput` đã chuyển về lõi, cắt chu trình policy ↔ io
+   * (PR-012). Danh sách này chỉ đi một chiều — mỗi lần ngắn đi là một cạnh
+   * được dọn thật.
    *
    * KHÔNG thêm chúng vào `depends_on` một lượt: mỗi cạnh mới đẻ một
-   * `uncovered-edge`, tức 67 hợp đồng cổng phải khai — việc lớn hơn hẳn và
+   * `uncovered-edge`, tức 66 hợp đồng cổng phải khai — việc lớn hơn hẳn và
    * phải do người quyết.
    *
    * Tập ĐÓNG, so bằng `deepEqual`: thêm import xuyên khối mới mà quên khai
@@ -148,7 +153,6 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-graph-read → M-validate",
     "M-graph-read → M-workflow",
     "M-hook-io → M-commands",
-    "M-hook-io → M-hook-policy",
     "M-load → M-commands",
     "M-load → M-graph-read",
     "M-load → M-hook-io",

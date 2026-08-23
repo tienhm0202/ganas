@@ -19,6 +19,10 @@ Mọi chuỗi lý do trả về cho người dùng cũng nằm ở đây.
 
 ## Bất biến dễ phá
 
+- **Không import gì từ `../io/`, kể cả KIỂU.** Trước T-041 khối này nhập
+  `HookOutput` từ vỏ, và cặp lõi/vỏ thành một chu trình ở mức khối — vô hình
+  suốt vì cạnh đó chưa bao giờ được khai trong `depends_on`. Kiểu dữ liệu của
+  một lượt hook nay nằm ở `types.ts` ngay trong khối này.
 - **Không import gì chạm đĩa.** Đây là toàn bộ lý do khối tồn tại: luật kiểm
   được bằng một object, không cần dựng dự án giả. Thêm một `readFile` vào đây
   là xoá cái được đó, và `test/module-nature.test.ts` sẽ đỏ.
