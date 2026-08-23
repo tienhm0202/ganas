@@ -1,0 +1,14 @@
+id: M-fsprobe
+scope: P-graph-core
+title: "Chỗ DUY NHẤT tra trạng thái filesystem — tồn tại không, thư mục có gì"
+nature: io
+paths:
+  - "src/util/fsprobe.ts"
+depends_on:
+  - M-util
+status: surveyed
+verify:
+  - id: V-fsprobe-probe
+    kind: probe
+    run: "npx tsx --test 'test/fsprobe.test.ts'"
+    expect: exit_zero

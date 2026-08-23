@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-006
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: medium
 model: verifier
 blocked_by:
@@ -20,11 +20,19 @@ context_contract:
 touches:
   - M-util
   - M-graph-read
+  - M-validate
+  - M-fsprobe
 
 exit_contract:
   - kind: artifact
     path: "src/util/fsprobe.ts"
     must_contain: "export"
+  - kind: artifact
+    path: ".ganas/modules/M-fsprobe.yaml"
+    must_contain: "src/util/fsprobe.ts"
+  - kind: artifact
+    path: ".ganas/scopes/P-graph-core.yaml"
+    must_contain: "M-fsprobe"
   - kind: command
     run: "npx tsx --test 'test/fsprobe.test.ts'"
   - kind: command
@@ -33,9 +41,22 @@ exit_contract:
     target: "M-util/V-util-glob"
   - kind: verification
     target: "M-graph-read/V-graph-read-trace"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+  - kind: verification
+    target: "M-fsprobe/V-fsprobe-probe"
 
 notes: >-
+  fsprobe thành KHỐI RIÊNG (`M-fsprobe`, nature: io), không nhét vào M-util —
+  theo đúng tiền lệ `M-exec` đang giữ cho việc sinh tiến trình con. Nhét công cụ
+  io vào một khối thuần là làm hỏng chính khối đó.
+
+  Guard test tìm ra 16 chỗ tra thẳng, trải cả P-cli lẫn P-hook — ngoài phạm vi
+  task này. Chúng được khai thành TẬP ĐÓNG `PENDING` trong test: thêm chỗ mới
+  thì đỏ, chuyển xong mà quên xoá dòng cũng đỏ. Danh sách chỉ đi một chiều.
+
   Gom `existsSync`/`stat`/`readdir` vào một chỗ để luật T-018 có chỗ bám thật,
   chứ không chỉ là một đoạn văn. Chuyển các chỗ chỉ TRA (graph/paths.ts,
   render/brief.ts, graph/validate.ts, hooks/handlers.ts, flow.ts) sang dùng nó —
   nhưng CHUYỂN DẦN theo phạm vi, task này chỉ lo phần trong P-graph-core.
+done_at: 2026-08-23T09:55:53.630Z

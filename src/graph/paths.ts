@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 import { NotInitializedError } from "../util/errors.js";
+import { exists } from "../util/fsprobe.js";
 
 export const GANAS_DIR = ".ganas";
 
@@ -47,7 +47,7 @@ export const LOCAL_ONLY: readonly string[] = [`${DIRS.runs}/`, `${DIRS.locks}/`,
 export function findGanasRoot(from = process.cwd()): string | null {
   let dir = resolve(from);
   for (;;) {
-    if (existsSync(join(dir, GANAS_DIR, CONFIG_FILE))) return dir;
+    if (exists(join(dir, GANAS_DIR, CONFIG_FILE))) return dir;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;

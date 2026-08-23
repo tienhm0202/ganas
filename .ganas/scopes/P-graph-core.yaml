@@ -14,6 +14,7 @@ modules:
   - M-verify
   - M-util
   - M-exec
+  - M-fsprobe
 entry: M-model
 
 acceptance:

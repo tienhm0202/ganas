@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ExitCriterion, Proposal } from "../model/index.js";
@@ -10,6 +9,7 @@ import {
   moduleGuideDir,
   modulePathsOverlap,
 } from "../model/index.js";
+import { exists } from "../util/fsprobe.js";
 import { lineOfPath } from "../util/yaml.js";
 import { defHash, entryAt, LEDGER_FILE, ledgerCorruption, verifyChain } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
@@ -817,7 +817,7 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
     const dir = moduleGuideDir(mod.value.paths);
     if (dir === undefined) continue;
 
-    if (!existsSync(join(graph.root, dir, guideFile))) {
+    if (!exists(join(graph.root, dir, guideFile))) {
       diags.push({
         severity: "warning",
         code: "scope/module-missing-guide",
@@ -1021,7 +1021,7 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
 
   // Dự án không dùng git thì "local vs shared qua git" vô nghĩa — bỏ qua,
   // khớp hành vi `ensureGitignore()` lúc `ganas init`.
-  if (existsSync(join(graph.root, ".git"))) {
+  if (exists(join(graph.root, ".git"))) {
     const lines = new Set((graph.gitignoreRaw ?? "").split("\n").map((l) => l.trim()));
     const missing = LOCAL_ONLY.filter((p) => !lines.has(`.ganas/${p}`));
     if (missing.length > 0) {

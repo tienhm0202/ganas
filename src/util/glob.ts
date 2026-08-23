@@ -1,7 +1,7 @@
-import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
 import { runShell } from "./exec.js";
+import { listDir } from "./fsprobe.js";
 
 /**
  * Matcher glob tối giản — đủ cho `depends_on` và `zone.paths`, không kéo thêm
@@ -143,12 +143,9 @@ export async function listProjectFiles(root: string): Promise<string[]> {
 }
 
 async function walk(root: string, dir: string, acc: string[]): Promise<string[]> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return acc;
-  }
+  // `listDir` trả mảng rỗng khi không đọc được — duyệt cây thì bỏ qua nhánh đó
+  // rồi đi tiếp, không huỷ cả lượt.
+  const entries = await listDir(dir);
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
