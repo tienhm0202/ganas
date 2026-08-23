@@ -6,9 +6,10 @@ paths:
   - "src/graph/freshness.ts"
 
 # `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
-# gộp cổng thật `freshness.ts` import từ hai khối thượng nguồn: `Graph` (kiểu
-# đồ thị, từ M-graph-read) và bảy cổng ghi/đọc sổ cái cộng kiểu `Target` (từ
-# M-verify) — dùng để duyệt mọi mục tiêu và tính vân tay so độ tươi.
+# gộp cổng thật `freshness.ts` import từ hai khối thượng nguồn: `Graph` và
+# `LedgerEntry` (kiểu thuần, từ khối lá M-graph-base sau T-042) và sáu cổng
+# ghi/đọc sổ cái cộng kiểu `Target` (từ M-verify) — dùng để duyệt mọi mục tiêu
+# và tính vân tay so độ tươi.
 contract:
   inputs:
     - name: Graph
@@ -31,7 +32,7 @@ contract:
       shape: "interface"
 
 depends_on:
-  - M-graph-read
+  - M-graph-base
   - M-verify
 status: surveyed
 verify:

@@ -1,0 +1,119 @@
+id: T-042
+title: "Tách khối lá M-graph-base, cắt chu trình graph-read ↔ load ↔ verify"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: ".ganas/proposals/PR-013.yaml"
+      why: "Vì sao cắt bằng cách tách khối lá, không phải bằng cách giấu cạnh"
+    - path: "test/module-deps.test.ts"
+      why: "Tập đóng MISSING_EDGES phải ngắn đi đúng những cạnh đã dọn"
+    - path: ".ganas/modules/M-graph-read.yaml"
+      why: "Khuôn khai cổng và cạnh contract — cổng nào theo file nào sang khối mới"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-graph-base
+  - M-graph-read
+  - M-load
+  - M-verify
+  - M-freshness
+  - M-validate
+
+exit_contract:
+  - kind: artifact
+    path: ".ganas/modules/M-graph-base.yaml"
+    must_contain: "src/graph/paths.ts"
+  - kind: artifact
+    path: "test/module-deps.test.ts"
+    must_contain: "chu trình"
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-graph-base/V-graph-base-shape"
+  - kind: verification
+    target: "M-graph-read/V-graph-read-trace"
+  - kind: verification
+    target: "M-load/V-load-smoke"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+  - kind: verification
+    target: "M-freshness/V-freshness-staleness"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Chu trình đo được ngày 2026-08-23 là ĐÚNG MỘT, và đúng ba khối PR-013 gọi tên:
+  `M-graph-read → M-verify` (trace.ts, types.ts nhập ledger/lint), `M-graph-read
+  → M-load` (types.ts nhập LoadedYaml từ util/yaml.ts), `M-load → M-verify`,
+  `M-load → M-graph-read`, `M-verify → M-graph-read` (ledger.ts nhập ganasPath,
+  run.ts nhập Graph/Sourced).
+
+  Cắt bằng một khối LÁ `M-graph-base` = `src/graph/types.ts` +
+  `src/graph/paths.ts`. Ba kiểu thuần phải chuyển VỀ đó để khối lá thật sự là
+  lá: `LedgerEntry`/`LedgerResult`/`LEDGER_RESULT` (đang ở `verify/ledger.ts`),
+  `LEDGER_FILE` (hằng tên file — về `paths.ts` cạnh CONFIG_FILE/STATE_FILE), và
+  `LoadedYaml` (đang ở `util/yaml.ts`). Chuyển xong thì `verify/ledger.ts` và
+  `util/yaml.ts` nhập ngược lại từ khối lá — chiều đó không đóng vòng.
+
+  M-graph-read còn lại `select.ts` + `trace.ts`, vẫn được phép phụ thuộc
+  M-verify: sau khi tách, M-verify không còn đường nào quay lại.
+
+  Cổng phải đi theo file: `Graph`, `Sourced`, `ganasPath` đang khai ở
+  `contract.outputs` của M-graph-read, và hai cạnh `V-graph-read-to-freshness` /
+  `V-graph-read-to-verify` grep đúng hai file vừa chuyển — cả ba thứ đó phải
+  sang M-graph-base, không phải nhân đôi. `LedgerEntry` rời `contract.outputs`
+  của M-verify vì nó không còn khai ở `verify/ledger.ts`.
+
+  Đo lại là điều kiện thật, không phải niềm tin: thêm vào
+  `test/module-deps.test.ts` một test tính SCC trên chính tập cạnh suy từ import
+  và đòi KHÔNG có chu trình. Trước khi sửa, toàn repo có đúng một SCC cỡ 3; sau
+  khi sửa phải là không. Test đó chặn cả việc dời chỗ chu trình thay vì cắt nó.
+
+  ĐÃ THỬ đổi thẳng đường import của sáu file ngoài phạm vi P-graph-core
+  (`src/boundary.ts`, `src/commands/trace.ts`, `src/commands/verify.ts`,
+  `src/hooks/policy/index.ts`, `test/ledger.test.ts`,
+  `test/ledger-chain.test.ts`) cho trỏ tới nguồn khai báo mới. Cách đó SAI, và
+  `ganas commit` chứng minh bằng phép đo chứ không phải bằng lý lẽ: nó chỉ stage
+  file trong ranh giới task (`ownsGanasFile`), nên sáu file kia bị bỏ lại, và
+  recheck trên CÂY SẮP COMMIT ra đỏ ba mục — `npx tsx --test
+  'test/module-deps.test.ts'` mã 1, `npm run typecheck` mã 2, `npm test` mã 1.
+  Working tree xanh không cứu được điều đó. Lưu ý `ganas commit --dry-run` KHÔNG
+  lộ ra sáu file này ở mục "Để lại": mục đó chỉ soi `.ganas/`.
+
+  Nên quay về đúng tiền lệ T-041: `verify/ledger.ts` TÁI XUẤT bốn tên đã chuyển
+  đi (`LEDGER_FILE` từ `graph/paths.ts`; `LEDGER_RESULT`, `LedgerResult`,
+  `LedgerEntry` từ `graph/types.ts`), sáu file kia hoàn nguyên về bản HEAD, và
+  toàn bộ thay đổi nằm gọn trong P-graph-core. Chu trình vẫn đứt — đo lại bằng
+  chính test SCC, không suy: tái xuất là `verify/ledger.ts` nhập từ `graph/*`,
+  đúng chiều đã có, không đóng vòng.
+
+  M-model có trong `touches` vì cạnh khai báo mới `M-model -> M-graph-base` phải
+  có hợp đồng kiểm, nếu không `ganas trace` đẻ một mục nợ mới:
+  `.ganas/modules/M-model.yaml` thêm `V-model-to-graph-base` (11 type mà
+  `graph/types.ts` thật sự nhập) và rút `V-model-to-graph-read` còn 3 type mà
+  `select.ts`/`trace.ts` còn nhập.
+
+  Cái giá phải trả, ghi thẳng ra: hai cạnh `M-verify → M-cli-core` và `M-verify
+  → M-hook-policy` sống tiếp trong bản đồ dù không còn lý do nào — `boundary.ts`
+  và `hooks/policy/index.ts` vẫn nhập `LEDGER_FILE` từ `verify/ledger.js` mà
+  hằng đó nay khai ở `graph/paths.ts`. `MISSING_EDGES` vì thế là 72 chứ không
+  phải 70. Dọn nốt là việc của chính P-cli và P-hook, đã ghi thành đề xuất chờ
+  người duyệt (PR-014).
+done_at: 2026-08-23T14:16:23.492Z

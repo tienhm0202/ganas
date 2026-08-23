@@ -34,6 +34,13 @@ export const CONFIG_FILE = "config.yaml";
 export const STATE_FILE = "state.json";
 
 /**
+ * Sổ cái xác minh — append-only, **commit vào git**. Chỗ ghi/đọc thật là
+ * `src/verify/ledger.ts`; tên file khai ở đây, cạnh các tên file khác của
+ * `.ganas/`, để boundary và hook không phải nhập từ khối chạy bằng chứng.
+ */
+export const LEDGER_FILE = "verify-ledger.jsonl";
+
+/**
  * Đường dẫn trong `.ganas/` CHỈ thuộc một máy, một lúc — không commit.
  *
  * Nguồn duy nhất: `gitignoreAddition()` (templates/project.ts) sinh

@@ -4,20 +4,12 @@ import { join } from "node:path";
 
 import { parseDocument } from "yaml";
 
-import type { Graph, Sourced } from "../graph/types.js";
+import type { Graph, LedgerEntry, LedgerResult, Sourced } from "../graph/types.js";
 import type { Fact, Module, Scope, Verification } from "../model/index.js";
 import { judge, runShell } from "../util/exec.js";
 import { listProjectFiles, matchesAny } from "../util/glob.js";
 import { AdapterError, readEvalResult } from "./adapters.js";
-import {
-  appendEntry,
-  defHash,
-  fileHash,
-  type LedgerEntry,
-  type LedgerResult,
-  runContext,
-  sha256,
-} from "./ledger.js";
+import { appendEntry, defHash, fileHash, runContext, sha256 } from "./ledger.js";
 import { hasBlockingFinding, lintProbe } from "./lint.js";
 import { proveCanFail } from "./mutate.js";
 

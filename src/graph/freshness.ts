@@ -3,9 +3,9 @@ import { join } from "node:path";
 import type { Fact, Freshness } from "../model/index.js";
 import { mtimeMs } from "../util/fsprobe.js";
 import { listProjectFiles, matchesAny } from "../util/glob.js";
-import { defHash, fileHash, historyFor, lastFor, type LedgerEntry } from "../verify/ledger.js";
+import { defHash, fileHash, historyFor, lastFor } from "../verify/ledger.js";
 import { allTargets, depsHash, type Target } from "../verify/run.js";
-import type { Graph } from "./types.js";
+import type { Graph, LedgerEntry } from "./types.js";
 
 /** Thư mục bỏ qua khi không có git — không phải mã nguồn dự án. */
 

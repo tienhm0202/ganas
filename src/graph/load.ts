@@ -20,10 +20,10 @@ import {
   zTask,
 } from "../model/index.js";
 import { GanasError } from "../util/errors.js";
-import { lineOfPath, type LoadedYaml, readYamlFile } from "../util/yaml.js";
+import { lineOfPath, readYamlFile } from "../util/yaml.js";
 import { indexByTarget, readLedger } from "../verify/ledger.js";
 import { CONFIG_FILE, DIRS, ganasPath } from "./paths.js";
-import type { Diagnostic, Graph, Sourced } from "./types.js";
+import type { Diagnostic, Graph, LoadedYaml, Sourced } from "./types.js";
 
 /** Đổi issue của zod thành Diagnostic có `file:line`. */
 function issuesToDiagnostics(

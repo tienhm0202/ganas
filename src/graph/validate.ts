@@ -11,9 +11,9 @@ import {
 } from "../model/index.js";
 import { exists } from "../util/fsprobe.js";
 import { lineOfPath } from "../util/yaml.js";
-import { defHash, entryAt, LEDGER_FILE, ledgerCorruption, verifyChain } from "../verify/ledger.js";
+import { defHash, entryAt, ledgerCorruption, verifyChain } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
-import { GANAS_DIR, LOCAL_ONLY } from "./paths.js";
+import { GANAS_DIR, LEDGER_FILE, LOCAL_ONLY } from "./paths.js";
 import type { Diagnostic, Graph, Sourced } from "./types.js";
 
 /**

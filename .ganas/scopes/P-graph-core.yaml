@@ -9,6 +9,7 @@ modules:
   - M-model
   - M-load
   - M-validate
+  - M-graph-base
   - M-graph-read
   - M-freshness
   - M-verify

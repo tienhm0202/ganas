@@ -6,9 +6,9 @@ paths:
   - "src/model/**"
 
 # `portIssues()` so `name` và so `shape` KHỚP TỪNG KÝ TỰ, và mỗi cạnh chỉ chịu
-# trách nhiệm cho cổng CHÍNH NÓ cấp (T-032). Khối này là NGUỒN của ba cạnh
-# (→ M-graph-read, → M-load, → M-verify) nên `outputs` phải gộp đủ những gì cả
-# ba đích thật sự import — cắt bớt là nói dối về khối (T-034).
+# trách nhiệm cho cổng CHÍNH NÓ cấp (T-032). Khối này là NGUỒN của bốn cạnh
+# (→ M-graph-base, → M-graph-read, → M-load, → M-verify) nên `outputs` phải gộp
+# đủ những gì cả bốn đích thật sự import — cắt bớt là nói dối về khối (T-034).
 #
 # Quy ước shape dùng trong khối này:
 #   - type suy ra từ schema (`export type X = z.infer<typeof zX>`) → khai
@@ -79,11 +79,13 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/icebox-model.test.ts'"
     expect: exit_zero
-  # Ba cạnh lõi → khối đọc/nạp/kiểm — grep xác nhận từng type/schema mà đích
-  # tương ứng thật sự import vẫn còn đúng chữ ký trong file định nghĩa.
-  - id: V-model-to-graph-read
+  # Bốn cạnh lõi → khối nền/đọc/nạp/kiểm — grep xác nhận từng type/schema mà
+  # đích tương ứng thật sự import vẫn còn đúng chữ ký trong file định nghĩa.
+  # T-042 chẻ `M-graph-read` làm hai: mười một type của `graph/types.ts` nay đi
+  # theo cạnh → M-graph-base, `graph/select.ts`/`graph/trace.ts` chỉ còn ba.
+  - id: V-model-to-graph-base
     kind: contract
-    to: M-graph-read
+    to: M-graph-base
     run: >-
       grep -q "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
       grep -q "export type Claim = z.infer<typeof zClaim>;" src/model/knowledge.ts &&
@@ -95,6 +97,12 @@ verify:
       grep -q "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
       grep -q "export type Proposal = z.infer<typeof zProposal>;" src/model/proposal.ts &&
       grep -q "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
+      grep -q "export type Task = z.infer<typeof zTask>;" src/model/task.ts
+  - id: V-model-to-graph-read
+    kind: contract
+    to: M-graph-read
+    run: >-
+      grep -q "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
       grep -q "export type Task = z.infer<typeof zTask>;" src/model/task.ts &&
       grep -q "export type ContractVerification = z.infer<typeof zContractVerification>;" src/model/verification.ts
   - id: V-model-to-load

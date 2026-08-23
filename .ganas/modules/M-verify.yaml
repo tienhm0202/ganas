@@ -8,8 +8,10 @@ paths:
 # `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). Khối này
 # là ĐÍCH của bốn cạnh nên `inputs` phải gộp đủ những gì `run.ts`/`ledger.ts`/
 # `mutate.ts` thật sự import từ CẢ BỐN khối thượng nguồn — cắt bớt vì "gộp từ
-# M-model thôi cho gọn" là đúng thứ luật này cấm. `outputs` khai tám cổng mà
-# M-freshness thật sự import từ `ledger.ts`/`run.ts`.
+# M-model thôi cho gọn" là đúng thứ luật này cấm. `outputs` khai bảy cổng mà
+# M-freshness thật sự import từ `ledger.ts`/`run.ts`; `LedgerEntry` đã rời
+# khối này ở T-042 — kiểu đó nay khai ở `M-graph-base` (src/graph/types.ts),
+# và cổng đi theo file chứ không nhân đôi.
 contract:
   inputs:
     # từ M-exec (src/util/exec.ts)
@@ -17,13 +19,19 @@ contract:
       shape: "(result: ExecResult, expect: Expect) => Judgement"
     - name: runShell
       shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv }) => Promise<ExecResult>"
-    # từ M-graph-read (src/graph/types.ts, src/graph/paths.ts)
+    # từ M-graph-base (src/graph/types.ts, src/graph/paths.ts)
     - name: Graph
       shape: "interface"
     - name: Sourced
       shape: "{ value: T; file: string; index?: number }"
+    - name: LedgerEntry
+      shape: "interface"
+    - name: LedgerResult
+      shape: "(typeof LEDGER_RESULT)[number]"
     - name: ganasPath
       shape: "(root: string, ...parts: string[]) => string"
+    - name: LEDGER_FILE
+      shape: '"verify-ledger.jsonl"'
     # từ M-model (src/model/index.ts)
     - name: Expect
       shape: "z.infer<typeof zExpect>"
@@ -57,8 +65,6 @@ contract:
       shape: "(index: Map<string, LedgerEntry[]>, target: string, k?: number) => LedgerEntry[]"
     - name: lastFor
       shape: "(index: Map<string, LedgerEntry[]>, target: string) => LedgerEntry | undefined"
-    - name: LedgerEntry
-      shape: "interface"
     - name: allTargets
       shape: "(graph: Graph) => Target[]"
     - name: depsHash
@@ -68,7 +74,7 @@ contract:
 
 depends_on:
   - M-model
-  - M-graph-read
+  - M-graph-base
   - M-util
   - M-exec
 status: surveyed
@@ -85,7 +91,6 @@ verify:
       grep -q "export async function fileHash(path: string): Promise<string> {" src/verify/ledger.ts &&
       grep -q "export function lastFor(" src/verify/ledger.ts &&
       grep -q "export function historyFor(" src/verify/ledger.ts &&
-      grep -q "export interface LedgerEntry {" src/verify/ledger.ts &&
       grep -q "export function allTargets(graph: Graph): Target\[\] {" src/verify/run.ts &&
       grep -q "export async function depsHash(" src/verify/run.ts &&
       grep -q "export interface Target {" src/verify/run.ts

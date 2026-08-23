@@ -1,8 +1,8 @@
 import type { ContractVerification, Module } from "../model/index.js";
 import { judge, runShell } from "../util/exec.js";
-import { appendEntry, defHash, type LedgerResult, runContext, sha256 } from "../verify/ledger.js";
+import { appendEntry, defHash, runContext, sha256 } from "../verify/ledger.js";
 import { hasBlockingFinding, lintProbe } from "../verify/lint.js";
-import type { Graph } from "./types.js";
+import type { Graph, LedgerResult } from "./types.js";
 
 /**
  * Cạnh hợp đồng: kiểm tương thích giữa hai khối liền kề trong sơ đồ.

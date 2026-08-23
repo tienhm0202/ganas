@@ -5,7 +5,7 @@
 
 Khối này là `nature: io` — nơi CHẠM I/O thật. Nó chạy lệnh shell của người
 dùng (`runShell`), đọc/ghi `verify-ledger.jsonl`, đọc/ghi ngược file fact
-YAML. `depends_on: [M-model, M-graph-read, M-util, M-exec]` — chiều phụ thuộc
+YAML. `depends_on: [M-model, M-graph-base, M-util, M-exec]` — chiều phụ thuộc
 đúng luật kiến trúc: adapter (đây) phụ thuộc lõi, lõi không biết tới đây.
 
 ## Cổng vào

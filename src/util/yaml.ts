@@ -1,17 +1,9 @@
 import { readFile } from "node:fs/promises";
 
-import { type Document, isNode, parseDocument } from "yaml";
+import { isNode, parseDocument } from "yaml";
 
+import type { LoadedYaml } from "../graph/types.js";
 import { GanasError } from "./errors.js";
-
-export interface LoadedYaml {
-  /** Giá trị JS thuần đã parse. */
-  value: unknown;
-  /** Document giữ vị trí node — dùng để quy lỗi về đúng dòng. */
-  doc: Document;
-  source: string;
-  file: string;
-}
 
 /**
  * Đọc file YAML, giữ lại Document để báo lỗi kèm số dòng.

@@ -104,15 +104,31 @@ test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó",
 
 test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đã khai", () => {
   /**
-   * 66 cạnh code CÓ mà bản đồ CHƯA khai.
+   * 72 cạnh code CÓ mà bản đồ CHƯA khai.
    *
    * Từ 67 xuống 66 ở T-041: `M-hook-io → M-hook-policy` biến mất vì kiểu
    * `HookInput`/`HookOutput` đã chuyển về lõi, cắt chu trình policy ↔ io
-   * (PR-012). Danh sách này chỉ đi một chiều — mỗi lần ngắn đi là một cạnh
-   * được dọn thật.
+   * (PR-012).
+   *
+   * Từ 66 lên 72 ở T-042, và đây là ngoại lệ DUY NHẤT cho luật "chỉ ngắn đi":
+   * `M-graph-read` bị CHẺ làm hai (`types.ts`+`paths.ts` sang khối lá
+   * `M-graph-base`), nên một cạnh cũ đi tới khối cũ thành hai cạnh đi tới hai
+   * khối mới. KHÔNG một import xuyên khối MỚI nào được thêm — mười một cạnh
+   * `M-graph-base → …` xuất hiện, hai cạnh chỉ đổi tên khối đích, năm cạnh cũ
+   * biến mất (`M-load → M-graph-read` cộng bốn cạnh `M-graph-read → …` đổi
+   * chủ).
+   *
+   * `M-verify → M-cli-core` và `M-verify → M-hook-policy` thì KHÔNG mất, và
+   * đó là cái giá đã trả có chủ đích: `verify/ledger.ts` TÁI XUẤT bốn tên đã
+   * chuyển đi (`LEDGER_FILE`, `LEDGER_RESULT`, `LedgerResult`, `LedgerEntry`)
+   * để `boundary.ts` và `hooks/policy/index.ts` — hai file NGOÀI phạm vi
+   * `P-graph-core` — không phải đổi import trong cùng một task. Không tái xuất
+   * thì `ganas commit` chỉ stage phần trong ranh giới task, và cây sắp commit
+   * không typecheck nổi. Tiền lệ T-041. Dọn nốt hai cạnh này là việc của chính
+   * P-cli và P-hook.
    *
    * KHÔNG thêm chúng vào `depends_on` một lượt: mỗi cạnh mới đẻ một
-   * `uncovered-edge`, tức 66 hợp đồng cổng phải khai — việc lớn hơn hẳn và
+   * `uncovered-edge`, tức 72 hợp đồng cổng phải khai — việc lớn hơn hẳn và
    * phải do người quyết.
    *
    * Tập ĐÓNG, so bằng `deepEqual`: thêm import xuyên khối mới mà quên khai
@@ -136,25 +152,31 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-freshness → M-workflow",
     "M-fsprobe → M-commands",
     "M-fsprobe → M-freshness",
-    "M-fsprobe → M-graph-read",
+    "M-fsprobe → M-graph-base",
     "M-fsprobe → M-hook-io",
     "M-fsprobe → M-render",
     "M-fsprobe → M-validate",
     "M-fsprobe → M-verify",
     "M-fsprobe → M-workflow",
+    "M-graph-base → M-claim",
+    "M-graph-base → M-cli-core",
+    "M-graph-base → M-commands",
+    "M-graph-base → M-graph-read",
+    "M-graph-base → M-hook-io",
+    "M-graph-base → M-hook-policy",
+    "M-graph-base → M-load",
+    "M-graph-base → M-render",
+    "M-graph-base → M-templates",
+    "M-graph-base → M-validate",
+    "M-graph-base → M-workflow",
     "M-graph-read → M-claim",
-    "M-graph-read → M-cli-core",
     "M-graph-read → M-commands",
     "M-graph-read → M-hook-io",
-    "M-graph-read → M-hook-policy",
-    "M-graph-read → M-load",
     "M-graph-read → M-render",
-    "M-graph-read → M-templates",
     "M-graph-read → M-validate",
     "M-graph-read → M-workflow",
     "M-hook-io → M-commands",
     "M-load → M-commands",
-    "M-load → M-graph-read",
     "M-load → M-hook-io",
     "M-load → M-workflow",
     "M-model → M-cli-core",
@@ -172,7 +194,7 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-util → M-cli-core",
     "M-util → M-commands",
     "M-util → M-freshness",
-    "M-util → M-graph-read",
+    "M-util → M-graph-base",
     "M-util → M-load",
     "M-util → M-mcp",
     "M-validate → M-commands",
@@ -197,5 +219,98 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     `Danh sách import xuyên khối chưa khai đã LỆCH khỏi tập đã đóng.\n` +
       `Thêm import xuyên khối mới: khai \`depends_on\` cho nó (và một hợp đồng cổng).\n` +
       `Vừa khai xong một cạnh: xoá dòng tương ứng khỏi MISSING_EDGES.`,
+  );
+});
+
+/* --- Vế 3: sơ đồ khối phải KHÔNG có chu trình ----------------------------- */
+
+/**
+ * Tarjan: mọi thành phần liên thông mạnh của một đồ thị có hướng, trong một
+ * lượt duyệt sâu. Thành phần cỡ > 1 nghĩa là có chu trình đi qua mọi khối
+ * trong đó.
+ */
+function stronglyConnectedComponents(edges: Iterable<string>): string[][] {
+  const adjacency = new Map<string, string[]>();
+  const nodes = new Set<string>();
+  for (const edge of edges) {
+    const [from, to] = edge.split(" → ");
+    nodes.add(from!);
+    nodes.add(to!);
+    const list = adjacency.get(from!);
+    if (list) list.push(to!);
+    else adjacency.set(from!, [to!]);
+  }
+
+  const index = new Map<string, number>();
+  const lowLink = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const components: string[][] = [];
+  let counter = 0;
+
+  const visit = (v: string): void => {
+    index.set(v, counter);
+    lowLink.set(v, counter);
+    counter++;
+    stack.push(v);
+    onStack.add(v);
+
+    for (const w of adjacency.get(v) ?? []) {
+      if (!index.has(w)) {
+        visit(w);
+        lowLink.set(v, Math.min(lowLink.get(v)!, lowLink.get(w)!));
+      } else if (onStack.has(w)) {
+        lowLink.set(v, Math.min(lowLink.get(v)!, index.get(w)!));
+      }
+    }
+
+    if (lowLink.get(v) === index.get(v)) {
+      const component: string[] = [];
+      for (;;) {
+        const w = stack.pop()!;
+        onStack.delete(w);
+        component.push(w);
+        if (w === v) break;
+      }
+      components.push(component.sort());
+    }
+  };
+
+  for (const v of nodes) if (!index.has(v)) visit(v);
+  return components;
+}
+
+test("⭐ sơ đồ khối suy từ import thật không có chu trình", () => {
+  /**
+   * Sơ đồ khối có chu trình thì KHÔNG lan truyền được độ tin.
+   *
+   * Cả cơ chế của ganas dựng trên một phép suy một chiều: khối A đã có bằng
+   * chứng, khối B chỉ phụ thuộc A ⇒ tin B tới đâu là hàm của độ tin của A.
+   * Phép đó chỉ chạy được khi có thứ tự tô-pô — tức là khi đồ thị không có
+   * chu trình. Trong một chu trình thì mỗi khối chờ độ tin của khối kia, và
+   * không khối nào là điểm bắt đầu; "độ tin lan truyền" thành lập luận vòng.
+   *
+   * Đo trên chính tập cạnh suy từ IMPORT THẬT, không phải trên `depends_on`:
+   * `depends_on` mới khai một phần cạnh (xem `MISSING_EDGES` ở trên), nên một
+   * chu trình có thật trong code vẫn vô hình với bản đồ. Đúng thứ đã xảy ra:
+   * đo ngày 2026-08-23 trước T-042 ra ĐÚNG MỘT thành phần liên thông mạnh cỡ
+   * 3 — `M-graph-read ↔ M-load ↔ M-verify` (PR-013) — trong khi `ganas
+   * validate` sạch không một lỗi.
+   *
+   * T-042 cắt nó bằng cách tách khối LÁ `M-graph-base` (`graph/types.ts` +
+   * `graph/paths.ts`), không phải bằng cách bỏ bớt cạnh khai báo.
+   */
+  const cyclic = stronglyConnectedComponents(realEdges())
+    .filter((component) => component.length > 1)
+    .map((component) => component.join(" ↔ "))
+    .sort();
+
+  assert.deepEqual(
+    cyclic,
+    [],
+    `Sơ đồ khối có CHU TRÌNH — độ tin không lan truyền được qua nó.\n` +
+      `Cắt bằng cách tách phần dùng chung ra một khối lá, KHÔNG bằng cách\n` +
+      `giấu cạnh: cạnh đo từ import thật, bản đồ khai thiếu không làm nó biến mất.\n` +
+      cyclic.join("\n"),
   );
 });

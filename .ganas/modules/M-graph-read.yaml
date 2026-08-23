@@ -1,53 +1,28 @@
 id: M-graph-read
 scope: P-graph-core
-title: "Đọc đồ thị: chọn task, kiểm cạnh hợp đồng, kiểu dữ liệu và đường dẫn chuẩn"
+title: "Đọc đồ thị: chọn task, kiểm cạnh hợp đồng"
 nature: code
 paths:
   - "src/graph/select.ts"
   - "src/graph/trace.ts"
-  - "src/graph/types.ts"
-  - "src/graph/paths.ts"
 
+# T-042 tách `types.ts`/`paths.ts` sang khối lá `M-graph-base` để cắt chu trình
+# M-graph-read ↔ M-load ↔ M-verify (PR-013). Cổng ĐI THEO FILE: `Graph`,
+# `Sourced`, `ganasPath` và hai cạnh contract của chúng nay nằm ở
+# `M-graph-base`, không nhân đôi ở đây.
+#
 # `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
-# gộp đủ 12 type mà `types.ts`/`select.ts`/`trace.ts` thật sự import từ
-# M-model. `outputs` khai những gì M-freshness và M-verify thật sự import từ
-# `types.ts`/`paths.ts` — hai interface lớn (`Graph`, `Sourced<T>`) khai
-# "interface" thay vì chép hết field, cùng lý do "ZodTypeAny" ở M-model: so
-# KHỚP TỪNG KÝ TỰ một interface hàng chục dòng thì mọi lần thêm field không
-# liên quan cũng làm cạnh đỏ oan, còn `run` bên dưới vẫn grep đúng tên thật.
+# khai đúng ba type mà `select.ts`/`trace.ts` thật sự import từ M-model —
+# khai thêm cổng không dùng là nói dối về khối, y như cắt bớt. Khối này không
+# là NGUỒN của cạnh khai báo nào nên `outputs` để rỗng.
 contract:
   inputs:
-    - name: Claim
-      shape: "z.infer<typeof zClaim>"
-    - name: Config
-      shape: "z.infer<typeof zConfig>"
-    - name: Decision
-      shape: "z.infer<typeof zDecision>"
-    - name: Design
-      shape: "z.infer<typeof zDesign>"
-    - name: Fact
-      shape: "z.infer<typeof zFact>"
-    - name: Goal
-      shape: "z.infer<typeof zGoal>"
-    - name: Icebox
-      shape: "z.infer<typeof zIcebox>"
-    - name: Module
-      shape: "z.infer<typeof zModule>"
-    - name: Proposal
-      shape: "z.infer<typeof zProposal>"
-    - name: Scope
-      shape: "z.infer<typeof zScope>"
-    - name: Task
-      shape: "z.infer<typeof zTask>"
     - name: ContractVerification
       shape: "z.infer<typeof zContractVerification>"
-  outputs:
-    - name: Graph
-      shape: "interface"
-    - name: Sourced
-      shape: "{ value: T; file: string; index?: number }"
-    - name: ganasPath
-      shape: "(root: string, ...parts: string[]) => string"
+    - name: Module
+      shape: "z.infer<typeof zModule>"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
 
 depends_on:
   - M-model
@@ -57,15 +32,3 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/trace.test.ts'"
     expect: exit_zero
-  - id: V-graph-read-to-freshness
-    kind: contract
-    to: M-freshness
-    run: >-
-      grep -q "export interface Graph {" src/graph/types.ts
-  - id: V-graph-read-to-verify
-    kind: contract
-    to: M-verify
-    run: >-
-      grep -q "export interface Graph {" src/graph/types.ts &&
-      grep -q "export interface Sourced<T> {" src/graph/types.ts &&
-      grep -q "export function ganasPath(root: string, ...parts: string\[\]): string {" src/graph/paths.ts

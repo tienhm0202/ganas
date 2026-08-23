@@ -1,0 +1,94 @@
+id: M-graph-base
+scope: P-graph-core
+title: "Nền của đồ thị: kiểu dữ liệu thuần và đường dẫn chuẩn của .ganas/"
+nature: code
+paths:
+  - "src/graph/types.ts"
+  - "src/graph/paths.ts"
+
+# Khối LÁ, tách ra ở T-042 để cắt chu trình M-graph-read ↔ M-load ↔ M-verify
+# (PR-013). "Lá" ở đây nghĩa hẹp và đo được: không file nào trong `paths` nhập
+# từ M-graph-read, M-load hay M-verify — nên ba khối đó cùng phụ thuộc khối
+# này mà không có đường quay lại. Ba nhóm định nghĩa đã chuyển về đây:
+# `LedgerEntry`/`LedgerResult`/`LEDGER_RESULT` (từ `verify/ledger.ts`),
+# `LEDGER_FILE` (từ `verify/ledger.ts`, nay nằm cạnh CONFIG_FILE/STATE_FILE),
+# và `LoadedYaml` (từ `util/yaml.ts`) — đều là kiểu/hằng thuần, chỗ CHẠM thật
+# vẫn nằm nguyên ở khối cũ.
+#
+# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
+# gộp đủ 11 type mà `types.ts` thật sự import từ M-model. `outputs` khai đúng
+# những cổng mà M-verify và M-freshness thật sự import từ `types.ts`/`paths.ts`
+# — hai interface lớn (`Graph`, `LedgerEntry`) khai "interface" thay vì chép
+# hết field, cùng lý do "ZodTypeAny" ở M-model: so KHỚP TỪNG KÝ TỰ một
+# interface hàng chục dòng thì mọi lần thêm field không liên quan cũng làm
+# cạnh đỏ oan, còn `run` bên dưới vẫn grep đúng tên thật.
+contract:
+  inputs:
+    - name: Claim
+      shape: "z.infer<typeof zClaim>"
+    - name: Config
+      shape: "z.infer<typeof zConfig>"
+    - name: Decision
+      shape: "z.infer<typeof zDecision>"
+    - name: Design
+      shape: "z.infer<typeof zDesign>"
+    - name: Fact
+      shape: "z.infer<typeof zFact>"
+    - name: Goal
+      shape: "z.infer<typeof zGoal>"
+    - name: Icebox
+      shape: "z.infer<typeof zIcebox>"
+    - name: Module
+      shape: "z.infer<typeof zModule>"
+    - name: Proposal
+      shape: "z.infer<typeof zProposal>"
+    - name: Scope
+      shape: "z.infer<typeof zScope>"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
+  outputs:
+    - name: Graph
+      shape: "interface"
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    - name: LedgerEntry
+      shape: "interface"
+    - name: LedgerResult
+      shape: "(typeof LEDGER_RESULT)[number]"
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+    - name: LEDGER_FILE
+      shape: '"verify-ledger.jsonl"'
+
+depends_on:
+  - M-model
+status: surveyed
+verify:
+  - id: V-graph-base-shape
+    kind: probe
+    expect: exit_zero
+    run: >-
+      grep -q "export interface Graph {" src/graph/types.ts &&
+      grep -q "export interface Sourced<T> {" src/graph/types.ts &&
+      grep -q "export interface LedgerEntry {" src/graph/types.ts &&
+      grep -q "export interface LoadedYaml {" src/graph/types.ts &&
+      grep -q "export type LedgerResult = (typeof LEDGER_RESULT)\[number\];" src/graph/types.ts &&
+      grep -q "export function ganasPath(root: string, ...parts: string\[\]): string {" src/graph/paths.ts &&
+      grep -q "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts &&
+      ! grep -qE "from \"\.\./(verify|util)/(ledger|yaml)\.js\"" src/graph/types.ts src/graph/paths.ts
+  - id: V-graph-base-to-freshness
+    kind: contract
+    to: M-freshness
+    run: >-
+      grep -q "export interface Graph {" src/graph/types.ts &&
+      grep -q "export interface LedgerEntry {" src/graph/types.ts
+  - id: V-graph-base-to-verify
+    kind: contract
+    to: M-verify
+    run: >-
+      grep -q "export interface Graph {" src/graph/types.ts &&
+      grep -q "export interface Sourced<T> {" src/graph/types.ts &&
+      grep -q "export interface LedgerEntry {" src/graph/types.ts &&
+      grep -q "export type LedgerResult = (typeof LEDGER_RESULT)\[number\];" src/graph/types.ts &&
+      grep -q "export function ganasPath(root: string, ...parts: string\[\]): string {" src/graph/paths.ts &&
+      grep -q "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts
