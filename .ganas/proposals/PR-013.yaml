@@ -2,9 +2,21 @@ id: PR-013
 title: "Ba khối lõi của đồ thị phụ thuộc vòng tròn: graph-read, load, verify"
 scope: P-graph-core
 problem: >-
-  Khai depends_on đúng import thật làm lộ một chu trình ba khối có thật trong code: graph/trace.ts và graph/types.ts nhập từ verify/ledger.js; graph/load.ts nhập từ verify/ledger.js; còn verify/run.ts nhập type Graph/Sourced từ graph/types.js và verify/ledger.ts nhập ganasPath từ graph/paths.js. Docstring của chính luật nói vì sao điều này quan trọng: sơ đồ khối phải không chu trình, nếu không không lan truyền được độ tin — mà lan truyền độ tin chính là việc ganas tồn tại để làm. Chu trình vô hình suốt vì bản đồ chỉ khai một phần cạnh, và computeDebt chỉ kiểm cạnh ĐÃ KHAI.
+  Khai depends_on đúng import thật làm lộ một chu trình ba khối có thật trong
+  code: graph/trace.ts và graph/types.ts nhập từ verify/ledger.js; graph/load.ts
+  nhập từ verify/ledger.js; còn verify/run.ts nhập type Graph/Sourced từ
+  graph/types.js và verify/ledger.ts nhập ganasPath từ graph/paths.js. Docstring
+  của chính luật nói vì sao điều này quan trọng: sơ đồ khối phải không chu
+  trình, nếu không không lan truyền được độ tin — mà lan truyền độ tin chính là
+  việc ganas tồn tại để làm. Chu trình vô hình suốt vì bản đồ chỉ khai một phần
+  cạnh, và computeDebt chỉ kiểm cạnh ĐÃ KHAI.
 proposed_change: >-
-  Cắt chu trình bằng cách tách phần bị dùng chung, không phải bằng cách giấu cạnh. Ứng viên rõ nhất: LedgerEntry (kiểu dữ liệu thuần, hiện khai trong verify/ledger.ts nhưng graph/types.ts cần) và ganasPath/DIRS (đường dẫn thuần, hiện ở graph/paths.ts mà verify cần). Đưa nhóm kiểu-và-đường-dẫn thuần đó về một khối lá không phụ thuộc ai, rồi cả ba khối kia cùng phụ thuộc nó. Cần đo lại sau khi tách để chắc chu trình đứt hẳn chứ không chỉ dời chỗ.
+  Cắt chu trình bằng cách tách phần bị dùng chung, không phải bằng cách giấu
+  cạnh. Ứng viên rõ nhất: LedgerEntry (kiểu dữ liệu thuần, hiện khai trong
+  verify/ledger.ts nhưng graph/types.ts cần) và ganasPath/DIRS (đường dẫn thuần,
+  hiện ở graph/paths.ts mà verify cần). Đưa nhóm kiểu-và-đường-dẫn thuần đó về
+  một khối lá không phụ thuộc ai, rồi cả ba khối kia cùng phụ thuộc nó. Cần đo
+  lại sau khi tách để chắc chu trình đứt hẳn chứ không chỉ dời chỗ.
 anchors:
   - "src/graph/trace.ts:3"
   - "src/verify/run.ts:7"
@@ -12,4 +24,7 @@ anchors:
 weight: 4
 ease: 2
 found_at: "2026-08-23T13:28:25.473Z"
-status: pending
+status: approved
+decided_by: "@tienhm"
+decided_at: 2026-08-23T13:55:55.743Z
+promoted_to: T-042

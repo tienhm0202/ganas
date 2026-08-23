@@ -1,0 +1,17 @@
+id: PR-014
+title: "Bốn file ngoài P-graph-core vẫn nhập qua tái xuất của verify/ledger.ts"
+scope: P-cli
+problem: >-
+  T-042 chuyển LEDGER_FILE về graph/paths.ts và LedgerResult/LedgerEntry/LEDGER_RESULT về graph/types.ts, rồi để verify/ledger.ts TÁI XUẤT chúng (src/verify/ledger.ts:34-36) vì ganas commit chỉ stage file trong ranh giới task — sửa thẳng import của file ngoài phạm vi làm cây sắp commit không typecheck nổi. Hệ quả: boundary.ts và hooks/policy/index.ts vẫn nhập LEDGER_FILE từ verify/ledger.js, commands/trace.ts và commands/verify.ts vẫn nhập LedgerResult từ đó, nên bản đồ giữ hai cạnh M-verify -> M-cli-core và M-verify -> M-hook-policy không còn lý do nào đỡ: bốn file đó không dùng gì của M-verify ngoài mấy cái tên đã đi nơi khác. Bản đồ đang nói một điều không còn đúng, và test module-deps đếm 72 thay vì 70.
+proposed_change: >-
+  Trong chính phạm vi sở hữu chúng, đổi bốn dòng import cho trỏ tới nguồn khai báo thật: boundary.ts và hooks/policy/index.ts lấy LEDGER_FILE từ graph/paths.js (cả hai đã import sẵn từ file đó), commands/trace.ts và commands/verify.ts lấy LedgerResult từ graph/types.js. Không một dòng logic nào đổi. Sau đó bỏ ba dòng tái xuất ở verify/ledger.ts, xoá hai cạnh tương ứng khỏi MISSING_EDGES trong test/module-deps.test.ts (72 -> 70), và chỉnh docstring cho khớp. Việc nằm ở hai phạm vi (P-cli: ba file, P-hook: một file) nên có thể phải chẻ làm hai task; người duyệt quyết.
+anchors:
+  - "src/verify/ledger.ts:34"
+  - "src/boundary.ts:7"
+  - "src/hooks/policy/index.ts:6"
+  - "src/commands/trace.ts:10"
+  - "src/commands/verify.ts:4"
+weight: 2
+ease: 4
+found_at: "2026-08-23T14:13:56.016Z"
+status: pending
