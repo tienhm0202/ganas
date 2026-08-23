@@ -1,7 +1,7 @@
 id: M-claim
 scope: P-hook
 title: "Giữ chỗ id, claim task, trạng thái phiên"
-nature: code
+nature: io
 paths:
   - "src/graph/claim.ts"
   - "src/state.ts"

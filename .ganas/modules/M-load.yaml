@@ -1,7 +1,7 @@
 id: M-load
 scope: P-graph-core
 title: "Nạp YAML thành graph"
-nature: code
+nature: io
 paths:
   - "src/graph/load.ts"
   - "src/util/yaml.ts"

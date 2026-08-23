@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-006
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: medium
 model: main
 blocked_by:
@@ -23,6 +23,12 @@ touches:
 exit_contract:
   - kind: command
     run: "npx tsx --test 'test/module-nature.test.ts'"
+  - kind: artifact
+    path: ".ganas/modules/M-claim.yaml"
+    must_contain: "nature: io"
+  - kind: artifact
+    path: ".ganas/modules/M-load.yaml"
+    must_contain: "nature: io"
   - kind: command
     run: "npm test"
   - kind: verification
@@ -37,3 +43,4 @@ notes: >-
   Nhãn còn lệch mà CHƯA sửa được thì phải khai miễn trừ TƯỜNG MINH kèm lý do
   trong chính test — cùng khuôn `EXEMPT` của test/no-dead-ends.ts. Danh sách
   miễn trừ im lặng thì test này chỉ là trang trí.
+done_at: 2026-08-23T10:25:15.331Z
