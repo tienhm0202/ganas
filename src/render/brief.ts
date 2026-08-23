@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { type FactFreshness, freshnessMark } from "../graph/freshness.js";
@@ -13,6 +12,7 @@ import {
   type Task,
 } from "../model/index.js";
 import { searchFacts, taskQuery } from "../search.js";
+import { exists } from "../util/fsprobe.js";
 import { renderGroupedByScope } from "./group.js";
 
 export interface BriefInput {
@@ -542,7 +542,7 @@ export function renderBrief(input: BriefInput): string {
 
   if (t.context_contract.must_read.length > 0) {
     const items = t.context_contract.must_read.map((m) => {
-      const missing = !existsSync(join(graph.root, m.path));
+      const missing = !exists(join(graph.root, m.path));
       return `\`${m.path}\`${missing ? " — ⚠ **KHÔNG TỒN TẠI**" : ""}\n  ${m.why}`;
     });
     parts.push(`## Phải đọc trước khi sửa gì\n\n${bullet(items)}`);

@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -8,6 +7,7 @@ import { taskForSession, touchedPathsFor } from "../state.js";
 import { type Argv, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
+import { existsAsync } from "../util/fsprobe.js";
 
 /**
  * `ganas note "..."` — ghi chú thô, RẺ hơn mở `NOTES.md` ra gõ tay.
@@ -93,7 +93,7 @@ export async function run(argv: Argv): Promise<number> {
   await mkdir(dirname(path), { recursive: true });
 
   const entry = renderEntry({ at, taskId, sha, touchedPaths, content });
-  if (existsSync(path)) {
+  if (await existsAsync(path)) {
     await appendFile(path, entry, "utf8");
   } else {
     await writeFile(path, renderHead(sessionId) + entry, "utf8");

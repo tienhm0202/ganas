@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
@@ -15,6 +14,7 @@ import * as T from "../templates/project.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
+import { exists } from "../util/fsprobe.js";
 
 /** Thư mục con tạo sẵn — thư mục rỗng giúp người mới biết chỗ đặt file. */
 const SUBDIRS = [
@@ -52,7 +52,7 @@ async function writeNew(
   content: string,
   force: boolean,
 ): Promise<"written" | "kept"> {
-  if (existsSync(file) && !force) return "kept";
+  if (exists(file) && !force) return "kept";
   await mkdir(join(file, ".."), { recursive: true });
   await writeFile(file, content, "utf8");
   return "written";
@@ -205,8 +205,8 @@ export async function run(argv: Argv): Promise<number> {
 /** Thêm mục ganas vào .gitignore nếu chưa có. Không tạo file nếu dự án không dùng git. */
 async function ensureGitignore(cwd: string): Promise<void> {
   const file = join(cwd, ".gitignore");
-  if (!existsSync(file)) {
-    if (!existsSync(join(cwd, ".git"))) return;
+  if (!exists(file)) {
+    if (!exists(join(cwd, ".git"))) return;
     await writeFile(file, T.gitignoreAddition().trimStart(), "utf8");
     return;
   }
@@ -227,7 +227,7 @@ async function ensureGitHook(
   content: string,
   force: boolean,
 ): Promise<{ path: string; result: "written" | "kept" } | undefined> {
-  if (!existsSync(join(cwd, ".git"))) return undefined;
+  if (!exists(join(cwd, ".git"))) return undefined;
 
   const hookFile = join(cwd, ".githooks", name);
   const result = await writeNew(hookFile, content, force);

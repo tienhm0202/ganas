@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -10,6 +9,7 @@ import type { Graph, Sourced } from "../graph/types.js";
 import { formatAnchor, type Icebox, ID_PATTERNS, type ScoreValue } from "../model/index.js";
 import { type Argv, flag, multiOption, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
+import { exists } from "../util/fsprobe.js";
 import { openProject } from "./_common.js";
 import { scopeFromClaimedTask } from "./debt.js";
 
@@ -85,7 +85,7 @@ async function appendIceboxRecord(root: string, month: string, record: Record<st
   await mkdir(dirname(file), { recursive: true });
 
   await withFileLock(iceboxLockFile(root, relFile), ICEBOX_LOCK_TTL_MS, async () => {
-    const raw = existsSync(file) ? await readFile(file, "utf8") : "";
+    const raw = exists(file) ? await readFile(file, "utf8") : "";
     const doc = parseDocument(raw);
     // File chưa có hoặc rỗng: `contents` là `null`. `createNode([])` trả một
     // node CHƯA gắn vị trí trong nguồn (không phải "Parsed") — ép kiểu về

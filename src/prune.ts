@@ -1,4 +1,4 @@
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 
 import { DIRS, ganasPath } from "./graph/paths.js";
@@ -6,7 +6,7 @@ import type { Graph, Sourced } from "./graph/types.js";
 import type { Icebox } from "./model/icebox.js";
 import { readState, type State, writeState } from "./state.js";
 import { runShell } from "./util/exec.js";
-import { exists, listDir } from "./util/fsprobe.js";
+import { exists, listDir, mtimeMs } from "./util/fsprobe.js";
 
 /**
  * Sub-thư mục trong `runs/` chứa ghi chú thô của `ganas note` — TÁCH khỏi
@@ -233,9 +233,13 @@ async function collectStaleIn(
     const sessionId = entry.name.slice(0, -3);
     if (state.sessions[sessionId]) continue; // phiên còn đang bind — không đụng
     const file = join(dir, entry.name);
-    const mtimeMs = (await stat(file)).mtimeMs;
-    if (mtimeMs > cutoff) continue;
-    out.push({ sessionId, file, ageDays: Math.floor((now - mtimeMs) / DAY_MS) });
+    // file biến mất giữa chừng (undefined): coi như đã cũ (0) — cùng cách xử
+    // của src/graph/freshness.ts, không tự nghĩ ra ngữ nghĩa thứ hai. Ở đây hệ
+    // quả là được liệt vào "stale" nên `applyPrune` sẽ `rm --force` nó — dọn
+    // một file vốn đã không còn cũng vô hại.
+    const mtime = (await mtimeMs(file)) ?? 0;
+    if (mtime > cutoff) continue;
+    out.push({ sessionId, file, ageDays: Math.floor((now - mtime) / DAY_MS) });
   }
   return out;
 }

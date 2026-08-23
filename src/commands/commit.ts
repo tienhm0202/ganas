@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +20,7 @@ import { baselineFor, taskForSession, touchedPathsFor } from "../state.js";
 import { type Argv, enabled, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
+import { exists } from "../util/fsprobe.js";
 import { verifyChain } from "../verify/ledger.js";
 import { openProject } from "./_common.js";
 import { commitDebtSummary } from "./debt.js";
@@ -306,7 +306,7 @@ export async function run(argv: Argv): Promise<number> {
  * clone về máy khác thì lệnh trong `exit_contract` không tìm thấy file.
  */
 async function unstagedContractPaths(root: string, task: Task): Promise<string[]> {
-  const existing = contractPathRefs(task).filter((r) => existsSync(join(root, r.path)));
+  const existing = contractPathRefs(task).filter((r) => exists(join(root, r.path)));
   if (existing.length === 0) return [];
   const changed = await changedUnder(
     root,

@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
 import { parseDocument } from "yaml";
@@ -11,6 +10,7 @@ import { guideFileName, ID_PATTERNS, moduleGuideDir } from "../model/index.js";
 import { moduleGuideMd } from "../templates/project.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
+import { exists, listDir } from "../util/fsprobe.js";
 import { matchesAny } from "../util/glob.js";
 import { openProject } from "./_common.js";
 
@@ -276,10 +276,10 @@ async function writeModuleGuide(
   if (dir === undefined) return;
 
   const absDir = join(root, dir);
-  if (!existsSync(absDir)) return;
+  if (!exists(absDir)) return;
 
   const file = join(absDir, guideFileName(graph.config.harness));
-  if (existsSync(file)) return;
+  if (exists(file)) return;
 
   const body = moduleGuideMd({
     id: mod.id,
@@ -447,8 +447,8 @@ async function scanMissing(root: string, graph: Graph): Promise<Missing[]> {
     [DIRS.tasks, "task"],
   ] as const) {
     const abs = ganasPath(root, dir);
-    if (!existsSync(abs)) continue;
-    for (const entry of await readdir(abs, { withFileTypes: true })) {
+    if (!exists(abs)) continue;
+    for (const entry of await listDir(abs)) {
       if (!entry.isFile() || !/\.ya?ml$/.test(entry.name)) continue;
       const file = join(abs, entry.name);
       const doc = parseDocument(await readFile(file, "utf8"));

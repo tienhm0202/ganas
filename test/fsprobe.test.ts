@@ -113,19 +113,7 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
    * Khác hẳn một danh sách "bỏ qua": bỏ qua thì im lặng phình ra, còn cái này
    * mỗi lần đụng vào đều phải sửa bằng tay và giải thích được vì sao.
    */
-  const PENDING = [
-    // Còn lại vì `fsprobe` chưa có phép đọc mtime, mà thêm vào đó là sửa
-    // M-fsprobe (P-graph-core) — ngoài phạm vi task đã dọn chỗ này (T-021, P-cli).
-    "src/prune.ts — stat",
-    // Chưa có task: lớp lệnh CLI và hai khối còn lại của D-006
-    "src/commands/commit.ts — existsSync",
-    "src/commands/icebox.ts — existsSync",
-    "src/commands/init.ts — existsSync",
-    "src/commands/note.ts — existsSync",
-    "src/commands/scope.ts — existsSync",
-    "src/commands/scope.ts — readdir",
-    "src/render/brief.ts — existsSync",
-  ].sort();
+  const PENDING: string[] = [];
 
   const offenders: string[] = [];
   for (const f of await walk("src")) {

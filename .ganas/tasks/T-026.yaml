@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-006
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: verifier
 blocked_by:
@@ -38,8 +38,9 @@ exit_contract:
 
 notes: >-
   Bảy dòng PENDING còn lại: năm file trong src/commands/, src/render/brief.ts,
-  và src/prune.ts (dòng `stat` chỉ xoá được sau khi T-025 thêm mtime vào
-  fsprobe — vì thế mới `blocked_by`).
+  và src/prune.ts (dòng `stat` chỉ xoá được sau khi T-025 thêm mtime vào fsprobe
+  — vì thế mới `blocked_by`).
 
-  ĐIỀU KIỆN HOÀN THÀNH THẬT: mảng `PENDING` trong test/fsprobe.test.ts rỗng.
-  Còn dòng nào thì task chưa xong, dù mọi lệnh khác đều xanh.
+  ĐIỀU KIỆN HOÀN THÀNH THẬT: mảng `PENDING` trong test/fsprobe.test.ts rỗng. Còn
+  dòng nào thì task chưa xong, dù mọi lệnh khác đều xanh.
+done_at: 2026-08-23T11:15:08.178Z
