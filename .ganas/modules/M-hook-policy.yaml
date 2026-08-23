@@ -4,9 +4,54 @@ title: "Phán quyết của hook: chặn hay cho qua, và nói gì với ngườ
 nature: code
 paths:
   - "src/hooks/policy/**"
+
+# `portIssues()` so `name` và so `shape` KHỚP TỪNG KÝ TỰ, và từ T-032 mỗi cạnh
+# chỉ chịu trách nhiệm cho cổng CHÍNH NÓ cấp. Nên khai ở đây phải là chữ ký
+# THẬT: đổi chữ ký trong code mà quên sửa dòng này thì cạnh đỏ — đó là toàn bộ
+# giá trị. Khai chung chung ("kết quả", "dữ liệu") biến cạnh thành ô đã điền.
+contract:
+  outputs:
+    - name: decideWriteEarly
+      shape: "(t: WriteTarget) => WriteStep"
+    - name: decideEntityOverwrite
+      shape: "(exists: boolean) => WriteStep"
+    - name: decideProposalWrite
+      shape: "(mode: Enforcement) => HookOutput"
+    - name: denyPreTool
+      shape: "(reason: string) => HookOutput"
+    - name: applyEnforcement
+      shape: "(mode: Enforcement, body: string) => HookOutput"
+    - name: ruleForDiagnostics
+      shape: "(diags: readonly Diagnostic[]) => EnforcementRule"
+    - name: knowledgeWriteBody
+      shape: "(rel: string, diags: readonly Diagnostic[], rule: EnforcementRule, nudgeTail: string) => string"
+    - name: locate
+      shape: "(raw: string, cwd: string, root: string) => { abs: string; rel: string }"
+    - name: inRepoTree
+      shape: "(rel: string | undefined) => rel is string"
+    - name: shellLooksLikeWrite
+      shape: "(command: string) => boolean"
+    - name: WRITE_TOOLS
+      shape: "Set<string>"
+    - name: PLAN_APPROVED_REASON
+      shape: "string"
+    - name: DISPATCH_NUDGE_REASON
+      shape: "string"
+
 status: surveyed
 verify:
   - id: V-hook-policy-pure
     kind: probe
     run: "npx tsx --test 'test/hook-policy.test.ts'"
     expect: exit_zero
+  # Cạnh lõi → vỏ, ranh giới mà PR-004 dựng ra. `run` phải nhắc TÊN CỔNG, nếu
+  # không `lintProbe` báo probe-unrelated — và báo đúng, vì lệnh chung chung
+  # không kiểm riêng cạnh này. Ở đây nó khẳng định ba chữ ký quyết định còn
+  # nguyên văn trong code, tức bắt được lúc YAML và code trôi khỏi nhau.
+  - id: V-hook-policy-to-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -q "export function decideWriteEarly(t: WriteTarget): WriteStep" src/hooks/policy/index.ts &&
+      grep -q "export function decideEntityOverwrite(exists: boolean): WriteStep" src/hooks/policy/index.ts &&
+      grep -q "export function decideProposalWrite(mode: Enforcement): HookOutput" src/hooks/policy/index.ts

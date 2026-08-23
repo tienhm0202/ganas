@@ -5,9 +5,45 @@ nature: io
 paths:
   - "src/graph/claim.ts"
   - "src/state.ts"
+
+# `portIssues()` so `name` và so `shape` KHỚP TỪNG KÝ TỰ, và từ T-032 mỗi cạnh
+# chỉ chịu trách nhiệm cho cổng CHÍNH NÓ cấp. Nên khai ở đây phải là chữ ký
+# THẬT: đổi chữ ký trong code mà quên sửa dòng này thì cạnh đỏ — đó là toàn bộ
+# giá trị. Khai chung chung ("kết quả", "dữ liệu") biến cạnh thành ô đã điền.
+contract:
+  outputs:
+    - name: claimNextTask
+      shape: "(graph: Graph, root: string, sessionId: string, opts?: SelectOptions) => Promise<Candidate | null>"
+    - name: claimTask
+      shape: "(root: string, taskId: string, sessionId: string, ttlMinutes: number) => Promise<boolean>"
+    - name: releaseClaimsForSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: bindSession
+      shape: "(root: string, sessionId: string, taskId: string) => Promise<void>"
+    - name: releaseSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: taskForSession
+      shape: "(root: string, sessionId?: string) => Promise<string | null>"
+    - name: sessionRecord
+      shape: "(root: string, sessionId: string) => Promise<SessionRecord | null>"
+    - name: markTouched
+      shape: "(root: string, sessionId: string, relPath?: string, fromSubagent?: boolean) => Promise<void>"
+    - name: clearTouched
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: dispatchNudgedFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<boolean>"
+    - name: markDispatchNudged
+      shape: "(root: string, sessionId: string) => Promise<void>"
+
 status: surveyed
 verify:
   - id: V-claim-smoke
     kind: probe
     run: "npx tsx --test 'test/claim.test.ts'"
     expect: exit_zero
+  - id: V-claim-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -q "export async function claimTask(" src/graph/claim.ts &&
+      grep -q "export async function markTouched(" src/state.ts

@@ -4,6 +4,60 @@ title: "Vỏ I/O của hook: đọc stdin, gom dữ liệu từ đĩa, phát JSO
 nature: io
 paths:
   - "src/hooks/io/**"
+# Cổng VÀO = ĐỦ những gì khối này nhập, từ CẢ HAI khối thượng nguồn. Khai một
+# nửa thì cạnh cũng xanh (T-032 chỉ kiểm giao), nhưng lúc đó `contract.inputs`
+# nói dối về khối — và phép kiểm PHỦ mất luôn thứ để đối chiếu.
+contract:
+  inputs:
+    - name: decideWriteEarly
+      shape: "(t: WriteTarget) => WriteStep"
+    - name: decideEntityOverwrite
+      shape: "(exists: boolean) => WriteStep"
+    - name: decideProposalWrite
+      shape: "(mode: Enforcement) => HookOutput"
+    - name: denyPreTool
+      shape: "(reason: string) => HookOutput"
+    - name: applyEnforcement
+      shape: "(mode: Enforcement, body: string) => HookOutput"
+    - name: ruleForDiagnostics
+      shape: "(diags: readonly Diagnostic[]) => EnforcementRule"
+    - name: knowledgeWriteBody
+      shape: "(rel: string, diags: readonly Diagnostic[], rule: EnforcementRule, nudgeTail: string) => string"
+    - name: locate
+      shape: "(raw: string, cwd: string, root: string) => { abs: string; rel: string }"
+    - name: inRepoTree
+      shape: "(rel: string | undefined) => rel is string"
+    - name: shellLooksLikeWrite
+      shape: "(command: string) => boolean"
+    - name: WRITE_TOOLS
+      shape: "Set<string>"
+    - name: PLAN_APPROVED_REASON
+      shape: "string"
+    - name: DISPATCH_NUDGE_REASON
+      shape: "string"
+    - name: claimNextTask
+      shape: "(graph: Graph, root: string, sessionId: string, opts?: SelectOptions) => Promise<Candidate | null>"
+    - name: claimTask
+      shape: "(root: string, taskId: string, sessionId: string, ttlMinutes: number) => Promise<boolean>"
+    - name: releaseClaimsForSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: bindSession
+      shape: "(root: string, sessionId: string, taskId: string) => Promise<void>"
+    - name: releaseSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: taskForSession
+      shape: "(root: string, sessionId?: string) => Promise<string | null>"
+    - name: sessionRecord
+      shape: "(root: string, sessionId: string) => Promise<SessionRecord | null>"
+    - name: markTouched
+      shape: "(root: string, sessionId: string, relPath?: string, fromSubagent?: boolean) => Promise<void>"
+    - name: clearTouched
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: dispatchNudgedFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<boolean>"
+    - name: markDispatchNudged
+      shape: "(root: string, sessionId: string) => Promise<void>"
+
 depends_on:
   - M-hook-policy
   - M-claim

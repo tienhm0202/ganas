@@ -4,16 +4,17 @@ serves:
   - G-001
 implements: D-007
 scope: P-hook
-status: todo
-# BỊ CHẶN bởi PR-010 — xem notes. Không đổi thành done, và không hạ
-# exit_contract xuống cho vừa: hợp đồng đòi cả phạm vi sạch là mức ĐÚNG.
+status: done
+blocked_by:
+  - T-032
 estimated_context: medium
 model: main
 
 context_contract:
   must_read:
     - path: "src/graph/trace.ts"
-      why: "portIssues() so tên cổng và shape từng ký tự — quyết định contract phải khai thế nào mới có tác dụng"
+      why: "portIssues() so tên cổng và shape từng ký tự — quyết định contract phải
+        khai thế nào mới có tác dụng"
     - path: "src/hooks/policy/index.ts"
       why: "Cổng ra thật của khối lõi: các hàm quyết định được export"
     - path: "src/hooks/io/handlers.ts"
@@ -24,6 +25,7 @@ context_contract:
 touches:
   - M-hook-policy
   - M-hook-io
+  - M-claim
 
 exit_contract:
   - kind: artifact
@@ -40,27 +42,32 @@ exit_contract:
     target: "M-hook-io/V-hooks-smoke"
   - kind: verification
     target: "M-hook-policy/V-hook-policy-pure"
+  - kind: verification
+    target: "M-claim/V-claim-smoke"
 
 notes: >-
-  Điều kiện hoàn thành THẬT: cạnh `M-hook-policy → M-hook-io` biến mất khỏi
-  danh sách `uncovered-edge` của `ganas debt`, và `ganas trace` báo cạnh đó
-  ĐẠT. Khai contract mà cạnh vẫn trần thì chưa xong.
+  Điều kiện hoàn thành THẬT: cạnh `M-hook-policy → M-hook-io` biến mất khỏi danh
+  sách `uncovered-edge` của `ganas debt`, và `ganas trace` báo cạnh đó ĐẠT. Khai
+  contract mà cạnh vẫn trần thì chưa xong.
 
   Khai cổng bằng tên hàm export thật và chữ ký thật. Khai chung chung ("dữ
-  liệu", "kết quả") thì phép so cổng không bắt được gì, và cạnh trở thành ô
-  đã điền chứ không phải bằng chứng.
+  liệu", "kết quả") thì phép so cổng không bắt được gì, và cạnh trở thành ô đã
+  điền chứ không phải bằng chứng.
 
   Cạnh này phải trở thành KHUÔN cho 13 cạnh còn lại — viết sao để task sau chép
   được hình, đừng tối ưu riêng cho một cạnh.
 
-  DỪNG GIỮA CHỪNG 2026-08-23, chặn bởi một khiếm khuyết của chính cơ chế
-  (PR-010), không phải bởi cách khai:
+  ĐÃ CHẠY TIẾP sau khi T-032 sửa cơ chế. Bản ghi lần dừng giữ nguyên bên dưới vì
+  nó là lý do cả D-007 tồn tại, không phải vết bẩn cần xoá.
+
+  DỪNG LẦN ĐẦU 2026-08-23, chặn bởi một khiếm khuyết của chính cơ chế (PR-010),
+  không phải bởi cách khai:
 
   `portIssues(from, to)` duyệt TOÀN BỘ `contract.inputs` của khối đích và đòi
-  khối nguồn xuất hết. `M-hook-io` nhập 13 cổng từ `M-hook-policy` và 11 cổng
-  từ `M-claim`. Khai đủ sự thật thì CẢ HAI cạnh trượt — cạnh claim báo thiếu 13
-  cổng của policy, cạnh policy báo thiếu 11 cổng của claim. Đã thử cả hai
-  chiều, có nguyên văn thông báo trong lịch sử phiên.
+  khối nguồn xuất hết. `M-hook-io` nhập 13 cổng từ `M-hook-policy` và 11 cổng từ
+  `M-claim`. Khai đủ sự thật thì CẢ HAI cạnh trượt — cạnh claim báo thiếu 13
+  cổng của policy, cạnh policy báo thiếu 11 cổng của claim. Đã thử cả hai chiều,
+  có nguyên văn thông báo trong lịch sử phiên.
 
   Hai đường vòng đều bị loại, có lý do:
    - Khai `optional: true` cho mọi input: vòng lặp BỎ QUA input optional, tức
@@ -72,3 +79,10 @@ notes: >-
   Nên contract đã khai bị HOÀN NGUYÊN, đồ thị giữ nguyên 14 cạnh trần. Đó là
   trạng thái trung thực. Làm tiếp được sau khi PR-010 tách phép kiểm làm hai
   tầng (từng cạnh kiểm GIAO, toàn sơ đồ kiểm PHỦ).
+
+  `touches` phải kể cả `M-claim`: cạnh thứ hai của phạm vi là `M-claim →
+  M-hook-io`, nên khai contract cho nó là SỬA khối đó. Bản đầu quên, và phép
+  chấm lại trên cây sắp commit (T-028) bắt được — `M-claim.yaml` không được
+  stage nên cạnh đỏ trong cây commit dù xanh ở working tree. Đúng lớp lỗi
+  fc99e87 và c865211, lần này bị chặn trước khi thành commit.
+done_at: 2026-08-23T12:07:56.861Z
