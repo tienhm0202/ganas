@@ -2,9 +2,22 @@ id: PR-008
 title: "Guard \"trường schema không ai đọc\" chưa từng soi tới zConfig"
 scope: P-graph-core
 problem: >-
-  test/no-dead-ends.test.ts trích tên trường bằng regex ^\s{4}(\w+): — đúng 4 dấu cách, vì nó nhắm các schema khai LỒNG trong biến. Nhưng zConfig khai ở cấp cao nhất nên trường của nó thụt 2 dấu cách, và regex không khớp cái nào. Hệ quả: toàn bộ 9 trường của zConfig (version, project, harness, enforcement, enforcement_rules, models, session_start, claim, build_check) chưa bao giờ được guard soi tới. Lộ ra khi T-027 thêm build_check — một trường CHƯA ai đọc (phần dùng nằm ở T-028) mà guard vẫn xanh, trong khi đúng lớp lỗi này đã bắt được ở T-007.
+  test/no-dead-ends.test.ts trích tên trường bằng regex ^\s{4}(\w+): — đúng 4
+  dấu cách, vì nó nhắm các schema khai LỒNG trong biến. Nhưng zConfig khai ở cấp
+  cao nhất nên trường của nó thụt 2 dấu cách, và regex không khớp cái nào. Hệ
+  quả: toàn bộ 9 trường của zConfig (version, project, harness, enforcement,
+  enforcement_rules, models, session_start, claim, build_check) chưa bao giờ
+  được guard soi tới. Lộ ra khi T-027 thêm build_check — một trường CHƯA ai đọc
+  (phần dùng nằm ở T-028) mà guard vẫn xanh, trong khi đúng lớp lỗi này đã bắt
+  được ở T-007.
 proposed_change: >-
-  Nới regex trích trường để bắt cả cấp 2 dấu cách. Nhưng làm thế sẽ nổ hai BÁO SAI cần xử trước: enforcement và enforcement_rules không có người đọc ngoài src/model/, nhưng chúng KHÔNG chết — chúng được đọc bởi enforcementFor() nằm ngay trong src/model/config.ts, và cả dự án gọi hàm đó thay vì chạm trường. Nên cùng lúc phải nới luật: trường được đọc bởi một accessor CÔNG KHAI của chính model thì tính là có người đọc. Không nới vế này thì bản vá đẻ ra hai miễn trừ giả, và danh sách miễn trừ giả là thứ làm guard mất uy tín.
+  Nới regex trích trường để bắt cả cấp 2 dấu cách. Nhưng làm thế sẽ nổ hai BÁO
+  SAI cần xử trước: enforcement và enforcement_rules không có người đọc ngoài
+  src/model/, nhưng chúng KHÔNG chết — chúng được đọc bởi enforcementFor() nằm
+  ngay trong src/model/config.ts, và cả dự án gọi hàm đó thay vì chạm trường.
+  Nên cùng lúc phải nới luật: trường được đọc bởi một accessor CÔNG KHAI của
+  chính model thì tính là có người đọc. Không nới vế này thì bản vá đẻ ra hai
+  miễn trừ giả, và danh sách miễn trừ giả là thứ làm guard mất uy tín.
 anchors:
   - "test/no-dead-ends.test.ts:128"
   - "src/model/config.ts:135"
@@ -12,4 +25,7 @@ anchors:
 weight: 3
 ease: 3
 found_at: "2026-08-23T10:50:41.241Z"
-status: pending
+status: approved
+decided_by: "@tienhm"
+decided_at: 2026-08-23T11:25:19.163Z
+promoted_to: T-029

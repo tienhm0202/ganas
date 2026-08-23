@@ -30,3 +30,4 @@ models:
   main: claude-opus-5
   verifier: claude-sonnet-5
   scribe: claude-haiku-4-5
+build_check: npm run typecheck
