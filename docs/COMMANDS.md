@@ -831,6 +831,22 @@ ganas commit T-014 --dry-run          # xem sẽ stage gì, chưa đụng index
 ganas commit T-014 --no-close         # commit nhưng tự đánh dấu done sau
 ```
 
+**Chấm lại trên CÂY SẮP ĐƯỢC COMMIT.** Sau khi stage và trước khi tạo commit,
+`ganas commit` bung nội dung đã stage ra thư mục tạm (`git write-tree` →
+`git archive`, mượn `node_modules` qua symlink) rồi chạy lại các tiêu chí
+`command`/`artifact` của `exit_contract` **ngay trong đó**. Đỏ thì không commit.
+
+Vì sao cần: `ganas gate` chấm trên **working tree**, còn commit chỉ mang những
+file trong `taskBoundary()`. Chênh lệch giữa hai tập đó từng cho ra một commit
+không biên dịch nổi (`commit:fc99e87`) trong khi gate xanh — đúng lớp lỗi
+"xanh ở máy tác giả, đỏ ở mọi máy khác" mà ganas tồn tại để chặn. Xem D-005 và
+PR-002 trong `.ganas/`.
+
+Tiêu chí `kind: verification` **không** chạy lại: nó hỏi sổ cái bằng chứng chứ
+không hỏi cây file. Dựng cây không được (không phải repo git, thiếu `tar`…) thì
+lệnh **nói ra là đã bỏ qua** chứ không im lặng coi như xanh. Cửa thoát:
+`--no-recheck`.
+
 ### `ganas note "..."`
 
 Ghi một ghi chú thô, tức thời — thứ đáng lẽ chảy vào một file `NOTES.md` tự

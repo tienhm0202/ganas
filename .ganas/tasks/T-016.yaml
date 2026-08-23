@@ -1,0 +1,65 @@
+id: T-016
+title: "ganas commit chấm lại exit_contract trên cây đã stage, đỏ thì không commit"
+serves:
+  - G-001
+implements: D-005
+scope: P-cli
+status: done
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/commands/commit.ts"
+      why: "Chỗ stage và tạo commit — điểm chèn phép chấm lại nằm giữa hai bước đó"
+    - path: "src/gate.ts"
+      why: "Hàm chấm exit_contract hiện có; phải dùng lại, không viết bản thứ hai"
+    - path: "src/boundary.ts"
+      why: "taskBoundary() quyết định file nào được stage — chính chênh lệch này sinh
+        ra lỗi"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-workflow
+  - M-commands
+
+exit_contract:
+  - kind: artifact
+    path: "src/commit.ts"
+    must_contain: "write-tree"
+  - kind: command
+    run: "npx tsx --test 'test/commit-staged-tree.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/commit.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/commit-staging.test.ts'"
+  - kind: artifact
+    path: "docs/COMMANDS.md"
+    must_contain: "CÂY SẮP ĐƯỢC COMMIT"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-workflow/V-workflow-boundary"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Câu hỏi mở đã tự trả lời trong lúc làm: CÓ cờ thoát `--no-recheck`, vì phép
+  chấm lại có thể trượt vì lý do ngoài task (thiếu `tar`, tiêu chí cần state
+  không có trong git). Nhưng phải gõ ra tay, và lệnh nói rõ là đang commit một
+  cây chưa ai kiểm.
+
+  Test suýt không chứng minh được gì: bản đầu dùng tiêu chí `grep ...
+  src/b/dep.ts`, mà `contractPathRefs()` đã kéo mọi đường dẫn LỆNH NHẮC TỚI vào
+  ranh giới nên file đó tự vào commit và cây stage vẫn xanh. T-010 hỏng vì phụ
+  thuộc NGẦM qua `import`, không phải phụ thuộc gọi tên. Test cuối dùng
+  `check.sh` đóng vai đó.
+
+  Test phải dựng lại ĐÚNG ca đã xảy ra thật ở T-010: một file trong ranh giới
+  import một file NGOÀI ranh giới đang sửa dở, gate xanh, và `ganas commit` phải
+  từ chối. Không dựng được ca đó thì test không chứng minh được gì.
+
+  Không chạy lại tiêu chí `kind: verification` — nó hỏi sổ cái, không hỏi cây
+  file.
+done_at: 2026-08-23T09:20:56.995Z

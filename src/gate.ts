@@ -201,3 +201,25 @@ export function formatGate(result: GateResult): string {
   }
   return lines.join("\n");
 }
+
+/**
+ * Chấm lại CHỈ những tiêu chí đo được trên cây file — `command` và `artifact` —
+ * tại một gốc khác gốc dự án.
+ *
+ * Dựng cho `ganas commit`: nó cần biết cây SẮP ĐƯỢC COMMIT có xanh không, chứ
+ * không phải working tree (xem `checkStagedTree`, src/commit.ts). Ba loại còn
+ * lại cố ý bị bỏ:
+ *
+ *  - `verification` hỏi SỔ CÁI bằng chứng, không hỏi cây file — bung cây ra
+ *    một chỗ khác không đổi câu trả lời, chạy lại chỉ tốn thời gian.
+ *  - `handoff` hỏi `.ganas/runs/` vốn là file CỤC BỘ, cố tình không vào git.
+ *  - `manual` cần người.
+ */
+export async function evaluateTreeCriteria(
+  root: string,
+  criteria: readonly ExitCriterion[],
+): Promise<CriterionResult[]> {
+  const measurable = criteria.filter((c) => c.kind === "command" || c.kind === "artifact");
+  const freshness = new Map<string, VerificationState>();
+  return Promise.all(measurable.map((c) => checkCriterion(c, { root, freshness })));
+}

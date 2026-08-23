@@ -1,0 +1,36 @@
+id: D-005
+title: "Chấm điều kiện hoàn thành trên CÂY SẮP COMMIT, không phải trên working tree"
+serves:
+  - G-001
+summary: >-
+  `ganas gate` chạy các lệnh trong `exit_contract` bằng cwd là gốc repo, tức là
+  trên WORKING TREE hiện tại. `ganas commit` thì chỉ `git add` những file nằm
+  trong ranh giới của task (`taskBoundary()`). Hai tập đó khác nhau, và chênh
+  lệch giữa chúng không được ai kiểm — nên gate xanh vẫn có thể sinh ra một
+  commit không biên dịch được.
+
+  Đã xảy ra thật, không phải giả định: T-010 thêm khoá enforcement
+  `proposal_decision` dùng ở `src/hooks/handlers.ts` nhưng khai ở
+  `src/model/config.ts`. File thứ hai thuộc M-model (P-graph-core), nằm ngoài
+  ranh giới của T-010 (M-hooks, P-hook), nên `ganas commit` bỏ lại. Gate vẫn
+  xanh vì working tree có đủ hai file. Commit `fc99e87` không `tsc` được, và
+  chỉ lộ ra khi dựng worktree tạm từ HEAD để đối chiếu bằng tay.
+
+  Đây đúng là lớp lỗi mà ganas tồn tại để chặn — "xanh ở máy tác giả, đỏ ở mọi
+  máy khác" — nên để nó lọt là mâu thuẫn với chính lý do dự án có mặt.
+
+  Cách chữa: trước khi tạo commit thật, `ganas commit` dựng lại nội dung ĐÃ
+  STAGE ra một thư mục tạm (`git write-tree` → `git archive` bung ra, mượn
+  `node_modules` của repo qua symlink) rồi chạy lại các tiêu chí `command` và
+  `artifact` của `exit_contract` NGAY TRONG thư mục đó. Đỏ thì không commit, và
+  nói rõ file nào đang thiếu.
+
+  Vì sao chọn `write-tree` + `archive` chứ không `git stash --keep-index`:
+  stash đụng vào working tree thật của người dùng, và nếu tiến trình chết giữa
+  chừng thì công việc chưa commit nằm lại trong stash — một lệnh kiểm tra không
+  được phép có chế độ hỏng kiểu đó. `write-tree` chỉ đọc index, không sửa gì.
+
+  Tiêu chí `kind: verification` KHÔNG chạy lại: nó hỏi sổ cái bằng chứng, không
+  hỏi cây file, nên bung cây ra cũng không đổi câu trả lời.
+status: active
+created_at: 2026-08-23T00:00:00Z

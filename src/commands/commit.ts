@@ -12,7 +12,7 @@ import {
   ownsGanasFile,
   taskBoundary,
 } from "../boundary.js";
-import { buildCommitMessage } from "../commit.js";
+import { buildCommitMessage, checkStagedTree, formatStagedTreeCheck } from "../commit.js";
 import { alreadyGreen, evaluateGate, formatGate, type GateResult } from "../gate.js";
 import { GANAS_DIR } from "../graph/paths.js";
 import type { Sourced } from "../graph/types.js";
@@ -230,6 +230,30 @@ export async function run(argv: Argv): Promise<number> {
         outsideWarning,
     );
     return 0;
+  }
+
+  // Chấm lại trên chính cây SẮP ĐI VÀO COMMIT, trước khi tạo commit. Gate ở
+  // trên chấm working tree — hai cây khác nhau, và chênh lệch giữa chúng chính
+  // là chỗ `commit:fc99e87` lọt qua với `tsc` gãy. Xem `checkStagedTree`.
+  if (!flag(argv, "no-recheck")) {
+    const recheck = await checkStagedTree(root, task);
+    const report = formatStagedTreeCheck(taskId, recheck);
+
+    if (recheck.status === "failed") {
+      // Trả file task về nguyên trạng: task CHƯA xong, đánh dấu done là nói dối.
+      // Nhưng KHÔNG gỡ khỏi index — sửa xong chạy lại là commit được ngay, không
+      // phải stage lại từ đầu.
+      if (originalTaskFile !== null) {
+        await writeFile(join(root, sourced.file), originalTaskFile, "utf8");
+      }
+      throw new GanasError(
+        report.trimStart() +
+          `\n  Thật sự cần bỏ qua thì \`ganas commit ${taskId} --no-recheck\` — nhưng biết rõ là ` +
+          `đang commit một cây chưa ai kiểm.\n`,
+      );
+    }
+
+    if (report) process.stdout.write(report);
   }
 
   const message = buildCommitMessage(graph, task, gateResult);
