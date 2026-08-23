@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import type { ExitCriterion, Proposal } from "../model/index.js";
+import type { AnchorObject, ExitCriterion, Proposal } from "../model/index.js";
 import {
   evalWeakness,
   formatAnchor,
@@ -980,6 +980,38 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
       line: head ? at(graph, head, "supersedes") : undefined,
       hint: `Cắt một cạnh \`supersedes\` — một đề xuất không thể vừa thay thế vừa bị thay thế.`,
     });
+  }
+
+  /* --- Anchor URL không có trích dẫn ------------------------------------- *
+   * `fetched_at` bắt buộc vì WEB ĐỔI. Nhưng khi trang đã đổi thật, `fetched_at`
+   * chỉ nói "tôi đọc nó ngày ấy" — thứ duy nhất còn trả lời được "ngày ấy nó
+   * viết gì" là `quote`. Bắt buộc mốc thời gian mà thả nội dung là giữ đúng
+   * phần ít giá trị hơn.
+   *
+   * `warning`, không `error`: dự án cũ import tri thức từ tài liệu có sẵn
+   * thường không còn trích dẫn để chép lại, và chặn cứng ở đó là chặn việc
+   * ghi lại thứ họ ĐANG BIẾT. Xem PR-009. */
+
+  const anchored: { id: string; file: string; anchors: readonly AnchorObject[] }[] = [
+    ...[...graph.facts.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
+    ...[...graph.claims.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
+    ...[...graph.icebox.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
+    ...[...graph.proposals.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
+  ];
+
+  for (const rec of anchored) {
+    for (const a of rec.anchors) {
+      if (a.kind !== "url" || a.quote) continue;
+      diags.push({
+        severity: "warning",
+        code: "knowledge/url-anchor-without-quote",
+        message: `${rec.id} neo vào ${a.url} nhưng không chép lại trích dẫn nào`,
+        file: rec.file,
+        hint:
+          `Trang web đổi, và khi nó đổi thì \`fetched_at\` chỉ còn nói được "đã đọc ngày nào". ` +
+          `Thêm \`quote:\` với đúng đoạn đã đọc — đó là phần bằng chứng sống lâu hơn cái link.`,
+      });
+    }
   }
 
   /* --- Sổ cái hỏng ------------------------------------------------------ */

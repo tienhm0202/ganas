@@ -1,0 +1,47 @@
+id: T-030
+title: "Trích dẫn của anchor URL hiện ra, và validate nhắc khi thiếu"
+serves:
+  - G-001
+implements: D-006
+scope: P-graph-core
+status: done
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/model/anchor.ts"
+      why: "formatAnchor là chỗ DUY NHẤT anchor biến thành chữ cho người đọc"
+    - path: ".ganas/claims/C-002.yaml"
+      why: "Anchor URL có quote thật trong repo — dùng làm ca thử"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-validate
+
+exit_contract:
+  - kind: artifact
+    path: "src/model/anchor.ts"
+    must_contain: "QUOTE_PREVIEW"
+  - kind: command
+    run: "npx tsx --test 'test/anchor.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/debt.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  `formatAnchor` PHẢI giữ đúng MỘT DÒNG. Nó được dùng làm ô trong bảng `ganas
+  debt` (`rowLocation`), nên xuống dòng là phá bố cục bảng ở một chỗ chẳng liên
+  quan gì tới anchor. Cắt trích dẫn còn ~60 ký tự.
+
+  Cảnh báo `knowledge/url-anchor-without-quote` ở mức `warning`, KHÔNG error —
+  luật không-force-cứng. Đo trước khi làm: cả 7 anchor URL trong repo đều đã có
+  quote, nên luật mới sinh 0 cảnh báo, không thêm nhiễu cho ai.
+done_at: 2026-08-23T11:36:33.655Z

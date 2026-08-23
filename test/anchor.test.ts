@@ -83,3 +83,41 @@ test("hiển thị lại anchor thành chuỗi ngắn", () => {
   assert.equal(formatAnchor({ kind: "file", path: "a.ts" }), "a.ts");
   assert.equal(formatAnchor({ kind: "commit", sha: "a1b2c3d4e5" }), "commit:a1b2c3d4");
 });
+
+/* --- Trích dẫn của anchor URL (PR-009) ------------------------------------ */
+
+test("anchor URL có quote → in kèm trích dẫn, vẫn ĐÚNG MỘT DÒNG", () => {
+  // Một dòng là ràng buộc cứng: formatAnchor làm ô trong bảng `ganas debt`.
+  const out = formatAnchor({
+    kind: "url",
+    url: "https://vi.du/trang",
+    fetched_at: "2026-08-20T00:00:00Z",
+    quote: "Claude Code reads CLAUDE.md files by walking up the directory tree",
+  });
+  assert.doesNotMatch(out, /\n/, "không được xuống dòng");
+  assert.match(out, /https:\/\/vi\.du\/trang/);
+  assert.match(out, /2026-08-20/);
+  assert.match(out, /Claude Code reads/);
+});
+
+test("trích dẫn dài bị cắt kèm dấu lược; xuống dòng trong quote bị gộp lại", () => {
+  const out = formatAnchor({
+    kind: "url",
+    url: "https://vi.du/trang",
+    fetched_at: "2026-08-20T00:00:00Z",
+    quote: "mot hai ba\n   bon nam sau bay tam chin muoi muoi mot muoi hai muoi ba muoi bon",
+  });
+  assert.doesNotMatch(out, /\n/);
+  assert.match(out, /…/, "quá dài thì phải có dấu lược");
+  assert.match(out, /mot hai ba bon/, "xuống dòng và khoảng trắng thừa phải được gộp");
+});
+
+test("anchor URL KHÔNG có quote → giữ nguyên dạng cũ, không thêm dấu ngoặc rỗng", () => {
+  const out = formatAnchor({
+    kind: "url",
+    url: "https://vi.du/trang",
+    fetched_at: "2026-08-20T00:00:00Z",
+  });
+  assert.equal(out, "https://vi.du/trang (lấy 2026-08-20)");
+});
+

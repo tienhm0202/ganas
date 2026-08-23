@@ -197,6 +197,10 @@ const SCORES: Record<string, DebtScore> = {
   // lặng biến mất khỏi chỗ người thật sự nhìn.
   "icebox/without-scope": { weight: 3, ease: 5 },
 
+  // Anchor URL thiếu trích dẫn: link chết thì bằng chứng mất theo, nhưng sửa
+  // chỉ là chép lại một đoạn — miễn còn mở được trang.
+  "knowledge/url-anchor-without-quote": { weight: 3, ease: 4 },
+
   /* --- bản đồ code: tài liệu vùng, vùng chồng nhau ------------------------ */
   // Thiếu tài liệu vùng: không sai gì cả, nhưng mỗi phiên đụng vào vùng đó
   // phải tự suy lại — nợ lãi kép, và viết một file là xong.

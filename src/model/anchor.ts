@@ -121,6 +121,21 @@ export const zAnchors = z
   .array(zAnchor, { required_error: NEED_ANCHOR, invalid_type_error: NEED_ANCHOR })
   .min(1, NEED_ANCHOR);
 
+/**
+ * Trích dẫn dài bao nhiêu thì còn vừa một dòng.
+ *
+ * `formatAnchor` được dùng làm Ô trong bảng `ganas debt` (`rowLocation`,
+ * src/commands/debt.ts), nên nó PHẢI giữ đúng một dòng — xuống dòng ở đây là
+ * phá bố cục bảng ở một chỗ chẳng liên quan gì tới anchor.
+ */
+const QUOTE_PREVIEW = 60;
+
+/** Rút trích dẫn về một dòng: gộp khoảng trắng, cắt, thêm dấu lược. */
+function preview(quote: string): string {
+  const flat = quote.trim().replace(/\s+/g, " ");
+  return flat.length <= QUOTE_PREVIEW ? flat : `${flat.slice(0, QUOTE_PREVIEW).trimEnd()}…`;
+}
+
 /** Hiển thị anchor lại thành chuỗi ngắn cho brief và báo cáo. */
 export function formatAnchor(a: AnchorObject): string {
   switch (a.kind) {
@@ -130,7 +145,12 @@ export function formatAnchor(a: AnchorObject): string {
     case "commit":
       return `commit:${a.sha.slice(0, 8)}`;
     case "url":
-      return `${a.url} (lấy ${a.fetched_at.slice(0, 10)})`;
+      // Trích dẫn là thứ DUY NHẤT còn lại khi trang đã đổi — chính lý do
+      // `fetched_at` bắt buộc. Ghi vào mà không bao giờ hiện ra thì người dùng
+      // tưởng bằng chứng đã được giữ, trong khi nó nằm im trong file (PR-009).
+      return a.quote
+        ? `${a.url} (lấy ${a.fetched_at.slice(0, 10)}) — "${preview(a.quote)}"`
+        : `${a.url} (lấy ${a.fetched_at.slice(0, 10)})`;
     case "human":
       return `${a.by} ${a.at.slice(0, 10)}${a.link ? ` — ${a.link}` : ""}`;
   }
