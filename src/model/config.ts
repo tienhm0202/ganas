@@ -181,6 +181,22 @@ export const zConfig = z.object({
       ttl_minutes: z.number().int().positive().default(240),
     })
     .default({}),
+
+  /**
+   * Lệnh kiểm TOÀN DỰ ÁN mà `ganas commit` chạy trên cây sắp được commit
+   * (vd `npm run typecheck`) — khác hẳn các lệnh trong `exit_contract` của
+   * từng task, vốn chỉ kiểm đúng PHẦN task đó chạm tới. Một task có thể có
+   * exit_contract xanh (phần của nó đúng) trong khi cây tổng vẫn không biên
+   * dịch được vì một thay đổi bắt buộc trải sang phạm vi khác — đây là lớp
+   * chặn cho đúng khoảng hở đó, xem PR-007.
+   *
+   * TUỲ CHỌN, mặc định trống: dự án không khai thì `ganas commit` bỏ qua
+   * phép kiểm này kèm một dòng báo, không phải đỏ. Bắt buộc khai sẽ chặn
+   * đứng mọi dự án cũ ngay lần commit đầu tiên — trái luật `enforcement`
+   * mặc định `warn` (xem `.claude/rules/architecture.md`), nên field này
+   * phải mềm y như những luật khác.
+   */
+  build_check: z.string().optional(),
 });
 
 export type Config = z.infer<typeof zConfig>;

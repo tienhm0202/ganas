@@ -4,14 +4,15 @@ serves:
   - G-001
 implements: D-005
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: small
 model: verifier
 
 context_contract:
   must_read:
     - path: "src/model/config.ts"
-      why: "Chỗ khai schema config; có luật cảnh báo khoá lạ nên thêm khoá phải đúng chỗ"
+      why: "Chỗ khai schema config; có luật cảnh báo khoá lạ nên thêm khoá phải đúng
+        chỗ"
   facts: []
   open_questions: []
 
@@ -36,3 +37,4 @@ notes: >-
   `build_check` là TUỲ CHỌN và mặc định trống: dự án không khai thì `ganas
   commit` bỏ qua phép kiểm toàn dự án kèm một dòng báo, không phải đỏ. Bắt buộc
   khai là chặn đứng mọi dự án cũ ngay lần commit đầu.
+done_at: 2026-08-23T10:50:01.549Z
