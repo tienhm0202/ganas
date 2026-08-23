@@ -332,3 +332,32 @@ test("ganas init: --harness không có trong enum thì báo lỗi, không đoán
     await cleanup(tmp);
   }
 });
+
+/* --- Một nguồn: file luật của CHÍNH repo này phải do template sinh ra ------ */
+
+test("⭐ .claude/rules/architecture.md khớp từng ký tự với architectureRuleMd()", async () => {
+  // ganas PHÁT file luật này cho mọi dự án chạy `ganas init`. Nếu bản trong
+  // repo và bản trong template lệch nhau thì ganas đang thi hành một luật và
+  // phát đi một luật khác — đúng cái mâu thuẫn hai-nguồn-sự-thật mà chính bộ
+  // luật đó cấm. Sửa luật thì sửa TEMPLATE rồi sinh lại file, không sửa tay.
+  const { architectureRuleMd } = await import("../src/templates/project.js");
+  const root = join(import.meta.dirname, "..");
+  const onDisk = await readFile(join(root, ".claude", "rules", "architecture.md"), "utf8");
+
+  assert.equal(
+    onDisk,
+    architectureRuleMd(),
+    "file luật trong repo đã lệch khỏi template — sinh lại từ architectureRuleMd(), đừng sửa tay",
+  );
+});
+
+test("architectureRuleMd: nói rõ công cụ io dùng chung không làm hàm gọi nó thành io", async () => {
+  const { architectureRuleMd } = await import("../src/templates/project.js");
+  const content = architectureRuleMd();
+
+  assert.match(content, /công cụ io dùng chung/i);
+  assert.match(content, /existsSync/, "phải nêu ĐÍCH DANH hàm nào là công cụ, không nói chung chung");
+  // Vế thứ hai quan trọng ngang vế thứ nhất: luật này không được đọc thành
+  // "bọc lại là hết io".
+  assert.match(content, /KHÔNG nới cho thứ khác/);
+});

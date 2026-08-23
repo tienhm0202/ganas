@@ -1,10 +1,11 @@
 id: T-018
-title: "Viết luật công cụ io dùng chung vào file luật VÀ vào template phát cho dự án khác"
+title: "Viết luật công cụ io dùng chung vào file luật VÀ vào template phát cho
+  dự án khác"
 serves:
   - G-001
 implements: D-006
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
 model: main
 
@@ -13,7 +14,8 @@ context_contract:
     - path: ".claude/rules/architecture.md"
       why: "File luật đang thi hành — chỗ phải sửa"
     - path: "src/templates/project.ts"
-      why: "architectureRuleMd() phát ĐÚNG file đó cho mọi dự án ganas init; sửa một chỗ mà quên chỗ kia là dựng lại mâu thuẫn hai nguồn"
+      why: "architectureRuleMd() phát ĐÚNG file đó cho mọi dự án ganas init; sửa một
+        chỗ mà quên chỗ kia là dựng lại mâu thuẫn hai nguồn"
   facts: []
   open_questions: []
 
@@ -26,7 +28,7 @@ exit_contract:
     must_contain: "công cụ"
   - kind: artifact
     path: "src/templates/project.ts"
-    must_contain: "công cụ io dùng chung"
+    must_contain: "Công cụ io dùng chung"
   - kind: command
     run: "npx tsx --test 'test/init.test.ts'"
   - kind: verification
@@ -41,3 +43,4 @@ notes: >-
 
   Đây là task ĐI ĐẦU của D-006. Chẻ khối trước khi luật được viết thì mỗi lần
   chẻ một kiểu, và không ai đối chiếu được với cái gì.
+done_at: 2026-08-23T09:48:40.285Z
