@@ -1,0 +1,47 @@
+id: T-044
+title: "P-cli thôi nhập LEDGER_FILE/LedgerResult qua tái xuất của verify/ledger"
+serves:
+  - G-001
+implements: D-007
+scope: P-cli
+status: todo
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: ".ganas/proposals/PR-014.yaml"
+      why: "Vì sao tái xuất tồn tại và vì sao phải dọn"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli-core
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Ba dòng import, không một dòng logic: `src/boundary.ts` lấy `LEDGER_FILE` từ
+  `graph/paths.js` (file đã import sẵn `DIRS`/`GANAS_DIR` từ đó),
+  `src/commands/trace.ts` và `src/commands/verify.ts` lấy `LedgerResult` từ
+  `graph/types.js`.
+
+  Không sinh cạnh khối mới: cả ba file đã phụ thuộc M-graph-base từ trước.
+  Cạnh `M-verify → M-cli-core` sẽ CHẾT — xoá dòng đó khỏi `MISSING_EDGES`
+  trong `test/module-deps.test.ts`. Cạnh `M-verify → M-commands` thì KHÔNG:
+  `commands/verify.ts` vẫn gọi `lastFor` của `verify/ledger.ts`, đó là import
+  giá trị thật.
+
+  ĐỪNG động vào `src/verify/ledger.ts` — nó thuộc P-graph-core, ngoài phạm vi
+  này. Gỡ tái xuất là việc của T-046, sau khi cả T-044 và T-045 xong.

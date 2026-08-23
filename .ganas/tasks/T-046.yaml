@@ -1,0 +1,46 @@
+id: T-046
+title: "Gỡ ba dòng tái xuất ở verify/ledger.ts sau khi hết người dùng"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: todo
+estimated_context: small
+model: scribe
+blocked_by:
+  - T-044
+  - T-045
+
+context_contract:
+  must_read:
+    - path: ".ganas/proposals/PR-014.yaml"
+      why: "Vì sao tái xuất tồn tại và vì sao phải dọn"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-verify
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+
+notes: >-
+  Xoá `src/verify/ledger.ts:34-36` — ba dòng tái xuất `LEDGER_FILE`,
+  `LedgerEntry`/`LedgerResult`, `LEDGER_RESULT`. Chỉ được làm SAU khi T-044 và
+  T-045 xong, nếu không là gãy build ở hai phạm vi khác.
+
+  Trước khi xoá: grep toàn repo để chắc không còn ai nhập bốn tên đó từ
+  `verify/ledger.js`. Còn người dùng thì DỪNG và báo — có thể là chỗ T-044/
+  T-045 bỏ sót, hoặc là một chỗ mới sinh ra sau đó.
+
+  Không sinh và không giết cạnh khối nào: ba dòng này nhập từ M-graph-base, mà
+  `verify/ledger.ts` vốn đã nhập `ganasPath` từ đó. `MISSING_EDGES` không đổi.

@@ -1,0 +1,41 @@
+id: T-045
+title: "P-hook thôi nhập LEDGER_FILE qua tái xuất của verify/ledger"
+serves:
+  - G-001
+implements: D-007
+scope: P-hook
+status: todo
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: ".ganas/proposals/PR-014.yaml"
+      why: "Vì sao tái xuất tồn tại và vì sao phải dọn"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hook-policy
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-hook-policy/V-hook-policy-pure"
+
+notes: >-
+  Một dòng import: `src/hooks/policy/index.ts` lấy `LEDGER_FILE` từ
+  `graph/paths.js` — file đã import sẵn `CONFIG_FILE`/`DIRS`/`GANAS_DIR` từ
+  đúng chỗ đó, nên không sinh cạnh khối mới.
+
+  Cạnh `M-verify → M-hook-policy` sẽ CHẾT — xoá dòng đó khỏi `MISSING_EDGES`
+  trong `test/module-deps.test.ts`. Đây cũng là cạnh cuối cùng buộc khối LÕI
+  của hook phải biết tới khối chạy bằng chứng; gỡ xong thì `M-hook-policy`
+  đúng nghĩa lõi.
+
+  ĐỪNG động vào `src/verify/ledger.ts` — ngoài phạm vi. Gỡ tái xuất là T-046.
