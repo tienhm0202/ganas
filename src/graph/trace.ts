@@ -60,6 +60,21 @@ export function contractEdges(graph: Graph): ContractEdge[] {
 }
 
 /** Cổng ra của `from` phải phủ mọi cổng vào bắt buộc của `to`. */
+/**
+ * Kiểm GIAO, không kiểm PHỦ — một cạnh chỉ chịu trách nhiệm cho những cổng mà
+ * CHÍNH NÓ cấp.
+ *
+ * Bản cũ duyệt toàn bộ `inputs` của khối đích và đòi khối nguồn xuất hết. Nghe
+ * chặt hơn, nhưng nó làm cơ chế vô dụng với mọi khối có từ HAI phụ thuộc trở
+ * lên: `M-hook-io` nhập 13 cổng từ `M-hook-policy` và 11 cổng từ `M-claim`, nên
+ * khai đủ sự thật thì CẢ HAI cạnh cùng trượt — mỗi cạnh bị đòi những cổng thuộc
+ * về cạnh kia. Trong 20 khối của repo này phần lớn có từ hai phụ thuộc, nên
+ * bản cũ thực chất chỉ chạy được cho khối một-phụ-thuộc (xem T-031, PR-010).
+ *
+ * Cổng mà KHÔNG khối thượng nguồn nào cấp vẫn phải bị bắt — nhưng đó là câu hỏi
+ * của cả sơ đồ, không của một cạnh, nên nó nằm ở `computeDebt` dưới dạng
+ * `uncovered-port`. Bỏ tầng đó đi là mở lại đúng cái lỗ mà hàm này vừa nhường.
+ */
 function portIssues(from: Module, to: Module): PortIssue[] {
   const outputs = new Map(from.contract.outputs.map((p) => [p.name, p]));
   const issues: PortIssue[] = [];
@@ -67,13 +82,8 @@ function portIssues(from: Module, to: Module): PortIssue[] {
   for (const input of to.contract.inputs) {
     if (input.optional) continue;
     const out = outputs.get(input.name);
-    if (!out) {
-      issues.push({
-        port: input.name,
-        reason: `${from.id} không có cổng ra tên "${input.name}" mà ${to.id} cần`,
-      });
-      continue;
-    }
+    // Nguồn này không cấp cổng đó ⇒ cạnh khác lo. Im lặng ở đây là ĐÚNG vai.
+    if (!out) continue;
     if (out.shape.trim() !== input.shape.trim()) {
       issues.push({
         port: input.name,
@@ -245,7 +255,11 @@ function moduleLabel(id: string, mod: Module | undefined): string {
  * Nợ kiểm chứng của sơ đồ
  * ------------------------------------------------------------------------- */
 
-export type DebtKind = "uncovered-edge" | "broken-contract" | "unverified-module";
+export type DebtKind =
+  | "uncovered-edge"
+  | "uncovered-port"
+  | "broken-contract"
+  | "unverified-module";
 
 export interface DebtItem {
   kind: DebtKind;
@@ -274,6 +288,29 @@ export function computeDebt(graph: Graph, checks: readonly EdgeCheck[]): DebtIte
           message: `cạnh ${dep} → ${id} có trong depends_on nhưng không có bằng chứng \`kind: contract\` nào kiểm nó`,
         });
       }
+    }
+  }
+
+  // Tầng 2: kiểm PHỦ. Mọi cổng vào bắt buộc phải có ÍT NHẤT MỘT khối thượng
+  // nguồn cấp. Đây là câu hỏi của cả sơ đồ chứ không của một cạnh — và nó là
+  // vế bù cho việc `portIssues` chỉ còn kiểm giao. Thiếu vế này thì một cổng
+  // KHÔNG AI cấp sẽ im lặng lọt qua mọi cạnh.
+  for (const [id, sourced] of graph.modules) {
+    const supplied = new Set<string>();
+    for (const dep of sourced.value.depends_on) {
+      for (const out of graph.modules.get(dep)?.value.contract.outputs ?? []) {
+        supplied.add(out.name);
+      }
+    }
+    for (const input of sourced.value.contract.inputs) {
+      if (input.optional || supplied.has(input.name)) continue;
+      items.push({
+        kind: "uncovered-port",
+        moduleId: id,
+        message:
+          `khối ${id} cần cổng vào "${input.name}" nhưng không khối nào trong ` +
+          `\`depends_on\` khai cổng ra cùng tên`,
+      });
     }
   }
 

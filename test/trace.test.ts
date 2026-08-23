@@ -110,7 +110,11 @@ test("cổng khớp tên và kiểu → cạnh contract pass", async () => {
 
 /* --- Cổng thiếu ---------------------------------------------------------------- */
 
-test("khối đích cần cổng khối nguồn không có → fail, nợ broken-contract", async () => {
+test("cổng KHÔNG khối thượng nguồn nào cấp → nợ uncovered-port, KHÔNG phải cạnh trượt", async () => {
+  // Đổi từ hành vi cũ ("cạnh trượt") sang hai tầng, xem PR-010 và T-031: bản cũ
+  // bắt MỖI cạnh chịu trách nhiệm cho TOÀN BỘ cổng vào của khối đích, nên khối
+  // có từ hai phụ thuộc thì không cạnh nào đạt được. Cổng mồ côi vẫn phải bị
+  // bắt — nhưng bởi phép kiểm PHỦ của cả sơ đồ, không bởi một cạnh.
   const { root, graph } = await graphOf({
     ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
       outputs: [{ name: "text", shape: "string" }],
@@ -126,13 +130,57 @@ test("khối đích cần cổng khối nguồn không có → fail, nợ broken
   });
   try {
     const checks = await checkAllEdges(graph, root);
-    assert.equal(checks[0]!.result, "fail");
-    assert.equal(checks[0]!.issues.length, 1);
-    assert.match(checks[0]!.issues[0]!.reason, /extra/);
+    assert.equal(checks[0]!.result, "pass", "cạnh không chịu trách nhiệm cho cổng nó không cấp");
 
     const debt = computeDebt(graph, checks);
-    const broken = debt.find((d) => d.kind === "broken-contract");
-    assert.ok(broken, JSON.stringify(debt, null, 2));
+    const orphan = debt.find((d) => d.kind === "uncovered-port");
+    assert.ok(orphan, JSON.stringify(debt, null, 2));
+    assert.match(orphan.message, /extra/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("⭐ khối HAI phụ thuộc, mỗi bên cấp một nửa cổng → cả hai cạnh đều đạt", async () => {
+  // Chính ca làm T-031 phải dừng. Bản cũ: cạnh A bị đòi cổng của B và ngược
+  // lại, nên khai đủ sự thật thì cả hai cùng trượt.
+  const { root, graph } = await graphOf({
+    ".ganas/modules/M-a.yaml": moduleYaml("M-a", {
+      outputs: [{ name: "tu-a", shape: "string" }],
+      verify: [
+        `- id: V-a-probe\n    kind: probe\n    run: "true"`,
+        `${contractVerify("a-to-c", "M-c")}`,
+      ],
+    }),
+    ".ganas/modules/M-b.yaml": moduleYaml("M-b", {
+      outputs: [{ name: "tu-b", shape: "number" }],
+      verify: [
+        `- id: V-b-probe\n    kind: probe\n    run: "true"`,
+        `${contractVerify("b-to-c", "M-c")}`,
+      ],
+    }),
+    ".ganas/modules/M-c.yaml": moduleYaml("M-c", {
+      dependsOn: ["M-a", "M-b"],
+      inputs: [
+        { name: "tu-a", shape: "string" },
+        { name: "tu-b", shape: "number" },
+      ],
+    }),
+  });
+  try {
+    const checks = await checkAllEdges(graph, root);
+    assert.deepEqual(
+      checks.map((c) => c.result),
+      ["pass", "pass"],
+      JSON.stringify(checks, null, 2),
+    );
+
+    const debt = computeDebt(graph, checks);
+    assert.equal(
+      debt.filter((d) => d.kind === "uncovered-port" || d.kind === "broken-contract").length,
+      0,
+      JSON.stringify(debt, null, 2),
+    );
   } finally {
     await cleanup(root);
   }

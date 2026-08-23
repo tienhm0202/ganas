@@ -1,0 +1,51 @@
+id: T-032
+title: "Chẻ phép kiểm cạnh làm hai tầng: từng cạnh kiểm GIAO, toàn sơ đồ kiểm PHỦ"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/graph/trace.ts"
+      why: "portIssues() và computeDebt() — cả hai tầng đều nằm ở đây"
+    - path: ".ganas/proposals/PR-010.yaml"
+      why: "Lý lẽ vì sao chẻ hai tầng, và vì sao hai đường vòng đều bị loại"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-graph-read
+  - M-validate
+
+exit_contract:
+  - kind: artifact
+    path: "src/graph/trace.ts"
+    must_contain: "uncovered-port"
+  - kind: command
+    run: "npx tsx --test 'test/trace.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/debt.test.ts'"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-graph-read/V-graph-read-trace"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Tầng 1 — TỪNG CẠNH kiểm GIAO: chỉ so những input mà khối nguồn CÓ cổng ra cùng
+  tên. Input không do nguồn này cấp thì không phải việc của cạnh này.
+
+  Tầng 2 — TOÀN SƠ ĐỒ kiểm PHỦ: mọi input không `optional` phải được ít nhất một
+  khối trong `depends_on` cấp; thiếu thì sinh nợ `uncovered-port`.
+
+  Bỏ tầng 2 là làm hỏng cả bản vá: chỉ kiểm giao mà không kiểm phủ thì một cổng
+  KHÔNG AI cấp sẽ im lặng lọt qua mọi cạnh — đúng lỗ mà tầng 1 vừa mở ra.
+
+  Test phải có ca "khối hai phụ thuộc, mỗi khối cấp một nửa cổng" — chính ca làm
+  T-031 phải dừng. Không dựng lại được ca đó thì bản vá chưa chứng minh được gì.
+done_at: 2026-08-23T12:06:12.402Z

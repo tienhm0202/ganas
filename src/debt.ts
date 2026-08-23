@@ -229,6 +229,9 @@ const SCORES: Record<string, DebtScore> = {
   // Cạnh `depends_on` không cạnh contract nào kiểm — sơ đồ TRÔNG như đã nối
   // nhưng chưa ai kiểm tương thích thật.
   "uncovered-edge": { weight: 3, ease: 3 },
+  // Cổng vào không khối thượng nguồn nào cấp: sơ đồ tự mâu thuẫn — khối đòi một
+  // thứ mà theo chính sơ đồ thì không ai đưa cho nó. Nặng hơn cạnh chưa kiểm.
+  "uncovered-port": { weight: 4, ease: 3 },
   // Cạnh contract ĐANG fail — tích hợp giữa hai khối thật sự đang gãy ngay
   // lúc này, không phải nguy cơ tương lai: cùng hạng với sổ cái hỏng.
   "broken-contract": { weight: 5, ease: 3 },
@@ -464,7 +467,7 @@ export function rowsInScope(rows: readonly DebtRow[], scopeId: string | undefine
 
 /** Chỉ để test/CLI liệt kê "còn mã nào chưa chấm điểm" — không phải API chính. */
 export function knownDebtKinds(): readonly DebtKind[] {
-  return ["uncovered-edge", "broken-contract", "unverified-module"];
+  return ["uncovered-edge", "uncovered-port", "broken-contract", "unverified-module"];
 }
 
 /**
