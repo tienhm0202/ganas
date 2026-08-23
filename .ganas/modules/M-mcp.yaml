@@ -6,6 +6,14 @@ paths:
   - "src/mcp/**"
 depends_on:
   - M-commands
+
+# server.ts KHÔNG viết lại logic: mỗi tool MCP gọi thẳng `run(argv)` của đúng
+# module lệnh CLI, y hệt cli.ts (`run: flow.run`, `run: gate.run`, ...).
+contract:
+  inputs:
+    - name: run
+      shape: "(argv: Argv) => Promise<number>"
+
 status: surveyed
 verify:
   - id: V-mcp-selfcontained

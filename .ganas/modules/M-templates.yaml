@@ -4,9 +4,57 @@ title: "Nội dung ganas init sinh ra: config, luật, file hướng dẫn, git 
 nature: code
 paths:
   - "src/templates/**"
+
+# `commands/init.ts` nạp cả module (`import * as T`) và dùng gần hết mọi
+# export; `commands/scope.ts` chỉ lấy riêng `moduleGuideMd`. Khai đủ những gì
+# thật sự được gọi ở hai nơi đó — không phải mọi hàm project.ts có thể có.
+contract:
+  outputs:
+    - name: InitVars
+      shape: "{ project: string; owner?: string | undefined; harness?: Harness | undefined }"
+    - name: configYaml
+      shape: "(v: InitVars) => string"
+    - name: guideMd
+      shape: "(v: InitVars) => string"
+    - name: knowledgeRuleMd
+      shape: "() => string"
+    - name: architectureRuleMd
+      shape: "() => string"
+    - name: guideRuleMd
+      shape: "(harness: Harness) => string"
+    - name: gitRuleMd
+      shape: "() => string"
+    - name: namingRuleMd
+      shape: "() => string"
+    - name: commitMsgHook
+      shape: "() => string"
+    - name: preCommitHook
+      shape: "() => string"
+    - name: guidePointerMd
+      shape: "(v: InitVars, guide: string) => string"
+    - name: gitignoreAddition
+      shape: "() => string"
+    - name: sampleGoal
+      shape: "(id: string, v: InitVars) => string"
+    - name: readme
+      shape: "() => string"
+    - name: moduleGuideMd
+      shape: "(v: { id: string; title: string; dir: string; nature: string; probes: readonly string[] }) => string"
+
 status: surveyed
 verify:
   - id: V-templates-init
     kind: probe
     run: "npx tsx --test 'test/init.test.ts'"
     expect: exit_zero
+  # Cạnh nội dung → lệnh: `init.ts` dựng project mới từ gần hết export của
+  # project.ts, `scope.ts` lấy riêng `moduleGuideMd` để vá file hướng dẫn khối.
+  - id: V-templates-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -q "export function configYaml(v: InitVars): string {" src/templates/project.ts &&
+      grep -q "export function readme(): string {" src/templates/project.ts &&
+      grep -q "export function moduleGuideMd(v: {" src/templates/project.ts &&
+      grep -q "T.configYaml(vars)" src/commands/init.ts &&
+      grep -q "moduleGuideMd({" src/commands/scope.ts

@@ -4,6 +4,19 @@ title: "Điểm vào CLI: parse argv, điều phối lệnh con"
 nature: io
 paths:
   - "src/cli.ts"
+
+# cli.ts KHÔNG export gì — nó là entrypoint tự thực thi. Nó cũng không được
+# khối nào nhập: `src/commands/*` không import gì từ đây. Chiều thật là NGƯỢC
+# LẠI — cli.ts nạp động từng module lệnh rồi gọi `mod.run(argv)`, nên nó là bên
+# TIÊU THỤ. Bản đồ khai `M-commands depends_on M-cli` từ T-006, sai chiều suốt
+# tới T-033.
+contract:
+  inputs:
+    - name: run
+      shape: "(argv: Argv) => Promise<number>"
+
+depends_on:
+  - M-commands
 status: surveyed
 verify:
   - id: V-cli-smoke

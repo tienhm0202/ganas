@@ -1,0 +1,84 @@
+id: T-033
+title: "Hợp đồng kiểm cho 7 cạnh của P-cli"
+serves:
+  - G-001
+implements: D-007
+scope: P-cli
+status: done
+estimated_context: large
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "KHUÔN đã chạy được: cổng khai bằng chữ ký thật, cạnh contract có run nhắc
+        tên cổng"
+    - path: ".ganas/modules/M-hook-io.yaml"
+      why: "Phía đích của khuôn — inputs khai ĐỦ từ mọi khối thượng nguồn"
+    - path: "src/graph/trace.ts"
+      why: "portIssues kiểm GIAO, computeDebt kiểm PHỦ — hiểu hai tầng trước khi khai"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli
+  - M-cli-core
+  - M-commands
+  - M-templates
+  - M-render
+  - M-workflow
+  - M-mcp
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts trace --scope P-cli"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-cli/V-cli-smoke"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-templates/V-templates-init"
+  - kind: verification
+    target: "M-render/V-render-brief"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-mcp/V-mcp-selfcontained"
+
+notes: >-
+  Bảy cạnh: M-cli→M-commands, M-cli-core→M-workflow, M-commands→M-mcp,
+  M-render→M-commands, M-templates→M-commands, M-workflow→M-commands,
+  M-workflow→M-render.
+
+  Điều kiện hoàn thành THẬT: `ganas trace --scope P-cli` thoát 0, tức không còn
+  `uncovered-edge` lẫn `uncovered-port` nào trong phạm vi.
+
+  KHÔNG chẻ nhỏ task này: nhiều cạnh dùng chung một file khối (M-commands là
+  đích của ba cạnh), nên hai người làm song song sẽ đè lên nhau.
+
+  HAI CẠNH SAI SỰ THẬT, phát hiện lúc rà và đã sửa trong task này:
+
+  1. `M-render → M-workflow` LỖI THỜI. Cạnh có từ T-006, lúc `src/search.ts`
+     còn nằm trong M-workflow; T-021 tách file đó sang M-cli-core mà không ai
+     sửa cạnh. Hôm nay `brief.ts` không import gì từ 5 file hiện tại của
+     M-workflow. Đã đảo `depends_on` của M-render sang M-cli-core và khai cổng
+     THẬT (`searchFacts`, `taskQuery`).
+
+     Sub-agent ban đầu khai cổng `isAutoCriterion`/`criterionKey` theo SUY ĐOÁN
+     về ý định kiến trúc ("brief.ts đang tự làm lại logic đó bằng tay"). Nó báo
+     rõ đó là suy đoán chứ không giấu — nhưng cổng dựa trên suy đoán là đúng
+     thứ D-007 cấm, nên đã thay bằng import thật.
+
+  2. `M-cli → M-commands` SAI CHIỀU. `src/commands/*` không import gì từ
+     `cli.ts`; ngược lại `cli.ts` nạp động từng lệnh rồi gọi `mod.run(argv)`.
+     Đã đảo: M-cli `depends_on: [M-commands]`, và M-commands cấp cổng `run`.
+
+  Cả hai đều thuộc đúng lớp lỗi PR-011 mô tả — `depends_on` lệch khỏi import
+  thật, và không gì kiểm điều đó.
+done_at: 2026-08-23T13:08:42.062Z

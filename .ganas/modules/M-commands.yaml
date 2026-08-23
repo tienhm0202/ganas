@@ -5,13 +5,115 @@ nature: io
 paths:
   - "src/commands/**"
 depends_on:
-  - M-cli
   - M-templates
   - M-render
   - M-workflow
+
+# `inputs`: hợp nhất ba cạnh tới khối này (M-templates, M-render, M-workflow) — mỗi tên khớp CHỮ KÝ TỪNG KÝ TỰ với `outputs` bên khối cấp nó,
+# xem verify tương ứng ở từng khối đó để biết bằng chứng.
+# `outputs`: `run` — mọi module lệnh export, M-mcp gọi lại qua `server.ts`.
+contract:
+  inputs:
+    # từ M-templates — xem V-templates-to-commands
+    - name: InitVars
+      shape: "{ project: string; owner?: string | undefined; harness?: Harness | undefined }"
+    - name: configYaml
+      shape: "(v: InitVars) => string"
+    - name: guideMd
+      shape: "(v: InitVars) => string"
+    - name: knowledgeRuleMd
+      shape: "() => string"
+    - name: architectureRuleMd
+      shape: "() => string"
+    - name: guideRuleMd
+      shape: "(harness: Harness) => string"
+    - name: gitRuleMd
+      shape: "() => string"
+    - name: namingRuleMd
+      shape: "() => string"
+    - name: commitMsgHook
+      shape: "() => string"
+    - name: preCommitHook
+      shape: "() => string"
+    - name: guidePointerMd
+      shape: "(v: InitVars, guide: string) => string"
+    - name: gitignoreAddition
+      shape: "() => string"
+    - name: sampleGoal
+      shape: "(id: string, v: InitVars) => string"
+    - name: readme
+      shape: "() => string"
+    - name: moduleGuideMd
+      shape: "(v: { id: string; title: string; dir: string; nature: string; probes: readonly string[] }) => string"
+    # từ M-render — xem V-render-to-commands
+    - name: renderBrief
+      shape: "(input: BriefInput) => string"
+    - name: renderGroupedByScope
+      shape: "<T>(graph: Graph, items: readonly T[], taskOf: (item: T) => Task, renderTask: (item: T) => string) => string"
+    # từ M-workflow — xem V-workflow-to-commands
+    - name: alreadyGreen
+      shape: "(gate: GateResult, baseline: Record<string, boolean> | undefined) => CriterionResult[]"
+    - name: evaluateGate
+      shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
+    - name: formatGate
+      shape: "(result: GateResult) => string"
+    - name: criterionKey
+      shape: "(c: ExitCriterion) => string"
+    - name: isAutoCriterion
+      shape: "(c: ExitCriterion) => boolean"
+    - name: GateResult
+      shape: "{ task: string; ok: boolean; results: CriterionResult[]; unmet: CriterionResult[]; pendingHuman: CriterionResult[] }"
+    - name: applyPrune
+      shape: "(root: string, plan: PrunePlan) => Promise<void>"
+    - name: planPrune
+      shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
+    - name: PrunePlan
+      shape: "{ staleRuns: StaleRun[]; deadSessions: DeadSession[]; doneTasks: ArchivableRecord[]; iceboxFiles: ArchivableIceboxFile[] }"
+    - name: notePath
+      shape: "(root: string, sessionId: string) => string"
+    - name: generateHandoff
+      shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined }) => Promise<HandoffResult>"
+    - name: buildCommitMessage
+      shape: "(graph: Graph, task: Task, gate: GateResult) => string"
+    - name: checkStagedTree
+      shape: "(root: string, task: Task, buildCheck?: string) => Promise<StagedTreeCheck>"
+    - name: formatStagedTreeCheck
+      shape: "(taskId: string, check: StagedTreeCheck) => string"
+    - name: flowContext
+      shape: "(cwd: string) => Promise<FlowContext>"
+    - name: nextStep
+      shape: "(c: FlowContext) => FlowStep | null"
+    - name: STAGES
+      shape: "Stage[]"
+  outputs:
+    - name: run
+      shape: "(argv: Argv) => Promise<number>"
+
 status: surveyed
 verify:
   - id: V-commands-smoke
     kind: probe
     run: "npx tsx --test 'test/icebox-cmd.test.ts'"
     expect: exit_zero
+  # Cạnh lệnh → adapter MCP: `server.ts` không viết lại logic, chỉ gọi thẳng
+  # `run(argv)` của từng module lệnh (`commit.run`, `flow.run`, `gate.run`,
+  # `next.run`, `scope.run`, `trace.run`, `verify.run`).
+  - id: V-commands-to-mcp
+    kind: contract
+    to: M-mcp
+    run: >-
+      grep -q "export async function run(argv: Argv): Promise<number> {" src/commands/flow.ts &&
+      grep -q "export async function run(argv: Argv): Promise<number> {" src/commands/gate.ts &&
+      grep -q "export async function run(argv: Argv): Promise<number> {" src/commands/next.ts &&
+      grep -q "export async function run(argv: Argv): Promise<number> {" src/commands/scope.ts &&
+      grep -q "export async function run(argv: Argv): Promise<number> {" src/commands/trace.ts &&
+      grep -q "export async function run(argv: Argv): Promise<number> {" src/commands/verify.ts &&
+      grep -q "export async function run(argv: Argv): Promise<number> {" src/commands/commit.ts &&
+      grep -q "run: flow.run" src/mcp/server.ts
+  # Cạnh lệnh con → router. Chiều này mới đúng code: `cli.ts` nạp động
+  # `./commands/x.js` rồi gọi `mod.run(argv)`, nên lệnh là bên CẤP `run`.
+  - id: V-commands-to-cli
+    kind: contract
+    to: M-cli
+    run: >-
+      grep -q "export async function run(argv: Argv): Promise<number>" src/commands/proposal.ts

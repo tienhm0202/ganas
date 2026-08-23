@@ -10,9 +10,75 @@ paths:
   - "src/prune.ts"
 depends_on:
   - M-cli-core
+
+# `outputs`: hợp nhất mọi tên mà `src/commands/*.ts` thật sự import từ 5 file
+# của khối này (gate/prune/handoff/commit/flow.ts) — không phải mọi export.
+# `isAutoCriterion`/`criterionKey` còn được M-render dùng (xem ghi chú ở
+# M-render.yaml — cạnh đó là phán đoán, cạnh NÀY tới M-commands thì là import
+# thật, kiểm được trực tiếp).
+#
+# `inputs`: `flowContext` (flow.ts) hỏi `taskBoundary` qua dynamic import từ
+# M-cli-core — xem V-cli-core-to-workflow.
+contract:
+  outputs:
+    - name: alreadyGreen
+      shape: "(gate: GateResult, baseline: Record<string, boolean> | undefined) => CriterionResult[]"
+    - name: evaluateGate
+      shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
+    - name: formatGate
+      shape: "(result: GateResult) => string"
+    - name: criterionKey
+      shape: "(c: ExitCriterion) => string"
+    - name: isAutoCriterion
+      shape: "(c: ExitCriterion) => boolean"
+    - name: GateResult
+      shape: "{ task: string; ok: boolean; results: CriterionResult[]; unmet: CriterionResult[]; pendingHuman: CriterionResult[] }"
+    - name: applyPrune
+      shape: "(root: string, plan: PrunePlan) => Promise<void>"
+    - name: planPrune
+      shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
+    - name: PrunePlan
+      shape: "{ staleRuns: StaleRun[]; deadSessions: DeadSession[]; doneTasks: ArchivableRecord[]; iceboxFiles: ArchivableIceboxFile[] }"
+    - name: notePath
+      shape: "(root: string, sessionId: string) => string"
+    - name: generateHandoff
+      shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined }) => Promise<HandoffResult>"
+    - name: buildCommitMessage
+      shape: "(graph: Graph, task: Task, gate: GateResult) => string"
+    - name: checkStagedTree
+      shape: "(root: string, task: Task, buildCheck?: string) => Promise<StagedTreeCheck>"
+    - name: formatStagedTreeCheck
+      shape: "(taskId: string, check: StagedTreeCheck) => string"
+    - name: flowContext
+      shape: "(cwd: string) => Promise<FlowContext>"
+    - name: nextStep
+      shape: "(c: FlowContext) => FlowStep | null"
+    - name: STAGES
+      shape: "Stage[]"
+  inputs:
+    - name: taskBoundary
+      shape: "(task: Task, graph: Graph) => string[]"
+
 status: surveyed
 verify:
   - id: V-workflow-commit
     kind: probe
     run: "npx tsx --test 'test/commit-staging.test.ts'"
     expect: exit_zero
+  # Cạnh vỏ workflow → lệnh: gate.ts/prune.ts/handoff.ts/commit.ts/flow.ts cấp
+  # gần hết logic cho commands/gate.ts, prune.ts, handoff.ts, commit.ts,
+  # flow.ts, next.ts, note.ts. Kiểm một lát cắt đại diện qua các file, không
+  # phải cả 17 cổng — `portIssues`/`computeDebt` đã đối chiếu đủ ở tầng khai.
+  - id: V-workflow-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -q "export async function evaluateGate(" src/gate.ts &&
+      grep -q "export async function applyPrune(root: string, plan: PrunePlan): Promise<void> {" src/prune.ts &&
+      grep -q "export async function generateHandoff(" src/handoff.ts &&
+      grep -q "export function buildCommitMessage(graph: Graph, task: Task, gate: GateResult): string {" src/commit.ts &&
+      grep -q "export const STAGES: Stage\[\] = \[" src/flow.ts
+  # Cạnh vỏ workflow → chữ dựng brief: xem ghi chú ở M-render.yaml — đây là
+  # cạnh PHÁN ĐOÁN (depends_on có từ trước khi search.ts tách khỏi khối này),
+  # nên `run` chỉ khẳng định hai chữ ký thật còn nguyên văn, không khẳng định
+  # brief.ts đang gọi chúng.

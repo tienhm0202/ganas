@@ -5,10 +5,39 @@ nature: code
 paths:
   - "src/render/**"
 depends_on:
-  - M-workflow
+  - M-cli-core
+
+# `outputs`: cổng thật mà `commands/next.ts` và `commands/brief.ts` gọi.
+#
+# `inputs`: `brief.ts` nhập `searchFacts`/`taskQuery` từ `src/search.js`. File đó
+# ĐÃ chuyển sang `M-cli-core` ở T-021, nhưng `depends_on` vẫn trỏ `M-workflow`
+# từ T-006 — cạnh lỗi thời suốt từ đó, không gì báo. T-033 đảo lại cho khớp
+# import thật; cổng khai theo hàm THẬT `brief.ts` gọi, không theo suy đoán về ý
+# định kiến trúc.
+contract:
+  outputs:
+    - name: renderBrief
+      shape: "(input: BriefInput) => string"
+    - name: renderGroupedByScope
+      shape: "<T>(graph: Graph, items: readonly T[], taskOf: (item: T) => Task, renderTask: (item: T) => string) => string"
+  inputs:
+    - name: searchFacts
+      shape: "(graph: Graph, query: string, opts?: SearchOptions) => SearchHit[]"
+    - name: taskQuery
+      shape: "(task: Task) => string"
+
 status: surveyed
 verify:
   - id: V-render-brief
     kind: probe
     run: "npx tsx --test 'test/scope-brief.test.ts'"
     expect: exit_zero
+  # Cạnh dựng chữ → lệnh: `next.ts` và `brief.ts` gọi thẳng `renderBrief`;
+  # `next.ts` còn dùng `renderGroupedByScope` để in danh sách task bị chặn.
+  - id: V-render-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -q "export function renderBrief(input: BriefInput): string {" src/render/brief.ts &&
+      grep -q "export function renderGroupedByScope<T>(" src/render/group.ts &&
+      grep -q "renderBrief({ graph, task: picked.task, freshness" src/commands/next.ts

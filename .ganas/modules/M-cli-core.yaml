@@ -8,6 +8,19 @@ paths:
   # Parser tham số: thuần, và thuộc LỚP LỆNH — để ở M-util (P-graph-core) thì
   # một file chỉ CLI dùng lại nằm trong phạm vi đồ thị tri thức.
   - "src/util/args.ts"
+
+# `flow.ts` (M-workflow) nạp `taskBoundary` bằng dynamic import
+# (`await import("./boundary.js")`), không phải import tĩnh — grep import
+# thường không thấy, nhưng cạnh vẫn có thật.
+contract:
+  outputs:
+    - name: searchFacts
+      shape: "(graph: Graph, query: string, opts?: SearchOptions) => SearchHit[]"
+    - name: taskQuery
+      shape: "(task: Task) => string"
+    - name: taskBoundary
+      shape: "(task: Task, graph: Graph) => string[]"
+
 status: surveyed
 verify:
   - id: V-cli-core-boundary
@@ -21,3 +34,20 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/search.test.ts'"
     expect: exit_zero
+  # Cạnh cốt lõi → vỏ workflow: `flowContext` (src/flow.ts) hỏi
+  # `taskBoundary` để tính pathspec `git status` — qua dynamic import, nên
+  # kiểm cả khai báo thật ở nguồn lẫn chỗ gọi động ở đích.
+  - id: V-cli-core-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -q "export function taskBoundary(task: Task, graph: Graph): string\[\]" src/boundary.ts &&
+      grep -q 'await import("./boundary.js")' src/flow.ts
+  # Cạnh sinh ra khi `search.ts` chuyển sang khối này (T-021) — `brief.ts` vẫn
+  # gọi nó, chỉ là cạnh trong bản đồ trỏ nhầm khối cũ tới tận T-033.
+  - id: V-cli-core-to-render
+    kind: contract
+    to: M-render
+    run: >-
+      grep -q "export function searchFacts(" src/search.ts &&
+      grep -q "export function taskQuery(" src/search.ts
