@@ -1,0 +1,15 @@
+id: PR-011
+title: "depends_on không khớp import thật, và không gì kiểm điều đó"
+scope: P-graph-core
+problem: >-
+  Trong lúc khai hợp đồng cho P-graph-core (T-034) lộ ra hai loại lệch giữa bản đồ và code, cả hai đều im lặng. MỘT: chiều sai. M-fsprobe khai depends_on M-util từ T-019, nhưng fsprobe.ts không import gì từ khối đó — chiều thật ngược lại, glob.ts mới là nơi import listDir. Sai suốt từ T-019 tới T-034 mới có người đọc code mà phát hiện. HAI: cạnh thiếu. Nhiều import thật KHÔNG có depends_on tương ứng: freshness.ts nhập Fact/Freshness từ M-model, mtimeMs từ M-fsprobe, listProjectFiles/matchesAny từ M-util; verify/ledger.ts nhập exists từ M-fsprobe; graph/types.ts nhập LoadedYaml từ M-load. Vì computeDebt chỉ kiểm những cạnh ĐÃ KHAI, cạnh không khai thì không sinh nợ — bản đồ càng thiếu càng sạch, đúng chiều khuyến khích ngược.
+proposed_change: >-
+  Thêm một test cơ học cùng khuôn test/module-map.test.ts và test/module-nature.test.ts: quét import thật giữa các file, quy về khối theo paths, rồi đối chiếu với depends_on. Lệch thì đỏ. Hai vế: mỗi import xuyên khối phải có depends_on tương ứng, và mỗi depends_on phải có ít nhất một import thật đỡ nó — vế sau bắt được đúng ca M-fsprobe sai chiều. Nếu bộ đầu tiên nổ quá nhiều thì khai TẬP ĐÓNG như PENDING của fsprobe.test.ts, không dùng danh sách bỏ qua im lặng.
+anchors:
+  - "src/graph/trace.ts:264"
+  - ".ganas/modules/M-fsprobe.yaml:1"
+  - "src/graph/freshness.ts:1"
+weight: 4
+ease: 3
+found_at: "2026-08-23T13:02:03.069Z"
+status: pending
