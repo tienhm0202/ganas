@@ -9,10 +9,14 @@ stdout đúng khuôn Claude Code hiểu được (`readHookInput`/`writeHookOutp
 `src/hooks/io.ts`). Mọi khối khác trong ganas chỉ tính toán trên đồ thị đã nạp
 sẵn trong bộ nhớ; khối này là ranh giới thật.
 
-> Bản đồ hiện khai khối này `nature: code`, tức là LÕI — mâu thuẫn với đoạn
-> trên, vì lõi thì không được tự chạm ra ngoài (`.claude/rules/architecture.md`).
-> Chỗ lệch này đang chờ người quyết: `ganas proposal show PR-003`. Đừng tự sửa
-> nhãn, và cũng đừng dựa vào nó để kết luận khối này là lõi.
+> Thư mục này chứa HAI khối, và ranh giới giữa chúng là ranh giới lõi/vỏ:
+> `M-hook-policy` (`policy.ts`, `nature: code`) giữ mọi PHÁN QUYẾT — chặn hay
+> cho qua, và nói gì với người. `M-hook-io` (`handlers.ts` + `io.ts`,
+> `nature: io`) chỉ gom dữ liệu từ đĩa, hỏi policy, rồi phát kết quả ra stdout.
+>
+> Sửa một LUẬT thì sửa `policy.ts` và test nó bằng `test/hook-policy.test.ts` —
+> không cần dựng dự án giả trên đĩa. Sửa cách LẤY dữ liệu thì sửa `handlers.ts`,
+> và `test/hooks.test.ts` là lưới an toàn cho phần nối dây.
 
 ## Cổng vào
 

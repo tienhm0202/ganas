@@ -18,7 +18,7 @@ context_contract:
   open_questions: []
 
 touches:
-  - M-hooks
+  - M-hook-io
 
 exit_contract:
   - kind: artifact
@@ -27,11 +27,17 @@ exit_contract:
   - kind: command
     run: "npx tsx src/cli.ts validate"
   - kind: verification
-    target: "M-hooks/V-hooks-smoke"
+    target: "M-hook-io/V-hooks-smoke"
 
 notes: >-
   Vùng này là chỗ DUY NHẤT của ganas chặn được thao tác sai, nên bất biến đáng
   ghi nhất là: hook không bao giờ được ném lỗi ra ngoài (hỏng hook = hỏng cả
   phiên), và mọi luật chặn phải đi qua `enforcementFor()` để dự án cũ hạ được
   xuống `warn`.
+
+  BẢN GHI ĐƯỢC SỬA SAU (2026-08-23, T-020): khối `M-hooks` bị chẻ thành
+  `M-hook-policy` + `M-hook-io`, nên `touches` và target bằng chứng ở đây được
+  trỏ lại sang id kế thừa. Không phải làm đẹp lịch sử: giữ id đã chết thì graph
+  đứt và `ganas validate` đỏ vĩnh viễn, còn đây là cùng một vùng code dưới tên
+  mới.
 done_at: 2026-08-21T10:37:51.391Z
