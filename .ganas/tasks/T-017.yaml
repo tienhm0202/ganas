@@ -1,0 +1,44 @@
+id: T-017
+title: "proposal approve: trỏ promoted_to được cho đề xuất ĐÃ duyệt, đúng như
+  lời lệnh tự hứa"
+serves:
+  - G-001
+implements: D-004
+scope: P-cli
+status: done
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/commands/proposal.ts"
+      why: "runApprove in ra lời hứa, requirePending chặn chính lời hứa đó — hai chỗ
+        cách nhau vài dòng"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/proposal-cli.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Duyệt xong, lệnh in "Chưa trỏ tới thực thể nào — tạo design/task rồi chạy lại
+  với `--promoted-to <id>`". Chạy lại thì `requirePending` từ chối vì đề xuất đã
+  `approved`. Lời hứa và hàng rào cùng nằm trong một file, cách nhau vài chục
+  dòng, và không test nào đi hết đường đó nên không ai thấy.
+
+  Sửa hẹp: chỉ cho phép ĐIỀN promoted_to còn trống cho đề xuất đã `approved` —
+  không đụng `decided_by`/`decided_at` (quyết định cũ giữ nguyên), không cho đổi
+  promoted_to đã có (đổi đích là chuyện khác, phải là đề xuất mới), và
+  `rejected`/`superseded` vẫn bị chặn như cũ.
+
+  Test phải đi ĐÚNG con đường người dùng thật đi: approve → tạo design → approve
+  lại kèm --promoted-to. Đó là con đường không test nào đi, nên lỗi lọt.
+done_at: 2026-08-23T09:15:38.625Z

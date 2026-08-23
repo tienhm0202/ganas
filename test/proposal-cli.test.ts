@@ -239,3 +239,57 @@ test("show: pending thì chỉ đường cho người quyết; id ma thì báo l
     await cleanup(root);
   }
 });
+
+test("duyệt xong rồi mới tạo design → trỏ promoted_to được, đúng con đường lệnh tự chỉ", async () => {
+  // Con đường THẬT của người dùng, và là con đường không test nào đi trước bản
+  // này: lúc duyệt thì design chưa tồn tại, nên `--promoted-to` phải điền sau.
+  const root = await makeProject(validSpine());
+  try {
+    await runCli(root, ["new"], NEW_OPTS);
+    const first = await runCli(root, ["approve", "PR-001"], { options: { by: "@nguoi-duyet" } });
+    assert.match(first.out, /--promoted-to/, "lệnh phải chỉ đường điền sau");
+
+    // D-001 có sẵn trong `validSpine()` — đóng vai design vừa được tạo.
+    const second = await runCli(root, ["approve", "PR-001"], {
+      options: { "promoted-to": "D-001" },
+    });
+    assert.equal(second.code, 0);
+
+    const graph = await loadGraph(root);
+    const p = graph.proposals.get("PR-001")?.value;
+    assert.equal(p?.promoted_to, "D-001");
+    assert.equal(p?.decided_by, "@nguoi-duyet", "quyết định cũ phải giữ nguyên, không bị ghi đè");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("đã trỏ promoted_to rồi thì không đổi đích — đổi đích là quyết định mới", async () => {
+  const root = await makeProject(validSpine());
+  try {
+    await runCli(root, ["new"], NEW_OPTS);
+    await runCli(root, ["approve", "PR-001"], {
+      options: { by: "@nguoi-duyet", "promoted-to": "D-001" },
+    });
+    await assert.rejects(
+      () => runCli(root, ["approve", "PR-001"], { options: { "promoted-to": "T-001" } }),
+      /supersedes/,
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("đề xuất đã TỪ CHỐI thì --promoted-to vẫn bị chặn", async () => {
+  const root = await makeProject(validSpine());
+  try {
+    await runCli(root, ["new"], NEW_OPTS);
+    await runCli(root, ["reject", "PR-001"], { options: { by: "@nguoi-duyet", why: "chưa cần" } });
+    await assert.rejects(
+      () => runCli(root, ["approve", "PR-001"], { options: { "promoted-to": "D-001" } }),
+      /rejected/,
+    );
+  } finally {
+    await cleanup(root);
+  }
+});

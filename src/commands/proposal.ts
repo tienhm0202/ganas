@@ -333,10 +333,40 @@ function requirePending(p: Proposal): void {
   }
 }
 
+/**
+ * Điền `promoted_to` còn trống cho một đề xuất ĐÃ duyệt.
+ *
+ * Đây là nửa sau của một việc vốn không làm một lần được: lúc duyệt thì
+ * design/task chưa tồn tại, mà `--promoted-to` lại đòi thực thể có thật. Chính
+ * `runApprove` in ra "tạo design/task rồi chạy lại với --promoted-to" — trước
+ * bản này, chạy lại thì `requirePending` từ chối, tức là lệnh hứa một đường
+ * rồi chặn đúng đường đó.
+ *
+ * Hẹp có chủ đích: KHÔNG đụng `decided_by`/`decided_at` (quyết định cũ là của
+ * người khác, ở thời điểm khác — ghi đè là sửa lịch sử), và KHÔNG cho đổi một
+ * `promoted_to` đã có. Trỏ lại đích khác là một quyết định mới, phải đi đường
+ * đề xuất mới kèm `supersedes`.
+ */
+async function fillPromotedTo(
+  root: string,
+  sourced: Sourced<Proposal>,
+  promotedTo: string,
+): Promise<number> {
+  const p = sourced.value;
+  if (p.promoted_to !== undefined) {
+    throw new GanasError(
+      `đề xuất ${p.id} đã trỏ tới ${p.promoted_to} — không đổi đích được. ` +
+        `Trỏ lại chỗ khác là một quyết định mới: ghi đề xuất mới với \`supersedes: [${p.id}]\`.`,
+    );
+  }
+
+  await writeUpdate(root, sourced, { promoted_to: promotedTo });
+  process.stdout.write(`${p.id} (đã duyệt trước đó) nay trỏ tới ${promotedTo}.\n`);
+  return 0;
+}
+
 async function runApprove(argv: Argv, root: string, graph: Graph): Promise<number> {
   const sourced = requireProposal(graph, argv.positional[1]);
-  requirePending(sourced.value);
-  const by = requireDecider(argv);
 
   const promotedTo = option(argv, "promoted-to");
   if (promotedTo !== undefined) {
@@ -348,6 +378,16 @@ async function runApprove(argv: Argv, root: string, graph: Graph): Promise<numbe
       );
     }
   }
+
+  // Đã duyệt + chỉ đưa thêm `--promoted-to` ⇒ đây là nửa sau của lượt duyệt
+  // trước, không phải một lượt quyết mới. Không đòi `--by` lại: người quyết đã
+  // ghi rồi, hỏi lại chỉ tạo cơ hội ghi đè bằng một cái tên khác.
+  if (sourced.value.status === "approved" && promotedTo !== undefined) {
+    return fillPromotedTo(root, sourced, promotedTo);
+  }
+
+  requirePending(sourced.value);
+  const by = requireDecider(argv);
 
   await writeUpdate(root, sourced, {
     status: "approved",
