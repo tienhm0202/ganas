@@ -1,0 +1,50 @@
+id: T-035
+title: "Test đối chiếu depends_on với import thật, hai vế"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "test/module-map.test.ts"
+      why: "Khuôn test cơ học đọc .ganas/modules rồi đối chiếu với cây code"
+    - path: "test/fsprobe.test.ts"
+      why: "Khuôn TẬP ĐÓNG (PENDING) — cách khai nợ mà không cho nó phình"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-validate
+
+exit_contract:
+  - kind: artifact
+    path: "test/module-deps.test.ts"
+    must_contain: "MISSING_EDGES"
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Hiện thực PR-011. Đo trước khi làm (2026-08-23): 67 import xuyên khối chưa có
+  `depends_on`, và 0 cạnh không import nào đỡ.
+
+  VẾ 2 (`depends_on` phải có import thật đỡ) siết CHẶT, rỗng là rỗng. Đây là vế
+  bắt được cả ba lỗi của phiên này: M-fsprobe→M-util sai chiều, M-cli→M-commands
+  sai chiều, M-render→M-workflow lỗi thời.
+
+  VẾ 1 (import thật phải có `depends_on`) khai TẬP ĐÓNG 67 mục. KHÔNG thêm 66
+  cạnh vào graph: mỗi cạnh mới đẻ một `uncovered-edge`, tức 67 hợp đồng phải
+  khai — việc đó lớn hơn hẳn và phải do người quyết. Tập đóng giữ cho nó không
+  phình, và ai dọn được mục nào thì xoá mục đó.
+
+  Phép quét PHẢI tính cả `import()` động: `cli.ts` nạp lệnh và `flow.ts` nạp
+  `boundary.js` đều bằng đường đó. Bỏ sót thì hai cạnh đúng bị báo oan là "không
+  import nào đỡ" — tôi đã vấp đúng chỗ này lúc đo.
+done_at: 2026-08-23T13:14:56.718Z
