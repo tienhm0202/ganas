@@ -2,13 +2,26 @@ id: PR-009
 title: "Trích dẫn của anchor URL không bao giờ được hiện ra"
 scope: P-graph-core
 problem: >-
-  zUrlAnchor có trường quote (trích dẫn đoạn đã đọc trên trang), nhưng KHÔNG code nào trong dự án đọc nó — formatAnchor chỉ in url kèm ngày fetched_at. Đó là chỗ đau nhất để bỏ sót: cả lý do anchor URL bắt buộc có fetched_at là vì web đổi, mà thứ duy nhất còn lại khi trang đã đổi chính là quote. Hiện người dùng được mời ghi trích dẫn vào một trường không ai đọc, rồi tin rằng bằng chứng đã được giữ. Guard trường-schema-không-ai-đọc mới bắt được nó sau khi PR-008 nới phép trích (trước đó cả nhánh anchor nằm ngoài tầm quét).
+  zUrlAnchor có trường quote (trích dẫn đoạn đã đọc trên trang), nhưng KHÔNG
+  code nào trong dự án đọc nó — formatAnchor chỉ in url kèm ngày fetched_at. Đó
+  là chỗ đau nhất để bỏ sót: cả lý do anchor URL bắt buộc có fetched_at là vì
+  web đổi, mà thứ duy nhất còn lại khi trang đã đổi chính là quote. Hiện người
+  dùng được mời ghi trích dẫn vào một trường không ai đọc, rồi tin rằng bằng
+  chứng đã được giữ. Guard trường-schema-không-ai-đọc mới bắt được nó sau khi
+  PR-008 nới phép trích (trước đó cả nhánh anchor nằm ngoài tầm quét).
 proposed_change: >-
-  Cho formatAnchor in kèm trích dẫn khi có, dạng rút gọn (vd 60 ký tự đầu) để không phá bố cục bảng nợ và brief. Cân nhắc thêm: validate cảnh báo khi anchor URL không có quote — web đổi thì một URL trần không neo được gì, đúng lý lẽ đã dùng để bắt buộc fetched_at. Hai phần này có thể tách hai task; phần in ra là bắt buộc, phần cảnh báo là tuỳ người quyết.
+  Cho formatAnchor in kèm trích dẫn khi có, dạng rút gọn (vd 60 ký tự đầu) để
+  không phá bố cục bảng nợ và brief. Cân nhắc thêm: validate cảnh báo khi anchor
+  URL không có quote — web đổi thì một URL trần không neo được gì, đúng lý lẽ đã
+  dùng để bắt buộc fetched_at. Hai phần này có thể tách hai task; phần in ra là
+  bắt buộc, phần cảnh báo là tuỳ người quyết.
 anchors:
   - "src/model/anchor.ts:36"
   - "src/model/anchor.ts:125"
 weight: 3
 ease: 4
 found_at: "2026-08-23T11:28:40.151Z"
-status: pending
+status: approved
+decided_by: "@tienhm"
+decided_at: 2026-08-23T11:33:54.215Z
+promoted_to: T-030
