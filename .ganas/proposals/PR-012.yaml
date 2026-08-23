@@ -2,13 +2,27 @@ id: PR-012
 title: "Chẻ lõi/vỏ ở src/hooks/ vẫn còn vòng: policy nhập kiểu từ io"
 scope: P-hook
 problem: >-
-  T-020 chẻ M-hook-policy (lõi) khỏi M-hook-io (vỏ), nhưng policy/index.ts vẫn import type HookOutput từ io/io.ts. Chiều io→policy là đúng thiết kế; chiều policy→io biến cặp này thành một CHU TRÌNH thật ở mức khối. Không ai thấy suốt từ T-020 vì cạnh policy→io chưa bao giờ được khai trong depends_on — khai đúng sự thật (T-036..T-038) thì spine/module-cycle nổ ngay, và đó là LỖI chứ không phải cảnh báo. Nói cách khác: ranh giới lõi/vỏ mà PR-004 dựng ra đang hở đúng một chỗ, và chỗ đó vô hình vì bản đồ thiếu cạnh.
+  T-020 chẻ M-hook-policy (lõi) khỏi M-hook-io (vỏ), nhưng policy/index.ts vẫn
+  import type HookOutput từ io/io.ts. Chiều io→policy là đúng thiết kế; chiều
+  policy→io biến cặp này thành một CHU TRÌNH thật ở mức khối. Không ai thấy suốt
+  từ T-020 vì cạnh policy→io chưa bao giờ được khai trong depends_on — khai đúng
+  sự thật (T-036..T-038) thì spine/module-cycle nổ ngay, và đó là LỖI chứ không
+  phải cảnh báo. Nói cách khác: ranh giới lõi/vỏ mà PR-004 dựng ra đang hở đúng
+  một chỗ, và chỗ đó vô hình vì bản đồ thiếu cạnh.
 proposed_change: >-
-  Chuyển HookInput/HookOutput (và ALLOW/degraded nếu cần) sang khối lõi. Chúng là ĐỊNH NGHĨA DỮ LIỆU thuần — hình dạng JSON mà Claude Code nhận — chứ không phải phép chạm I/O; đặt ở vỏ chỉ vì lịch sử file. Sau khi chuyển, io/io.ts giữ đúng readHookInput/writeHookOutput (thứ thật sự chạm stdin/stdout) và import kiểu từ policy. Chu trình biến mất, và chiều phụ thuộc khớp luật kiến trúc: adapter phụ thuộc lõi, không ngược lại.
+  Chuyển HookInput/HookOutput (và ALLOW/degraded nếu cần) sang khối lõi. Chúng
+  là ĐỊNH NGHĨA DỮ LIỆU thuần — hình dạng JSON mà Claude Code nhận — chứ không
+  phải phép chạm I/O; đặt ở vỏ chỉ vì lịch sử file. Sau khi chuyển, io/io.ts giữ
+  đúng readHookInput/writeHookOutput (thứ thật sự chạm stdin/stdout) và import
+  kiểu từ policy. Chu trình biến mất, và chiều phụ thuộc khớp luật kiến trúc:
+  adapter phụ thuộc lõi, không ngược lại.
 anchors:
   - "src/hooks/policy/index.ts:7"
   - "src/hooks/io/io.ts:10"
 weight: 4
 ease: 4
 found_at: "2026-08-23T13:27:59.917Z"
-status: pending
+status: approved
+decided_by: "@tienhm"
+decided_at: 2026-08-23T13:32:22.008Z
+promoted_to: T-041
