@@ -1,0 +1,69 @@
+id: T-034
+title: "Hợp đồng kiểm cho 10 cạnh của P-graph-core"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: done
+estimated_context: large
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "KHUÔN đã chạy được: cổng khai bằng chữ ký thật, cạnh contract có run nhắc
+        tên cổng"
+    - path: ".ganas/modules/M-hook-io.yaml"
+      why: "Phía đích của khuôn — inputs khai ĐỦ từ mọi khối thượng nguồn"
+    - path: "src/graph/trace.ts"
+      why: "portIssues kiểm GIAO, computeDebt kiểm PHỦ — hiểu hai tầng trước khi khai"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-load
+  - M-validate
+  - M-graph-read
+  - M-freshness
+  - M-verify
+  - M-util
+  - M-exec
+  - M-fsprobe
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts trace --scope P-graph-core"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-load/V-load-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+  - kind: verification
+    target: "M-graph-read/V-graph-read-trace"
+  - kind: verification
+    target: "M-freshness/V-freshness-staleness"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+  - kind: verification
+    target: "M-util/V-util-glob"
+  - kind: verification
+    target: "M-exec/V-exec-run"
+  - kind: verification
+    target: "M-fsprobe/V-fsprobe-probe"
+
+notes: >-
+  Mười cạnh: M-exec→M-verify, M-graph-read→M-freshness, M-graph-read→M-verify,
+  M-load→M-validate, M-model→M-graph-read, M-model→M-load, M-model→M-verify,
+  M-util→M-fsprobe, M-util→M-verify, M-verify→M-freshness.
+
+  Điều kiện hoàn thành THẬT: `ganas trace --scope P-graph-core` thoát 0.
+
+  M-verify là đích của BỐN cạnh, M-model là nguồn của BA — nên không chẻ nhỏ
+  task này được, hai người sẽ đè lên file của nhau.
+done_at: 2026-08-23T13:02:39.911Z

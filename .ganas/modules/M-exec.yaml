@@ -4,9 +4,26 @@ title: "Chỗ DUY NHẤT sinh tiến trình con — mọi lệnh shell của gan
 nature: io
 paths:
   - "src/util/exec.ts"
+
+# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `outputs`
+# khai hai cổng mà `verify/run.ts`, `verify/ledger.ts`, `verify/mutate.ts`
+# thật sự import từ khối này.
+contract:
+  outputs:
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv }) => Promise<ExecResult>"
+    - name: judge
+      shape: "(result: ExecResult, expect: Expect) => Judgement"
+
 status: surveyed
 verify:
   - id: V-exec-run
     kind: probe
     run: "npx tsx --test 'test/verify-run.test.ts'"
     expect: exit_zero
+  - id: V-exec-to-verify
+    kind: contract
+    to: M-verify
+    run: >-
+      grep -q "export function runShell(" src/util/exec.ts &&
+      grep -q "export function judge(result: ExecResult, expect: Expect): Judgement {" src/util/exec.ts

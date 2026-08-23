@@ -4,11 +4,23 @@ title: "Chỗ DUY NHẤT tra trạng thái filesystem — tồn tại không, th
 nature: io
 paths:
   - "src/util/fsprobe.ts"
-depends_on:
-  - M-util
+
+# Cổng RA = thứ `M-util` (glob.ts) thật sự nhập. Chiều này mới đúng code:
+# fsprobe không import gì từ M-util, còn glob.ts thì `import { listDir }`.
+# Bản đồ khai ngược từ T-019 tới T-034 mới bị phát hiện.
+contract:
+  outputs:
+    - name: listDir
+      shape: "(dir: string) => Promise<DirEntry[]>"
+
 status: surveyed
 verify:
   - id: V-fsprobe-probe
     kind: probe
     run: "npx tsx --test 'test/fsprobe.test.ts'"
     expect: exit_zero
+  - id: V-fsprobe-to-util
+    kind: contract
+    to: M-util
+    run: >-
+      grep -q "export async function listDir(dir: string): Promise<DirEntry\[\]>" src/util/fsprobe.ts

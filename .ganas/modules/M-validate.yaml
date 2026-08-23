@@ -5,6 +5,16 @@ nature: code
 paths:
   - "src/graph/validate.ts"
   - "src/debt.ts"
+
+# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `validate.ts`
+# chỉ thật sự import MỘT tên từ M-load: `lineOfPath` (quy dòng lỗi schema về
+# đúng `file:line`). Không khai thêm gì — khai cổng không thật sự dùng là nói
+# dối về khối, y như cắt bớt.
+contract:
+  inputs:
+    - name: lineOfPath
+      shape: "(loaded: LoadedYaml, path: readonly (string | number)[]) => number | undefined"
+
 depends_on:
   - M-load
 status: surveyed

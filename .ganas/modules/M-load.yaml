@@ -5,6 +5,42 @@ nature: io
 paths:
   - "src/graph/load.ts"
   - "src/util/yaml.ts"
+
+# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
+# gộp đủ những gì `load.ts` thật sự import từ M-model: hằng số version cộng
+# 11 schema Zod dùng để `.parse()` từng loại thực thể. `outputs` khai
+# `lineOfPath` (từ `util/yaml.ts`, cũng nằm trong `paths` của khối này) — cổng
+# duy nhất mà M-validate thật sự import từ khối này.
+contract:
+  inputs:
+    - name: LATEST_SCHEMA_VERSION
+      shape: "number"
+    - name: zClaim
+      shape: "ZodTypeAny"
+    - name: zConfig
+      shape: "ZodTypeAny"
+    - name: zDecision
+      shape: "ZodTypeAny"
+    - name: zDesign
+      shape: "ZodTypeAny"
+    - name: zFact
+      shape: "ZodTypeAny"
+    - name: zGoal
+      shape: "ZodTypeAny"
+    - name: zIcebox
+      shape: "ZodTypeAny"
+    - name: zModule
+      shape: "ZodTypeAny"
+    - name: zProposal
+      shape: "ZodTypeAny"
+    - name: zScope
+      shape: "ZodTypeAny"
+    - name: zTask
+      shape: "ZodTypeAny"
+  outputs:
+    - name: lineOfPath
+      shape: "(loaded: LoadedYaml, path: readonly (string | number)[]) => number | undefined"
+
 depends_on:
   - M-model
 status: surveyed
@@ -13,3 +49,8 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/knowledge.test.ts'"
     expect: exit_zero
+  - id: V-load-to-validate
+    kind: contract
+    to: M-validate
+    run: >-
+      grep -q "export function lineOfPath(" src/util/yaml.ts

@@ -4,6 +4,68 @@ title: "Chạy bằng chứng và ghi sổ cái: probe, eval, chuỗi hash của
 nature: io
 paths:
   - "src/verify/**"
+
+# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). Khối này
+# là ĐÍCH của bốn cạnh nên `inputs` phải gộp đủ những gì `run.ts`/`ledger.ts`/
+# `mutate.ts` thật sự import từ CẢ BỐN khối thượng nguồn — cắt bớt vì "gộp từ
+# M-model thôi cho gọn" là đúng thứ luật này cấm. `outputs` khai tám cổng mà
+# M-freshness thật sự import từ `ledger.ts`/`run.ts`.
+contract:
+  inputs:
+    # từ M-exec (src/util/exec.ts)
+    - name: judge
+      shape: "(result: ExecResult, expect: Expect) => Judgement"
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv }) => Promise<ExecResult>"
+    # từ M-graph-read (src/graph/types.ts, src/graph/paths.ts)
+    - name: Graph
+      shape: "interface"
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+    # từ M-model (src/model/index.ts)
+    - name: Expect
+      shape: "z.infer<typeof zExpect>"
+    - name: Fact
+      shape: "z.infer<typeof zFact>"
+    - name: Module
+      shape: "z.infer<typeof zModule>"
+    - name: Scope
+      shape: "z.infer<typeof zScope>"
+    - name: Verification
+      shape: "z.infer<typeof zVerification>"
+    # từ M-util (src/util/glob.ts, src/util/shell.ts)
+    - name: listProjectFiles
+      shape: "(root: string) => Promise<string[]>"
+    - name: matchesAny
+      shape: "(path: string, patterns: readonly string[]) => boolean"
+    - name: looksLikePath
+      shape: "(token: string) => boolean"
+    - name: stripOperators
+      shape: "(token: string) => string"
+    - name: tokenSpans
+      shape: "(command: string) => TokenSpan[]"
+    - name: TokenSpan
+      shape: "{ text: string; start: number }"
+  outputs:
+    - name: defHash
+      shape: "(definition: unknown, statement?: string) => string"
+    - name: fileHash
+      shape: "(path: string) => Promise<string>"
+    - name: historyFor
+      shape: "(index: Map<string, LedgerEntry[]>, target: string, k?: number) => LedgerEntry[]"
+    - name: lastFor
+      shape: "(index: Map<string, LedgerEntry[]>, target: string) => LedgerEntry | undefined"
+    - name: LedgerEntry
+      shape: "interface"
+    - name: allTargets
+      shape: "(graph: Graph) => Target[]"
+    - name: depsHash
+      shape: "(context: string[], root: string, allProjectFiles?: string[]) => Promise<string | undefined>"
+    - name: Target
+      shape: "interface"
+
 depends_on:
   - M-model
   - M-graph-read
@@ -15,3 +77,15 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/verify-run.test.ts'"
     expect: exit_zero
+  - id: V-verify-to-freshness
+    kind: contract
+    to: M-freshness
+    run: >-
+      grep -q "export function defHash(definition: unknown, statement?: string): string {" src/verify/ledger.ts &&
+      grep -q "export async function fileHash(path: string): Promise<string> {" src/verify/ledger.ts &&
+      grep -q "export function lastFor(" src/verify/ledger.ts &&
+      grep -q "export function historyFor(" src/verify/ledger.ts &&
+      grep -q "export interface LedgerEntry {" src/verify/ledger.ts &&
+      grep -q "export function allTargets(graph: Graph): Target\[\] {" src/verify/run.ts &&
+      grep -q "export async function depsHash(" src/verify/run.ts &&
+      grep -q "export interface Target {" src/verify/run.ts

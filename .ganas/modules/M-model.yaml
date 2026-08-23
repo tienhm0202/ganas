@@ -4,9 +4,121 @@ title: "Kiểu dữ liệu lõi của graph (schema Zod)"
 nature: code
 paths:
   - "src/model/**"
+
+# `portIssues()` so `name` và so `shape` KHỚP TỪNG KÝ TỰ, và mỗi cạnh chỉ chịu
+# trách nhiệm cho cổng CHÍNH NÓ cấp (T-032). Khối này là NGUỒN của ba cạnh
+# (→ M-graph-read, → M-load, → M-verify) nên `outputs` phải gộp đủ những gì cả
+# ba đích thật sự import — cắt bớt là nói dối về khối (T-034).
+#
+# Quy ước shape dùng trong khối này:
+#   - type suy ra từ schema (`export type X = z.infer<typeof zX>`) → khai
+#     đúng vế phải đó, chữ ký thật, grep được nguyên văn.
+#   - hằng số schema Zod (`export const zX = z...`) → khai "ZodTypeAny": kiểu
+#     tĩnh đầy đủ dài hàng chục dòng, không thực tế để so KHỚP TỪNG KÝ TỰ; đây
+#     là phân loại thật (không phải "dữ liệu"/"kết quả" chung chung) và cùng
+#     tinh thần với cách M-hook-policy khai `WRITE_TOOLS` là "Set<string>"
+#     thay vì tái hiện toàn bộ giá trị.
+contract:
+  outputs:
+    - name: Claim
+      shape: "z.infer<typeof zClaim>"
+    - name: Config
+      shape: "z.infer<typeof zConfig>"
+    - name: Decision
+      shape: "z.infer<typeof zDecision>"
+    - name: Design
+      shape: "z.infer<typeof zDesign>"
+    - name: Fact
+      shape: "z.infer<typeof zFact>"
+    - name: Goal
+      shape: "z.infer<typeof zGoal>"
+    - name: Icebox
+      shape: "z.infer<typeof zIcebox>"
+    - name: Module
+      shape: "z.infer<typeof zModule>"
+    - name: Proposal
+      shape: "z.infer<typeof zProposal>"
+    - name: Scope
+      shape: "z.infer<typeof zScope>"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
+    - name: ContractVerification
+      shape: "z.infer<typeof zContractVerification>"
+    - name: Verification
+      shape: "z.infer<typeof zVerification>"
+    - name: Expect
+      shape: "z.infer<typeof zExpect>"
+    - name: LATEST_SCHEMA_VERSION
+      shape: "number"
+    - name: zClaim
+      shape: "ZodTypeAny"
+    - name: zConfig
+      shape: "ZodTypeAny"
+    - name: zDecision
+      shape: "ZodTypeAny"
+    - name: zDesign
+      shape: "ZodTypeAny"
+    - name: zFact
+      shape: "ZodTypeAny"
+    - name: zGoal
+      shape: "ZodTypeAny"
+    - name: zIcebox
+      shape: "ZodTypeAny"
+    - name: zModule
+      shape: "ZodTypeAny"
+    - name: zProposal
+      shape: "ZodTypeAny"
+    - name: zScope
+      shape: "ZodTypeAny"
+    - name: zTask
+      shape: "ZodTypeAny"
+
 status: surveyed
 verify:
   - id: V-model-smoke
     kind: probe
     run: "npx tsx --test 'test/icebox-model.test.ts'"
     expect: exit_zero
+  # Ba cạnh lõi → khối đọc/nạp/kiểm — grep xác nhận từng type/schema mà đích
+  # tương ứng thật sự import vẫn còn đúng chữ ký trong file định nghĩa.
+  - id: V-model-to-graph-read
+    kind: contract
+    to: M-graph-read
+    run: >-
+      grep -q "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
+      grep -q "export type Claim = z.infer<typeof zClaim>;" src/model/knowledge.ts &&
+      grep -q "export type Decision = z.infer<typeof zDecision>;" src/model/knowledge.ts &&
+      grep -q "export type Config = z.infer<typeof zConfig>;" src/model/config.ts &&
+      grep -q "export type Design = z.infer<typeof zDesign>;" src/model/design.ts &&
+      grep -q "export type Goal = z.infer<typeof zGoal>;" src/model/goal.ts &&
+      grep -q "export type Icebox = z.infer<typeof zIcebox>;" src/model/icebox.ts &&
+      grep -q "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
+      grep -q "export type Proposal = z.infer<typeof zProposal>;" src/model/proposal.ts &&
+      grep -q "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
+      grep -q "export type Task = z.infer<typeof zTask>;" src/model/task.ts &&
+      grep -q "export type ContractVerification = z.infer<typeof zContractVerification>;" src/model/verification.ts
+  - id: V-model-to-load
+    kind: contract
+    to: M-load
+    run: >-
+      grep -q "export const LATEST_SCHEMA_VERSION = 1;" src/model/config.ts &&
+      grep -q "export const zClaim = z" src/model/knowledge.ts &&
+      grep -q "export const zFact = z" src/model/knowledge.ts &&
+      grep -q "export const zDecision = z" src/model/knowledge.ts &&
+      grep -q "export const zConfig = z.object({" src/model/config.ts &&
+      grep -q "export const zDesign = z" src/model/design.ts &&
+      grep -q "export const zGoal = z" src/model/goal.ts &&
+      grep -q "export const zIcebox = z" src/model/icebox.ts &&
+      grep -q "export const zModule = z" src/model/module.ts &&
+      grep -q "export const zProposal = z" src/model/proposal.ts &&
+      grep -q "export const zScope = z" src/model/scope.ts &&
+      grep -q "export const zTask = z" src/model/task.ts
+  - id: V-model-to-verify
+    kind: contract
+    to: M-verify
+    run: >-
+      grep -q "export type Expect = z.infer<typeof zExpect>;" src/model/common.ts &&
+      grep -q "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
+      grep -q "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
+      grep -q "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
+      grep -q "export type Verification = z.infer<typeof zVerification>;" src/model/verification.ts

@@ -7,6 +7,48 @@ paths:
   - "src/graph/trace.ts"
   - "src/graph/types.ts"
   - "src/graph/paths.ts"
+
+# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
+# gộp đủ 12 type mà `types.ts`/`select.ts`/`trace.ts` thật sự import từ
+# M-model. `outputs` khai những gì M-freshness và M-verify thật sự import từ
+# `types.ts`/`paths.ts` — hai interface lớn (`Graph`, `Sourced<T>`) khai
+# "interface" thay vì chép hết field, cùng lý do "ZodTypeAny" ở M-model: so
+# KHỚP TỪNG KÝ TỰ một interface hàng chục dòng thì mọi lần thêm field không
+# liên quan cũng làm cạnh đỏ oan, còn `run` bên dưới vẫn grep đúng tên thật.
+contract:
+  inputs:
+    - name: Claim
+      shape: "z.infer<typeof zClaim>"
+    - name: Config
+      shape: "z.infer<typeof zConfig>"
+    - name: Decision
+      shape: "z.infer<typeof zDecision>"
+    - name: Design
+      shape: "z.infer<typeof zDesign>"
+    - name: Fact
+      shape: "z.infer<typeof zFact>"
+    - name: Goal
+      shape: "z.infer<typeof zGoal>"
+    - name: Icebox
+      shape: "z.infer<typeof zIcebox>"
+    - name: Module
+      shape: "z.infer<typeof zModule>"
+    - name: Proposal
+      shape: "z.infer<typeof zProposal>"
+    - name: Scope
+      shape: "z.infer<typeof zScope>"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
+    - name: ContractVerification
+      shape: "z.infer<typeof zContractVerification>"
+  outputs:
+    - name: Graph
+      shape: "interface"
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+
 depends_on:
   - M-model
 status: surveyed
@@ -15,3 +57,15 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/trace.test.ts'"
     expect: exit_zero
+  - id: V-graph-read-to-freshness
+    kind: contract
+    to: M-freshness
+    run: >-
+      grep -q "export interface Graph {" src/graph/types.ts
+  - id: V-graph-read-to-verify
+    kind: contract
+    to: M-verify
+    run: >-
+      grep -q "export interface Graph {" src/graph/types.ts &&
+      grep -q "export interface Sourced<T> {" src/graph/types.ts &&
+      grep -q "export function ganasPath(root: string, ...parts: string\[\]): string {" src/graph/paths.ts
