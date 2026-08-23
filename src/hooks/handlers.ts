@@ -1,16 +1,14 @@
-import { stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { relative } from "node:path";
 
 import { evaluateGate } from "../gate.js";
 import { claimNextTask, claimTask, releaseClaimsForSession } from "../graph/claim.js";
 import { computeFreshness } from "../graph/freshness.js";
 import { loadGraph } from "../graph/load.js";
-import { CONFIG_FILE, DIRS, findGanasRoot, GANAS_DIR, ganasPath } from "../graph/paths.js";
+import { CONFIG_FILE, findGanasRoot, GANAS_DIR, ganasPath } from "../graph/paths.js";
 import { type Candidate, rankedCandidates, selectNextTask } from "../graph/select.js";
-import type { Diagnostic } from "../graph/types.js";
 import { validateGraph } from "../graph/validate.js";
 import { generateHandoff } from "../handoff.js";
-import { type Enforcement, enforcementFor, type EnforcementRule } from "../model/index.js";
+import { enforcementFor } from "../model/index.js";
 import { renderBrief } from "../render/brief.js";
 import {
   bindSession,
@@ -22,23 +20,24 @@ import {
   sessionRecord,
   taskForSession,
 } from "../state.js";
-import { LEDGER_FILE, ledgerPath } from "../verify/ledger.js";
+import { existsAsync } from "../util/fsprobe.js";
+import { ledgerPath } from "../verify/ledger.js";
 import { ALLOW, type HookInput, type HookOutput } from "./io.js";
-
-/** Diagnostic liên quan tới bằng chứng — luật `knowledge_anchor`, không phải `schema`. */
-function isAnchorIssue(d: Diagnostic): boolean {
-  return d.message.includes("anchor") || d.message.includes("bằng chứng");
-}
-
-function formatDiagnostics(diags: readonly Diagnostic[]): string {
-  return diags
-    .map((d) => {
-      const where = d.line === undefined ? d.file : `${d.file}:${d.line}`;
-      return `  ${where}\n    ${d.message}${d.hint ? `\n    → ${d.hint}` : ""}`;
-    })
-    .join("\n");
-}
-
+import {
+  applyEnforcement,
+  decideEntityOverwrite,
+  decideProposalWrite,
+  decideWriteEarly,
+  denyPreTool,
+  DISPATCH_NUDGE_REASON,
+  inRepoTree,
+  knowledgeWriteBody,
+  locate,
+  PLAN_APPROVED_REASON,
+  ruleForDiagnostics,
+  shellLooksLikeWrite,
+  WRITE_TOOLS,
+} from "./policy.js";
 /* ------------------------------------------------------------------------- *
  * SessionStart — phiên mới biết phải làm gì
  * ------------------------------------------------------------------------- */
@@ -118,164 +117,9 @@ export async function sessionStart(input: HookInput): Promise<HookOutput> {
   return out;
 }
 
-const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
-
 /* ------------------------------------------------------------------------- *
  * PreToolUse — giữ sổ cái xác minh khỏi bị sửa
  * ------------------------------------------------------------------------- */
-
-/** Dấu hiệu một lệnh shell đang GHI chứ không chỉ đọc. */
-const SHELL_WRITE_HINTS = [">", ">>", "tee", "sed -i", "truncate", "rm ", "mv ", "cp ", "dd "];
-
-function denyPreTool(reason: string): HookOutput {
-  return {
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: reason,
-    },
-  };
-}
-
-const LEDGER_REASON =
-  `\`${LEDGER_FILE}\` là sổ cái xác minh — bằng chứng rằng probe đã thật sự chạy. ` +
-  `Chỉ \`ganas verify\` mới được ghi vào đó.\n\n` +
-  `Muốn một fact được coi là đã kiểm chứng thì chạy \`ganas verify <id>\` cho probe chạy thật, ` +
-  `đừng ghi kết quả bằng tay. Nếu probe đang fail thì đó là thông tin cần giữ, không phải ` +
-  `thứ cần che đi.`;
-
-const CONFIG_REASON =
-  `\`.ganas/${CONFIG_FILE}\` giữ mức cưỡng chế của cả dự án. Ghi \`enforcement: warn\` ` +
-  `vào đó là tự tắt mọi hàng rào trong đúng phiên đang bị hàng rào chặn — vòng lặp ` +
-  `mà không luật nào bên trong ganas phá được.\n\n` +
-  `Mức cưỡng chế là quyết định của NGƯỜI, sửa ngoài phiên agent. Nếu một luật đang ` +
-  `chặn sai thì nêu ra để người xử lý, đừng hạ luật xuống.`;
-
-const SKILL_DIR = `.claude/skills/`;
-
-const SKILL_WRITE_REASON =
-  `Sub-agent không được sửa skill trong \`${SKILL_DIR}\` — chỉ phiên chính mới được. ` +
-  `Skill định hình CÁCH làm việc; để sub-agent tự đổi nó giữa lúc chạy là mất kiểm soát, ` +
-  `phiên chính không biết nó đã đổi gì.\n\n` +
-  `Nhờ phiên chính sửa hộ nếu skill cần cập nhật.`;
-
-/**
- * Thư mục THỰC THỂ dưới `.ganas/` — mỗi file trong đó là một bản ghi có id
- * (goal/design/task/scope/module/fact/claim/decision/icebox), khác với `runs/`,
- * `.locks/`, `map/`, `proposals/`... vốn không phải "một thực thể = một id".
- * Dùng lại `DIRS` thay vì khai tay chuỗi để không lệch nếu `paths.ts` đổi tên.
- */
-const ENTITY_DIRS: readonly string[] = [
-  DIRS.goals,
-  DIRS.designs,
-  DIRS.tasks,
-  DIRS.scopes,
-  DIRS.modules,
-  DIRS.facts,
-  DIRS.claims,
-  DIRS.decisions,
-  DIRS.icebox,
-];
-
-function isEntityPath(rel: string): boolean {
-  return ENTITY_DIRS.some((dir) => rel.startsWith(`${GANAS_DIR}/${dir}/`));
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const ENTITY_OVERWRITE_REASON =
-  `File này đã tồn tại trong một thư mục thực thể của ganas. \`Write\` sẽ GHI ĐÈ ÂM THẦM ` +
-  `lên nó — không có gì báo cho phiên đang giữ nội dung cũ biết nó vừa mất dữ liệu.\n\n` +
-  `Muốn SỬA file có sẵn thì dùng \`Edit\`, không dùng \`Write\`.\n\n` +
-  `Nếu tưởng đang tạo một thực thể MỚI: id này đã có chủ. Chạy \`ganas id <loại>\` để lấy ` +
-  `một id khác, đừng tự đoán số kế tiếp.`;
-
-/**
- * Đường dẫn một file proposal — `.ganas/proposals/PR-00N.yaml`.
- *
- * Cố ý KHÔNG gộp vào `ENTITY_DIRS`/`isEntityPath`: luật ở đó chặn TOÀN BỘ
- * `Write` đè lên file đã tồn tại (sửa phải đi qua `Edit`), còn luật cho
- * proposal hẹp hơn nhiều — sửa `problem`/`proposed_change` khi đề xuất còn
- * `pending` vẫn là việc hợp lệ của agent; thứ duy nhất bị khoá là NỘI DUNG
- * đặt `status: approved`/`rejected`, bất kể qua `Write` hay `Edit`.
- */
-function isProposalPath(rel: string): boolean {
-  return rel.startsWith(`${GANAS_DIR}/${DIRS.proposals}/`) && rel.endsWith(".yaml");
-}
-
-/**
- * Dòng YAML biến một proposal thành "đã có người trả lời": đổi `status` sang
- * `approved`/`rejected`, hoặc điền `decided_by`/`decided_at` — ba trường mà
- * schema (`zProposal`, xem `model/proposal.ts`) chỉ chấp nhận khi status đã
- * chuyển khỏi `pending`. Bắt cả `decided_by`/`decided_at` riêng lẻ, không chỉ
- * dòng `status`: ghi hai trường đó trước rồi đổi `status` ở một lượt Edit khác
- * là cùng một việc giả mạo quyết định, chỉ chia làm hai bước để né luật.
- */
-const PROPOSAL_DECISION_PATTERN =
-  /^[ \t]*(status:\s*["']?(approved|rejected)["']?\s*$|decided_by:\s*\S|decided_at:\s*\S)/m;
-
-/** Gom mọi đoạn nội dung MỚI mà tool call này sắp ghi — Write/Edit/MultiEdit mỗi cái một hình. */
-function writtenText(toolInput: Record<string, unknown>): string[] {
-  const texts: string[] = [];
-  if (typeof toolInput["content"] === "string") texts.push(toolInput["content"]);
-  if (typeof toolInput["new_string"] === "string") texts.push(toolInput["new_string"]);
-  const edits = toolInput["edits"];
-  if (Array.isArray(edits)) {
-    for (const edit of edits) {
-      if (edit && typeof edit === "object") {
-        const ns = (edit as Record<string, unknown>)["new_string"];
-        if (typeof ns === "string") texts.push(ns);
-      }
-    }
-  }
-  return texts;
-}
-
-function setsProposalDecision(toolInput: Record<string, unknown> | undefined): boolean {
-  if (!toolInput) return false;
-  return writtenText(toolInput).some((t) => PROPOSAL_DECISION_PATTERN.test(t));
-}
-
-const PROPOSAL_DECISION_REASON =
-  `Duyệt hay từ chối một đề xuất là việc của NGƯỜI — cùng luật đã áp cho ` +
-  `\`decision\` (\`.claude/rules/ganas-knowledge.md\`). Ghi thẳng \`status: approved\`/` +
-  `\`rejected\` (hay \`decided_by\`/\`decided_at\`) vào file proposal bằng Write/Edit là ` +
-  `giả mạo một quyết định chưa xảy ra.\n\n` +
-  `Đường đúng: \`ganas proposal approve <id> --by @ten\` hoặc \`ganas proposal reject <id> ` +
-  `--by @ten --why "..."\` — hai lệnh đó đòi người gõ \`--by\`, không có mặc định, và ghi lại ` +
-  `đúng ai đã quyết.`;
-
-/** Chặn khi enforce, chỉ cảnh báo khi warn — cùng khuôn nhánh warn/enforce của postToolUse. */
-function denyOrWarnPreTool(mode: Enforcement, reason: string): HookOutput {
-  return mode === "enforce"
-    ? denyPreTool(reason)
-    : { systemMessage: `ganas (chế độ warn — chưa chặn):\n${reason}` };
-}
-
-const PLAN_APPROVED_REASON =
-  `Plan vừa được duyệt đang nằm trong context — và sẽ MẤT khi context bị compact. ` +
-  `Chẻ ngay thành Task, đừng để sau.\n\n` +
-  `Dùng skill \`plan-to-tasks\`: nó đã dạy đủ các bước, không cần đọc lại plan từ đâu cả. ` +
-  `Cấp ID thật ngay bằng \`ganas id task --count N\` — đừng dùng nhãn tạm kiểu T1, T4a.\n\n` +
-  `Nhưng phát hiện KHÔNG thuộc plan này — thấy dọc đường, chưa ai duyệt — thì đừng nhét ` +
-  `thành Task cho đủ bộ: \`serves\`/\`implements\`/\`exit_contract\` bịa ra là dữ liệu giả. ` +
-  `Ghi vào sổ icebox bằng \`ganas icebox add\`. Task là đã quyết LÀM; icebox là đã quyết ` +
-  `CHƯA làm, kèm điểm, lý do và ngày xem lại. Cái repo này không cho phép tồn tại là một ` +
-  `việc chưa quyết gì cả, nằm lơ lửng — icebox không phải thứ đó.`;
-
-const DISPATCH_NUDGE_REASON =
-  `Task đang làm khai tier rẻ hơn \`main\` (\`scribe\`/\`verifier\`) — việc cơ học hoặc kiểm ` +
-  `chứng, không cần model mạnh nhất. Nhưng phiên chính đang tự sửa file thay vì giao việc.\n\n` +
-  `Việc cơ học làm bằng model mạnh nhất chính là chỗ over-engineering sinh ra. Brief đã nạp ` +
-  `có sẵn hướng dẫn giao sub-agent ở mục "Giao việc" (kèm alias model) — dùng nó.\n\n` +
-  `(Chỉ nhắc một lần trong phiên này — không lặp lại ở những lượt sửa tiếp theo.)`;
 
 /**
  * Nhắc MỘT LẦN khi phiên chính (không phải sub-agent) tự sửa file cho task khai
@@ -362,27 +206,30 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
   if (input.tool_name && WRITE_TOOLS.has(input.tool_name)) {
     const raw = input.tool_input?.["file_path"];
     if (typeof raw === "string") {
-      const abs = isAbsolute(raw) ? raw : resolve(cwd, raw);
-      if (abs === ledgerPath(root)) return denyPreTool(LEDGER_REASON);
-      if (abs === ganasPath(root, CONFIG_FILE)) return denyPreTool(CONFIG_REASON);
+      const { abs, rel } = locate(raw, cwd, root);
 
-      const rel = relative(root, abs).split("\\").join("/");
+      // Gom dữ kiện RẺ, hỏi policy, rồi chỉ đi lấy thứ nó thật sự đòi. Phép
+      // lười nằm ở đây: `existsAsync` và `loadGraph` chỉ chạy khi policy hỏi.
+      const step = decideWriteEarly({
+        toolName: input.tool_name,
+        abs,
+        rel,
+        ledgerAbs: ledgerPath(root),
+        configAbs: ganasPath(root, CONFIG_FILE),
+        fromSubagent: input.agent_id !== undefined,
+        toolInput: input.tool_input,
+      });
 
-      if (input.agent_id && rel.startsWith(SKILL_DIR)) return denyPreTool(SKILL_WRITE_REASON);
+      if (step.kind === "deny") return denyPreTool(step.reason);
 
-      if (input.tool_name === "Write" && isEntityPath(rel) && (await fileExists(abs))) {
-        return denyPreTool(ENTITY_OVERWRITE_REASON);
+      if (step.kind === "need" && step.probe === "entity-exists") {
+        const after = decideEntityOverwrite(await existsAsync(abs));
+        if (after.kind === "deny") return denyPreTool(after.reason);
       }
 
-      // Duyệt/từ chối proposal: khác ba luật phía trên, luật này ĐI QUA
-      // enforcementFor — dự án cũ hạ được xuống warn, xem doc comment
-      // PROPOSAL_DECISION_REASON. `loadGraph` chỉ chạy khi thật sự cần (path
-      // là proposal VÀ nội dung ghi thật sự chứa dấu hiệu quyết định), cùng
-      // kiểu lazy đã dùng cho `fileExists` ở nhánh trên.
-      if (isProposalPath(rel) && setsProposalDecision(input.tool_input)) {
+      if (step.kind === "need" && step.probe === "proposal-mode") {
         const graph = await loadGraph(root);
-        const mode = enforcementFor(graph.config, "proposal_decision");
-        return denyOrWarnPreTool(mode, PROPOSAL_DECISION_REASON);
+        return decideProposalWrite(enforcementFor(graph.config, "proposal_decision"));
       }
     }
     return ALLOW;
@@ -390,7 +237,7 @@ export async function preToolUse(input: HookInput): Promise<HookOutput> {
 
   if (input.tool_name === "Bash" || input.tool_name === "PowerShell") {
     const command = input.tool_input?.["command"];
-    if (typeof command === "string" && SHELL_WRITE_HINTS.some((h) => command.includes(h))) {
+    if (typeof command === "string" && shellLooksLikeWrite(command)) {
       // `sed -i`, `>` — sửa file mà không đi qua PostToolUse của Write/Edit. Đánh
       // dấu ở PRE vì với Bash đây là lần duy nhất ganas nhìn thấy nội dung lệnh.
       // Đánh dấu nhầm (lệnh sau đó fail) chỉ tốn thêm một lần chấm gate; bỏ sót
@@ -428,12 +275,11 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
   if (!root) return ALLOW;
 
   const raw = input.tool_input?.["file_path"];
-  const abs = typeof raw === "string" ? (isAbsolute(raw) ? raw : resolve(cwd, raw)) : undefined;
-  const rel = abs === undefined ? undefined : relative(root, abs).split("\\").join("/");
+  const rel = typeof raw === "string" ? locate(raw, cwd, root).rel : undefined;
 
   // File ngoài cây repo (`../..`, ổ đĩa khác) không đối chiếu được với ranh giới
   // của task — ranh giới là pathspec tương đối gốc repo. Ghi vào chỉ tạo nhiễu.
-  const inTree = rel !== undefined && rel !== "" && !rel.startsWith("../");
+  const inTree = inRepoTree(rel);
 
   const sessionId = input.session_id;
   const fromSubagent = input.agent_id !== undefined;
@@ -465,7 +311,7 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
   const mine = all.filter((d) => d.severity === "error" && d.file === rel);
   if (mine.length === 0) return deliverNudge();
 
-  const rule: EnforcementRule = mine.some(isAnchorIssue) ? "knowledge_anchor" : "schema";
+  const rule = ruleForDiagnostics(mine);
   const mode = enforcementFor(graph.config, rule);
 
   // Lời nhắc giao việc đi KÈM chứ không bị thay thế: hai chuyện khác nhau, và
@@ -476,18 +322,7 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
     await markDispatchNudged(root, sessionId);
   }
 
-  const body =
-    `Ghi vào \`${rel}\` chưa hợp lệ:\n\n${formatDiagnostics(mine)}\n\n` +
-    (rule === "knowledge_anchor"
-      ? `Kho tri thức chỉ nhận phát biểu có bằng chứng. Thêm anchor (\`file:line\`, ` +
-        `\`commit:sha\`, hoặc URL kèm \`fetched_at\`), hoặc bỏ hẳn phát biểu đó ra ` +
-        `và ghi vào \`open_questions\` của task.`
-      : `Sửa lại cho đúng schema rồi ghi lại. Xem \`.claude/rules/ganas-knowledge.md\`.`) +
-    nudgeTail;
-
-  return mode === "enforce"
-    ? { decision: "block", reason: body }
-    : { systemMessage: `ganas (chế độ warn — chưa chặn):\n${body}` };
+  return applyEnforcement(mode, knowledgeWriteBody(rel, mine, rule, nudgeTail));
 }
 
 /* ------------------------------------------------------------------------- *

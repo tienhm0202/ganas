@@ -106,8 +106,6 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
     "src/handoff.ts — existsSync",
     "src/prune.ts — existsSync",
     "src/prune.ts — readdir, stat",
-    // T-020 — chẻ src/hooks/ (PR-004)
-    "src/hooks/handlers.ts — stat",
     // Chưa có task: lớp lệnh CLI và hai khối còn lại của D-006
     "src/commands/commit.ts — existsSync",
     "src/commands/icebox.ts — existsSync",

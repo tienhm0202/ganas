@@ -1,0 +1,16 @@
+id: M-hook-io
+scope: P-hook
+title: "Vỏ I/O của hook: đọc stdin, gom dữ liệu từ đĩa, phát JSON ra stdout"
+nature: io
+paths:
+  - "src/hooks/handlers.ts"
+  - "src/hooks/io.ts"
+depends_on:
+  - M-hook-policy
+  - M-claim
+status: surveyed
+verify:
+  - id: V-hooks-smoke
+    kind: probe
+    run: "npx tsx --test 'test/hooks.test.ts'"
+    expect: exit_zero

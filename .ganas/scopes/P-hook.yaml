@@ -6,9 +6,10 @@ status: active
 
 # Ranh giới code của phạm vi. Fact/claim chỉ được coi là đúng BÊN TRONG đây.
 modules:
-  - M-hooks
+  - M-hook-policy
+  - M-hook-io
   - M-claim
-entry: M-hooks
+entry: M-hook-io
 
 acceptance:
   - id: V-hook-e2e
