@@ -39,11 +39,7 @@ const PROBE_ONLY = new Set(["existsSync", "stat", "statSync", "readdir", "readdi
  * sửa được nhãn. Mỗi mục phải nói rõ vì sao — danh sách miễn trừ không giải
  * thích được thì test này chỉ là trang trí.
  */
-const EXEMPT: Record<string, string> = {
-  "M-cli": "khai `code` nhưng cli.ts ghi stdout, và trộn với util/args.ts thuần — T-023 dọn",
-  "M-commands":
-    "khai `code` nhưng 19/21 lệnh ghi stdout; đó là bản chất lớp adapter CLI, nhãn phải là io — T-023 dọn",
-};
+const EXEMPT: Record<string, string> = {};
 
 interface ModuleDoc {
   id: string;

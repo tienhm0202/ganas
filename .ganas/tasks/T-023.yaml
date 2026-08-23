@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-006
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: verifier
 blocked_by:
@@ -13,16 +13,20 @@ blocked_by:
 context_contract:
   must_read:
     - path: "test/module-nature.test.ts"
-      why: "Hai khối này đang nằm trong danh sách miễn trừ của test đó — xoá miễn trừ là điều kiện hoàn thành"
+      why: "Hai khối này đang nằm trong danh sách miễn trừ của test đó — xoá miễn trừ
+        là điều kiện hoàn thành"
     - path: "src/commands/CLAUDE.md"
-      why: "Tài liệu vùng đã mô tả M-commands là lớp điều phối; sửa nhãn thì phải sửa cả đoạn mở đầu"
+      why: "Tài liệu vùng đã mô tả M-commands là lớp điều phối; sửa nhãn thì phải sửa
+        cả đoạn mở đầu"
   facts: []
   open_questions:
-    - "src/commands/_common.ts và hook.ts thuần — tách ra khối lõi riêng, hay để nguyên vì chúng chỉ là chỗ nối dây?"
+    - "src/commands/_common.ts và hook.ts thuần — tách ra khối lõi riêng, hay để
+      nguyên vì chúng chỉ là chỗ nối dây?"
 
 touches:
   - M-cli
   - M-commands
+  - M-cli-core
 
 exit_contract:
   - kind: command
@@ -33,13 +37,16 @@ exit_contract:
     target: "M-cli/V-cli-smoke"
   - kind: verification
     target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
 
 notes: >-
   Hai khối cuối còn lệch nhãn sau T-022. `M-cli` trộn `cli.ts` (ghi stdout) với
-  `util/args.ts` (thuần). `M-commands` có 19/21 file ghi stdout — đó là bản
-  chất của một lớp adapter CLI, nên nhãn `io` là đúng chứ không phải thoả hiệp;
-  phần thuần lẫn trong từng lệnh (`rankProposals`, `ownedPaths`…) là việc chẻ
-  tiếp, không gộp vào task này.
+  `util/args.ts` (thuần). `M-commands` có 19/21 file ghi stdout — đó là bản chất
+  của một lớp adapter CLI, nên nhãn `io` là đúng chứ không phải thoả hiệp; phần
+  thuần lẫn trong từng lệnh (`rankProposals`, `ownedPaths`…) là việc chẻ tiếp,
+  không gộp vào task này.
 
   Điều kiện hoàn thành THẬT: `EXEMPT` trong `test/module-nature.test.ts` rỗng
   đi. Còn miễn trừ thì còn nợ.
+done_at: 2026-08-23T10:50:05.574Z

@@ -3,10 +3,12 @@
 <!-- Khối `M-commands`. File này chỉ được nạp khi agent đụng vào file trong thư
      mục này. Không chép lại luật gốc ở đây. -->
 
-Khối này là `nature: code` — nhưng nó là lớp **điều phối**, không phải lõi
-nghiệp vụ. Phần tính toán thật nằm ở `src/graph/` (đọc đồ thị) và ở các file
-lõi từng lệnh (`src/gate.ts`, `src/commit.ts`, `src/boundary.ts`…). Lệnh ở đây
-chỉ: đọc `argv` → gọi lõi → in chữ cho người.
+Khối này là `nature: io` — 19/21 lệnh ghi thẳng ra `process.stdout`, đó là bản
+chất của một lớp adapter CLI, không phải ngoại lệ cần miễn trừ. Nó vẫn là lớp
+**điều phối**, không phải lõi nghiệp vụ: phần tính toán thật nằm ở `src/graph/`
+(đọc đồ thị) và ở các file lõi từng lệnh (`src/gate.ts`, `src/commit.ts`,
+`src/boundary.ts`…). Lệnh ở đây chỉ: đọc `argv` → gọi lõi → in chữ cho người —
+chính bước cuối đó mới là lý do nhãn phải là `io`.
 
 ## Cổng vào
 

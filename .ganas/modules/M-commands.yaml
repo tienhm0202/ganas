@@ -1,7 +1,7 @@
 id: M-commands
 scope: P-cli
 title: "Cài đặt từng lệnh con (scope, id, next, verify, icebox, search, ...)"
-nature: code
+nature: io
 paths:
   - "src/commands/**"
 depends_on:

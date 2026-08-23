@@ -5,6 +5,9 @@ nature: code
 paths:
   - "src/boundary.ts"
   - "src/search.ts"
+  # Parser tham số: thuần, và thuộc LỚP LỆNH — để ở M-util (P-graph-core) thì
+  # một file chỉ CLI dùng lại nằm trong phạm vi đồ thị tri thức.
+  - "src/util/args.ts"
 status: surveyed
 verify:
   - id: V-cli-core-boundary
