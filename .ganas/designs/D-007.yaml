@@ -1,0 +1,40 @@
+id: D-007
+title: "Cạnh giữa các khối phải có hợp đồng kiểm, bắt đầu từ ranh giới lõi/vỏ"
+serves:
+  - G-001
+summary: >-
+  Phiên 2026-08-23 chẻ bản đồ từ 9 khối lên 20, và mỗi lần chẻ lại khai thêm
+  `depends_on`. Kết quả: 14 cạnh trong sơ đồ, KHÔNG cạnh nào có bằng chứng
+  `kind: contract` — chiếm gần nửa bảng `ganas debt`. Không khối nào khai
+  `contract.inputs`/`outputs`; tất cả đang để rỗng mặc định.
+
+  `depends_on` chỉ khai THỨ TỰ. Nó không nói output khối nguồn có phủ được
+  input khối đích không, nên một sơ đồ đủ cạnh vẫn có thể là sơ đồ chưa ai
+  kiểm — đúng thứ `computeDebt` gọi là `uncovered-edge`. Nói cách khác, bản đồ
+  mới dựng xong vẫn là NIỀM TIN, chỉ là niềm tin có cấu trúc hơn trước.
+
+  Cách chữa, và nó không phải điền cho đủ ô: khai `contract` bằng chính CỔNG
+  VÀO THẬT của khối — tên cổng là tên hàm được export, `shape` là chữ ký của
+  nó. Khi đó phép so cổng của `portIssues()` (tên phải khớp, `shape` phải khớp
+  từng ký tự) trở thành phép bắt trôi ngữ nghĩa giữa hai bên, chứ không phải
+  một thủ tục hành chính.
+
+  Bắt đầu từ `M-hook-policy → M-hook-io`. Không phải vì nó dễ nhất mà vì nó là
+  cạnh ĐÁNG TIN NHẤT trong sơ đồ: chính ranh giới lõi/vỏ mà PR-004 dựng ra, và
+  là chỗ một thay đổi im lặng gây hại nhiều nhất. Làm cạnh đó trước cũng cho ra
+  KHUÔN để 13 cạnh còn lại theo — chẻ mỗi cạnh một kiểu thì bản đồ lại lệch,
+  chỉ là lệch theo cách mới.
+
+  Ba điều phải giữ, rút từ chính cơ chế:
+
+  (1) `shape` so bằng chuỗi khớp từng ký tự. Nên nó phải là chữ ký THẬT, và khi
+  chữ ký code đổi mà YAML không đổi thì cạnh phải đỏ — đó là toàn bộ giá trị.
+
+  (2) `run` của cạnh đi qua `lintProbe` như mọi probe khác, và lint đối chiếu
+  lệnh với TÊN CỔNG. Lệnh chung chung kiểu `npm run typecheck` sẽ bị
+  `verify/probe-unrelated` — đúng, vì nó không kiểm riêng cạnh này.
+
+  (3) Cạnh này KHÔNG thay thế test. Nó trả lời một câu khác hẳn: "hai khối còn
+  khớp nhau không", chứ không phải "khối chạy có đúng không".
+status: active
+created_at: 2026-08-23T00:00:00Z

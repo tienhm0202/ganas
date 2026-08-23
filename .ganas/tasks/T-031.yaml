@@ -1,0 +1,74 @@
+id: T-031
+title: "Hợp đồng kiểm cho cạnh M-hook-policy → M-hook-io"
+serves:
+  - G-001
+implements: D-007
+scope: P-hook
+status: todo
+# BỊ CHẶN bởi PR-010 — xem notes. Không đổi thành done, và không hạ
+# exit_contract xuống cho vừa: hợp đồng đòi cả phạm vi sạch là mức ĐÚNG.
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/graph/trace.ts"
+      why: "portIssues() so tên cổng và shape từng ký tự — quyết định contract phải khai thế nào mới có tác dụng"
+    - path: "src/hooks/policy/index.ts"
+      why: "Cổng ra thật của khối lõi: các hàm quyết định được export"
+    - path: "src/hooks/io/handlers.ts"
+      why: "Bên tiêu thụ — nó gọi đúng những hàm nào"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hook-policy
+  - M-hook-io
+
+exit_contract:
+  - kind: artifact
+    path: ".ganas/modules/M-hook-policy.yaml"
+    must_contain: "kind: contract"
+  - kind: artifact
+    path: ".ganas/modules/M-hook-io.yaml"
+    must_contain: "inputs:"
+  - kind: command
+    run: "npx tsx src/cli.ts trace --scope P-hook"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+  - kind: verification
+    target: "M-hook-policy/V-hook-policy-pure"
+
+notes: >-
+  Điều kiện hoàn thành THẬT: cạnh `M-hook-policy → M-hook-io` biến mất khỏi
+  danh sách `uncovered-edge` của `ganas debt`, và `ganas trace` báo cạnh đó
+  ĐẠT. Khai contract mà cạnh vẫn trần thì chưa xong.
+
+  Khai cổng bằng tên hàm export thật và chữ ký thật. Khai chung chung ("dữ
+  liệu", "kết quả") thì phép so cổng không bắt được gì, và cạnh trở thành ô
+  đã điền chứ không phải bằng chứng.
+
+  Cạnh này phải trở thành KHUÔN cho 13 cạnh còn lại — viết sao để task sau chép
+  được hình, đừng tối ưu riêng cho một cạnh.
+
+  DỪNG GIỮA CHỪNG 2026-08-23, chặn bởi một khiếm khuyết của chính cơ chế
+  (PR-010), không phải bởi cách khai:
+
+  `portIssues(from, to)` duyệt TOÀN BỘ `contract.inputs` của khối đích và đòi
+  khối nguồn xuất hết. `M-hook-io` nhập 13 cổng từ `M-hook-policy` và 11 cổng
+  từ `M-claim`. Khai đủ sự thật thì CẢ HAI cạnh trượt — cạnh claim báo thiếu 13
+  cổng của policy, cạnh policy báo thiếu 11 cổng của claim. Đã thử cả hai
+  chiều, có nguyên văn thông báo trong lịch sử phiên.
+
+  Hai đường vòng đều bị loại, có lý do:
+   - Khai `optional: true` cho mọi input: vòng lặp BỎ QUA input optional, tức
+     là không kiểm gì nữa. Cạnh xanh mà rỗng ruột, đúng thứ task này cấm.
+   - Chỉ khai phần cổng đến từ MỘT khối nguồn: cạnh xanh, nhưng
+     `contract.inputs` khi đó nói dối về khối — 13 trên 24 cổng. Dữ liệu sai
+     trong kho tri thức là thứ đắt hơn một cạnh chưa phủ.
+
+  Nên contract đã khai bị HOÀN NGUYÊN, đồ thị giữ nguyên 14 cạnh trần. Đó là
+  trạng thái trung thực. Làm tiếp được sau khi PR-010 tách phép kiểm làm hai
+  tầng (từng cạnh kiểm GIAO, toàn sơ đồ kiểm PHỦ).
