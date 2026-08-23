@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { loadGraph } from "../src/graph/load.js";
 import { validateGraph } from "../src/graph/validate.js";
-import * as handlers from "../src/hooks/handlers.js";
+import * as handlers from "../src/hooks/io/handlers.js";
 import {
   appendEntry,
   defHash,

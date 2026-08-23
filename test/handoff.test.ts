@@ -6,7 +6,7 @@ import { evaluateGate } from "../src/gate.js";
 import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
 import { generateHandoff, parseTranscript, renderHandoff, runsPath } from "../src/handoff.js";
-import * as handlers from "../src/hooks/handlers.js";
+import * as handlers from "../src/hooks/io/handlers.js";
 import { zTask } from "../src/model/index.js";
 import { cleanup, design, goal, makeProject, moduleYaml, scope } from "./helpers.js";
 

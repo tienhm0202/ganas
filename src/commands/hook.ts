@@ -1,4 +1,4 @@
-import * as handlers from "../hooks/handlers.js";
+import * as handlers from "../hooks/io/handlers.js";
 import {
   ALLOW,
   degraded,
@@ -6,7 +6,7 @@ import {
   type HookOutput,
   readHookInput,
   writeHookOutput,
-} from "../hooks/io.js";
+} from "../hooks/io/io.js";
 import type { Argv } from "../util/args.js";
 
 type Handler = (input: HookInput) => Promise<HookOutput>;

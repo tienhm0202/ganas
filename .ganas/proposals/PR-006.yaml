@@ -1,0 +1,31 @@
+id: PR-006
+title: "Khối phải SỞ HỮU thư mục thì tài liệu vùng mới có chủ"
+scope: P-hook
+problem: >-
+  Chẻ M-hooks thành M-hook-policy và M-hook-io nhưng để cả hai dùng chung thư
+  mục src/hooks/, mỗi khối khai một DANH SÁCH FILE. Hệ quả dây chuyền:
+  moduleGuideDir() trả undefined cho cả hai (đúng thiết kế — nó chỉ nhận glob
+  cây con dạng dir/**), nên không khối nào sở hữu src/hooks/CLAUDE.md; ganas
+  commit không stage được file đó (phải commit tay ở 98f5e80); và file hướng dẫn
+  duy nhất còn lại buộc phải mô tả CẢ HAI khối, tức là phá đúng luật một chiều
+  mà D-004 vừa dựng — file hướng dẫn không được mô tả khối khác.
+proposed_change: >-
+  Bố cục thư mục phải đi theo ranh giới khối: chẻ khối thì chẻ luôn thư mục. Làm
+  HẸP trước cho src/hooks/ — đưa policy.ts vào thư mục riêng, handlers.ts +
+  io.ts vào thư mục riêng, mỗi khối khai dir/** và có CLAUDE.md của riêng nó.
+  Nguyên tắc này áp đều thì còn đụng M-workflow (5 file ở gốc src/), M-cli
+  (cli.ts + util/args.ts) và M-cli-core (boundary.ts + search.ts) — cả ba đều là
+  khối khai danh sách file trong thư mục dùng chung, nên cũng không khối nào có
+  tài liệu vùng được. Đó là một cuộc sắp xếp lại bố cục src/, đáng một mục tiêu
+  riêng, KHÔNG gộp vào lần sửa hẹp này.
+anchors:
+  - "src/model/module.ts:moduleGuideDir"
+  - "src/hooks/CLAUDE.md:1"
+  - "commit:98f5e80"
+weight: 3
+ease: 3
+found_at: "2026-08-23T10:30:03.687Z"
+status: approved
+decided_by: "@tienhm"
+decided_at: 2026-08-23T10:30:21.763Z
+promoted_to: T-024

@@ -74,7 +74,7 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
     "src/util/yaml.ts",
     "src/graph/claim.ts",
     "src/state.ts",
-    "src/hooks/io.ts",
+    "src/hooks/io/io.ts",
     "src/mcp/server.ts",
   ]);
 

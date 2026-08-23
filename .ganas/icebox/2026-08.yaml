@@ -118,4 +118,10 @@
     - src/model/module.ts:moduleGuideDir
     - commit:98f5e80
   scope: P-hook
-  status: open
+  status: closed
+  closed_at: 2026-08-23T10:30:03.355Z
+  closed_reason: "Chẩn đoán sai. Không phải lỗ hổng của moduleGuideDir hay luật agent-guide —
+    hai thứ đó hành xử đúng thiết kế. Lỗi là ở chỗ chẻ nửa vời: tách làm hai
+    khối nhưng để cả hai dùng chung một thư mục, nên không khối nào NHẬN thư
+    mục, và đương nhiên không khối nào sở hữu file hướng dẫn ở đó. Thay bằng
+    PR-006."

@@ -8,7 +8,7 @@ import { contractPathRefs, contractPaths, ownsGanasFile } from "../src/boundary.
 import { run as ganasCommit } from "../src/commands/commit.js";
 import { parsePorcelainZ } from "../src/commands/commit.js";
 import { criterionKey } from "../src/gate.js";
-import * as handlers from "../src/hooks/handlers.js";
+import * as handlers from "../src/hooks/io/handlers.js";
 import { zTask } from "../src/model/index.js";
 import { runShell } from "../src/util/exec.js";
 import { tokenizeShell } from "../src/util/shell.js";
