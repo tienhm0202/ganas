@@ -1,0 +1,50 @@
+id: T-038
+title: "Khai cạnh và cổng còn thiếu cho các khối của P-hook"
+serves:
+  - G-001
+implements: D-007
+scope: P-hook
+status: todo
+estimated_context: large
+model: main
+
+context_contract:
+  must_read:
+    - path: "test/module-deps.test.ts"
+      why: "Tập đóng MISSING_EDGES là đầu bài; sau cả chuỗi nó phải rỗng"
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "Khuôn khai cổng và cạnh contract đã chạy được"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hook-policy
+  - M-hook-io
+  - M-claim
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-hook-policy/V-hook-policy-pure"
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+  - kind: verification
+    target: "M-claim/V-claim-smoke"
+
+notes: >-
+  Một cạnh `X → Y` phải sửa CẢ HAI khối, mà 44/66 cạnh còn lại xuyên phạm vi —
+  không task nào khai nổi cả cạnh. Nên chia theo KHỐI THUỘC PHẠM VI NÀO, không
+  theo cạnh: mỗi task chỉ sửa khối trong phạm vi của mình, ghép đủ ba phạm vi
+  thì cạnh tự khép kín.
+
+  Hệ quả phải chấp nhận: giữa chừng sơ đồ có cạnh nửa vời (đã khai `depends_on`
+  mà chưa có contract bên kia), nên `ganas trace` chưa sạch cho tới task cuối
+  (T-039). Đó là lý do exit_contract của task này KHÔNG đòi `trace` sạch — đòi
+  thế là đòi một thứ chỉ đúng sau khi task khác xong.
+
+  `shape` do MÁY sinh từ chính code (bảng cổng dựng một lần, áp cho cả ba phạm
+  vi). Chép tay 224 cổng qua ba phạm vi thì lệch là chắc chắn, mà lệch `shape`
+  giữa hai khối là cạnh đỏ ở một chỗ chẳng ai ngờ.
