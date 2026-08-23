@@ -8,7 +8,7 @@ proposed_change: >-
 anchors:
   - "test/no-dead-ends.test.ts:128"
   - "src/model/config.ts:135"
-  - "src/model/config.ts:enforcementFor"
+  - "src/model/config.ts:205"
 weight: 3
 ease: 3
 found_at: "2026-08-23T10:50:41.241Z"
