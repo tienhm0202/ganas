@@ -44,7 +44,7 @@ export function buildCommitMessage(graph: Graph, task: Task, gate: GateResult): 
 
 /** Kết quả chấm lại. `skipped` là "không dựng được cây", KHÔNG phải "đã xanh". */
 export interface StagedTreeCheck {
-  status: "ok" | "failed" | "skipped";
+  status: "ok" | "failed" | "skipped" | "baseline-red";
   /** Tiêu chí đỏ trên cây đã stage — rỗng khi `ok` hoặc `skipped`. */
   failures: { label: string; reason: string }[];
   /** Vì sao bỏ qua. Chỉ có khi `skipped`. */
@@ -89,7 +89,42 @@ function shellQuote(p: string): string {
  * trả `skipped` kèm lý do, và nơi gọi phải NÓI RA. Im lặng coi như xanh là
  * dựng lại đúng cái lỗ này ở một chỗ khác.
  */
-export async function checkStagedTree(root: string, task: Task): Promise<StagedTreeCheck> {
+/**
+ * Bung một cây git ra thư mục tạm, mượn `node_modules` của repo qua symlink.
+ *
+ * Dùng cho CẢ cây đã stage lẫn cây HEAD — hai lượt phải dựng y hệt nhau, nếu
+ * không thì phép so mốc (xem `checkStagedTree`) so hai thứ khác nhau và kết
+ * luận vô nghĩa.
+ *
+ * Trả `undefined` khi không dựng nổi. Nơi gọi phải hiểu đó là "không biết",
+ * KHÔNG phải "xanh".
+ */
+async function materializeTree(root: string, treeish: string): Promise<string | undefined> {
+  const dir = await mkdtemp(join(tmpdir(), "ganas-tree-"));
+  const extract = await runShell(`git archive ${treeish} | tar -x -C ${shellQuote(dir)}`, {
+    cwd: root,
+    timeoutMs: 120_000,
+  });
+  if (extract.code !== 0) {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    return undefined;
+  }
+
+  const modules = join(root, "node_modules");
+  if (exists(modules)) {
+    await symlink(modules, join(dir, "node_modules"), "dir").catch(() => undefined);
+  }
+  return dir;
+}
+
+/** Thời gian tối đa cho lệnh kiểm toàn dự án. Quá giờ ⇒ `skipped`, không bao giờ ⇒ chặn. */
+const BUILD_CHECK_TIMEOUT_MS = 300_000;
+
+export async function checkStagedTree(
+  root: string,
+  task: Task,
+  buildCheck?: string  ,
+): Promise<StagedTreeCheck> {
   const tree = await runShell("git write-tree", { cwd: root, timeoutMs: 30_000 });
   if (tree.code !== 0 || !tree.stdout.trim()) {
     return {
@@ -99,33 +134,76 @@ export async function checkStagedTree(root: string, task: Task): Promise<StagedT
     };
   }
 
-  const dir = await mkdtemp(join(tmpdir(), "ganas-staged-"));
+  const dir = await materializeTree(root, tree.stdout.trim());
+  if (dir === undefined) {
+    return {
+      status: "skipped",
+      failures: [],
+      reason: "bung cây đã stage ra thư mục tạm thất bại",
+    };
+  }
+
   try {
-    const extract = await runShell(
-      `git archive ${tree.stdout.trim()} | tar -x -C ${shellQuote(dir)}`,
-      { cwd: root, timeoutMs: 120_000 },
-    );
-    if (extract.code !== 0) {
-      return {
-        status: "skipped",
-        failures: [],
-        reason: `bung cây đã stage ra thư mục tạm thất bại: ${extract.stderr.trim() || "không rõ lý do"}`,
-      };
-    }
-
-    const modules = join(root, "node_modules");
-    if (exists(modules)) {
-      await symlink(modules, join(dir, "node_modules"), "dir").catch(() => undefined);
-    }
-
     const results = await evaluateTreeCriteria(dir, task.exit_contract);
     const failures = results
       .filter((r) => r.status === "fail")
       .map((r) => ({ label: r.label, reason: r.reason ?? "không đạt" }));
 
-    return failures.length === 0
-      ? { status: "ok", failures: [] }
-      : { status: "failed", failures };
+    if (failures.length > 0) return { status: "failed", failures };
+
+    // Lệnh kiểm TOÀN DỰ ÁN. Khác các tiêu chí trên: chúng chỉ kiểm phần task
+    // chạm tới, còn cái này kiểm cả cây — chính chỗ mà một thay đổi trải sang
+    // phạm vi khác làm gãy mà không tiêu chí nào của task nhìn thấy.
+    if (!buildCheck) return { status: "ok", failures: [] };
+
+    const staged = await runShell(buildCheck, { cwd: dir, timeoutMs: BUILD_CHECK_TIMEOUT_MS });
+    if (staged.code === 0) return { status: "ok", failures: [] };
+
+    // Quá giờ ⇒ KHÔNG kết luận. Chạy tiếp trên HEAD chỉ tốn thêm đúng ngần ấy
+    // thời gian nữa để rồi cũng không biết gì thêm.
+    if (staged.timedOut) {
+      return {
+        status: "skipped",
+        failures: [],
+        reason: `\`${buildCheck}\` quá ${BUILD_CHECK_TIMEOUT_MS / 1000}s trên cây đã stage — không kết luận`,
+      };
+    }
+
+    // SO VỚI MỐC, không so với "xanh". Chỉ chặn khi commit này LÀM GÃY thứ
+    // đang lành. Không có vế này thì: HEAD đỏ sẵn ⇒ cả đội không commit được
+    // gì; dự án cũ chưa bao giờ sạch ⇒ không commit nổi commit đầu tiên; lệnh
+    // kiểm sai/thiếu ⇒ đỏ ở mọi lượt. Xem PR-007 trong `.ganas/proposals/`.
+    const headDir = await materializeTree(root, "HEAD");
+    if (headDir === undefined) {
+      return {
+        status: "skipped",
+        failures: [],
+        reason: `\`${buildCheck}\` đỏ trên cây đã stage, nhưng không dựng được cây HEAD để đối chiếu`,
+      };
+    }
+
+    try {
+      const base = await runShell(buildCheck, { cwd: headDir, timeoutMs: BUILD_CHECK_TIMEOUT_MS });
+      if (base.code !== 0) {
+        return {
+          status: "baseline-red",
+          failures: [],
+          reason: `\`${buildCheck}\` đỏ ở CẢ cây đã stage lẫn HEAD — commit này không làm gãy thêm`,
+        };
+      }
+    } finally {
+      await rm(headDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+
+    return {
+      status: "failed",
+      failures: [
+        {
+          label: `lệnh kiểm toàn dự án \`${buildCheck}\``,
+          reason: (staged.stderr.trim() || staged.stdout.trim() || "thoát khác 0").slice(0, 800),
+        },
+      ],
+    };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
@@ -134,6 +212,12 @@ export async function checkStagedTree(root: string, task: Task): Promise<StagedT
 /** In kết quả chấm lại thành chữ. Trả `""` khi xanh — không có gì để nói thì đừng nói. */
 export function formatStagedTreeCheck(taskId: string, check: StagedTreeCheck): string {
   if (check.status === "ok") return "";
+
+  if (check.status === "baseline-red") {
+    // KHÔNG chặn: commit này không làm gãy thêm gì. Nhưng phải nói ra — im lặng
+    // cho qua thì một dự án đỏ triền miên trông y hệt một dự án xanh.
+    return `\n⚠ ${check.reason}\n  Commit vẫn đi tiếp. Chỗ đỏ sẵn đó là nợ của cả dự án, không phải của ${taskId}.\n`;
+  }
 
   if (check.status === "skipped") {
     return (

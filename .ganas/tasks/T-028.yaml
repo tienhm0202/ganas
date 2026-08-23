@@ -1,10 +1,11 @@
 id: T-028
-title: "ganas commit chạy build_check trên cây stage, so với MỐC chứ không so với xanh"
+title: "ganas commit chạy build_check trên cây stage, so với MỐC chứ không so
+  với xanh"
 serves:
   - G-001
 implements: D-005
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: main
 blocked_by:
@@ -13,7 +14,8 @@ blocked_by:
 context_contract:
   must_read:
     - path: "src/commit.ts"
-      why: "checkStagedTree đã dựng sẵn cây tạm từ index — thêm phép kiểm vào đúng chỗ đó, đừng dựng cây thứ hai"
+      why: "checkStagedTree đã dựng sẵn cây tạm từ index — thêm phép kiểm vào đúng chỗ
+        đó, đừng dựng cây thứ hai"
     - path: ".ganas/proposals/PR-007.yaml"
       why: "Quyết định (a') và ba điều kiện không-được-kẹt nằm nguyên văn ở đó"
   facts: []
@@ -22,6 +24,7 @@ context_contract:
 touches:
   - M-workflow
   - M-commands
+  - M-templates
 
 exit_contract:
   - kind: artifact
@@ -35,8 +38,13 @@ exit_contract:
     run: "npm run typecheck"
   - kind: verification
     target: "M-workflow/V-workflow-commit"
+  - kind: artifact
+    path: "docs/COMMANDS.md"
+    must_contain: "build_check"
   - kind: verification
     target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-templates/V-templates-init"
 
 notes: >-
   Ba điều kiện BẮT BUỘC, thiếu một là task chưa xong — mỗi cái phải có test
@@ -50,5 +58,6 @@ notes: >-
   3. Không chạy được (thiếu lệnh, hết giờ, dựng cây lỗi) ⇒ `skipped` kèm lý do,
      KHÔNG phải đỏ.
 
-  Lượt chạy trên HEAD chỉ được phát sinh khi cây stage ĐỎ — đường thường vẫn
-  một lượt.
+  Lượt chạy trên HEAD chỉ được phát sinh khi cây stage ĐỎ — đường thường vẫn một
+  lượt.
+done_at: 2026-08-23T10:56:25.880Z

@@ -842,6 +842,14 @@ không biên dịch nổi (`commit:fc99e87`) trong khi gate xanh — đúng lớ
 "xanh ở máy tác giả, đỏ ở mọi máy khác" mà ganas tồn tại để chặn. Xem D-005 và
 PR-002 trong `.ganas/`.
 
+**Lệnh kiểm toàn dự án (`build_check`).** Khai trong `.ganas/config.yaml`, ganas
+chạy nó trong chính cây tạm đó. Nó **so với MỐC, không so với "xanh"**: đỏ thì
+chạy lại trên `HEAD`, và **chỉ chặn khi `HEAD` xanh mà cây stage đỏ** — tức chỉ
+chặn đúng thứ commit này làm gãy. Nhờ vế đó, bật được cả trên dự án đang đỏ sẵn
+và dự án cũ chưa bao giờ sạch; lệnh khai sai hoặc không tồn tại cũng đỏ ở cả hai
+cây nên không chặn ai. Lượt chạy trên `HEAD` chỉ phát sinh khi cây stage đã đỏ.
+Quá `300s` thì bỏ qua kèm lý do, không bao giờ biến thành chặn.
+
 Tiêu chí `kind: verification` **không** chạy lại: nó hỏi sổ cái bằng chứng chứ
 không hỏi cây file. Dựng cây không được (không phải repo git, thiếu `tar`…) thì
 lệnh **nói ra là đã bỏ qua** chứ không im lặng coi như xanh. Cửa thoát:

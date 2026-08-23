@@ -54,6 +54,16 @@ models:
   main: claude-opus-5
   verifier: claude-sonnet-5
   scribe: claude-haiku-4-5
+
+# Lệnh kiểm TOÀN DỰ ÁN mà \`ganas commit\` chạy trên cây sắp được commit.
+# Khác các lệnh trong \`exit_contract\` của task: chúng chỉ kiểm phần task chạm
+# tới, còn cái này kiểm cả cây — chỗ mà một thay đổi trải sang phạm vi khác làm
+# gãy build mà không tiêu chí nào của task nhìn thấy.
+#
+# So với MỐC, không so với "xanh": nếu HEAD cũng đỏ thì KHÔNG chặn, chỉ báo.
+# Nên bật được ngay cả trên dự án cũ chưa bao giờ sạch.
+# Không khai thì bỏ qua phép kiểm này.
+# build_check: npm run typecheck
 `;
 }
 
