@@ -1,7 +1,7 @@
-import { stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Fact, Freshness } from "../model/index.js";
+import { mtimeMs } from "../util/fsprobe.js";
 import { listProjectFiles, matchesAny } from "../util/glob.js";
 import { defHash, fileHash, historyFor, lastFor, type LedgerEntry } from "../verify/ledger.js";
 import { allTargets, depsHash, type Target } from "../verify/run.js";
@@ -215,12 +215,8 @@ export async function computeFreshness(
   const mtimeOf = async (rel: string): Promise<number> => {
     const cached = mtimeCache.get(rel);
     if (cached !== undefined) return cached;
-    let value = 0;
-    try {
-      value = (await stat(join(graph.root, rel))).mtimeMs;
-    } catch {
-      /* file biến mất giữa chừng: coi như không đổi */
-    }
+    // file biến mất giữa chừng (undefined): coi như không đổi.
+    const value = (await mtimeMs(join(graph.root, rel))) ?? 0;
     mtimeCache.set(rel, value);
     return value;
   };

@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { dirname } from "node:path";
 
 import { ganasPath } from "../graph/paths.js";
 import { runShell } from "../util/exec.js";
+import { exists } from "../util/fsprobe.js";
 
 /**
  * Sổ cái xác minh — append-only, **commit vào git**.
@@ -278,7 +278,7 @@ export function ledgerCorruption(root: string): number {
 export async function readLedger(root: string): Promise<LedgerEntry[]> {
   const file = ledgerPath(root);
   corruptLines.set(root, 0);
-  if (!existsSync(file)) return [];
+  if (!exists(file)) return [];
   const raw = await readFile(file, "utf8");
   const out: LedgerEntry[] = [];
   let bad = 0;

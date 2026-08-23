@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { exists, existsAsync, listDir } from "../src/util/fsprobe.js";
+import { exists, existsAsync, listDir, mtimeMs } from "../src/util/fsprobe.js";
 import { cleanup } from "./helpers.js";
 
 /**
@@ -54,6 +54,21 @@ test("listDir: thư mục không tồn tại → mảng rỗng, KHÔNG ném", as
   // Mọi nơi gọi trong ganas đều đang duyệt cây: gặp nhánh không vào được thì bỏ
   // qua rồi đi tiếp. Ném ở đây là huỷ cả lượt duyệt vì một thư mục lạ.
   assert.deepEqual(await listDir(join(tmpdir(), "ganas-khong-bao-gio-co-thu-muc-nay")), []);
+});
+
+test("mtimeMs: file tồn tại → trả một số; không tồn tại → undefined", async () => {
+  const dir = await tempDir();
+  try {
+    const file = join(dir, "co-that.txt");
+    await writeFile(file, "x", "utf8");
+
+    const m = await mtimeMs(file);
+    assert.equal(typeof m, "number");
+
+    assert.equal(await mtimeMs(join(dir, "khong-co.txt")), undefined);
+  } finally {
+    await cleanup(dir);
+  }
 });
 
 /* --- Điều kiện (1) của luật: công cụ phải nằm MỘT chỗ --------------------- */
@@ -109,9 +124,7 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
     "src/commands/note.ts — existsSync",
     "src/commands/scope.ts — existsSync",
     "src/commands/scope.ts — readdir",
-    "src/graph/freshness.ts — stat",
     "src/render/brief.ts — existsSync",
-    "src/verify/ledger.ts — existsSync",
   ].sort();
 
   const offenders: string[] = [];

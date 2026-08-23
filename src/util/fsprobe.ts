@@ -74,3 +74,19 @@ export async function listDir(dir: string): Promise<DirEntry[]> {
     return [];
   }
 }
+
+/**
+ * Thời điểm sửa đổi gần nhất (mtime) của một đường dẫn, mili giây kể từ epoch.
+ *
+ * Trả `undefined` khi đường dẫn không tồn tại hoặc không đọc được — cùng tinh
+ * thần "không ném" của `listDir`: nơi gọi đang TRA trạng thái ("file này đổi
+ * chưa"), không phải khẳng định file luôn ở đó. Chỉ đọc mtime, không đọc nội
+ * dung — vế "không ném" không mở đường cho `readFile` vào đây.
+ */
+export async function mtimeMs(path: string): Promise<number | undefined> {
+  try {
+    return (await stat(path)).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}

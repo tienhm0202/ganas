@@ -4,14 +4,15 @@ serves:
   - G-001
 implements: D-006
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: small
 model: verifier
 
 context_contract:
   must_read:
     - path: "test/fsprobe.test.ts"
-      why: "Danh sách PENDING là đầu bài — xoá được dòng nào thì task coi như xong phần đó"
+      why: "Danh sách PENDING là đầu bài — xoá được dòng nào thì task coi như xong
+        phần đó"
     - path: "src/util/fsprobe.ts"
       why: "Thêm phép đọc mtime vào đúng chỗ, không mở cửa cho readFile"
   facts: []
@@ -45,3 +46,4 @@ notes: >-
   `mtimeMs` là TRA trạng thái, đúng vế công cụ của luật. Nhưng đừng nhân dịp
   thêm `readFile` vào fsprobe — đó là vế bên kia, và thêm vào là biến công cụ
   tra thành cửa hậu cho mọi thứ.
+done_at: 2026-08-23T10:50:03.890Z
