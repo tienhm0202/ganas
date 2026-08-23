@@ -1,0 +1,20 @@
+id: M-cli-core
+scope: P-cli
+title: "Tính thuần cho lớp lệnh: ranh giới code của task, và tìm fact bằng BM25"
+nature: code
+paths:
+  - "src/boundary.ts"
+  - "src/search.ts"
+status: surveyed
+verify:
+  - id: V-cli-core-boundary
+    kind: probe
+    run: "npx tsx --test 'test/boundary.test.ts'"
+    expect: exit_zero
+  # Hai bằng chứng RIÊNG, không gộp một lệnh hai pattern: `ganas verify` bóp méo
+  # từng chuỗi để kiểm probe có thật sự kiểm gì không, và một lệnh hai pattern
+  # thì bóp méo pattern đầu vẫn pass nhờ pattern sau — probe rỗng ruột.
+  - id: V-cli-core-search
+    kind: probe
+    run: "npx tsx --test 'test/search.test.ts'"
+    expect: exit_zero

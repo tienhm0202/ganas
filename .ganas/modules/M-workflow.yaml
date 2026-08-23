@@ -1,18 +1,18 @@
 id: M-workflow
 scope: P-cli
-title: "Lõi từng lệnh: ranh giới code, chấm gate, commit, handoff, dọn, tìm"
+title: "Chỗ chạm đĩa của từng lệnh: chấm gate, commit, handoff, dọn, dòng chảy"
 nature: io
 paths:
-  - "src/boundary.ts"
   - "src/commit.ts"
   - "src/flow.ts"
   - "src/gate.ts"
   - "src/handoff.ts"
   - "src/prune.ts"
-  - "src/search.ts"
+depends_on:
+  - M-cli-core
 status: surveyed
 verify:
-  - id: V-workflow-boundary
+  - id: V-workflow-commit
     kind: probe
-    run: "npx tsx --test 'test/boundary.test.ts'"
+    run: "npx tsx --test 'test/commit-staging.test.ts'"
     expect: exit_zero

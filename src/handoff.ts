@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -6,6 +5,7 @@ import { formatGate, type GateResult } from "./gate.js";
 import { DIRS, ganasPath } from "./graph/paths.js";
 import type { Graph } from "./graph/types.js";
 import type { Task } from "./model/index.js";
+import { exists } from "./util/fsprobe.js";
 
 /**
  * Handoff — bản ghi tiếp nối giữa các phiên, DẪN XUẤT từ transcript thật.
@@ -232,7 +232,7 @@ export async function generateHandoff(
   opts: { sessionId: string; transcriptPath?: string | undefined },
 ): Promise<HandoffResult> {
   let transcript: TranscriptSummary | null = null;
-  if (opts.transcriptPath && existsSync(opts.transcriptPath)) {
+  if (opts.transcriptPath && exists(opts.transcriptPath)) {
     try {
       transcript = parseTranscript(await readFile(opts.transcriptPath, "utf8"));
     } catch {

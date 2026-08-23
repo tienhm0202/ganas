@@ -99,13 +99,9 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
    * mỗi lần đụng vào đều phải sửa bằng tay và giải thích được vì sao.
    */
   const PENDING = [
-    // T-021 — chẻ M-workflow (PR-005)
-    "src/commit.ts — existsSync",
-    "src/flow.ts — existsSync",
-    "src/gate.ts — existsSync",
-    "src/handoff.ts — existsSync",
-    "src/prune.ts — existsSync",
-    "src/prune.ts — readdir, stat",
+    // Còn lại vì `fsprobe` chưa có phép đọc mtime, mà thêm vào đó là sửa
+    // M-fsprobe (P-graph-core) — ngoài phạm vi task đã dọn chỗ này (T-021, P-cli).
+    "src/prune.ts — stat",
     // Chưa có task: lớp lệnh CLI và hai khối còn lại của D-006
     "src/commands/commit.ts — existsSync",
     "src/commands/icebox.ts — existsSync",

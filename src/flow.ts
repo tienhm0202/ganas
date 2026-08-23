@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-
 import { evaluateGate, type GateResult } from "./gate.js";
 import type { VerificationState } from "./graph/freshness.js";
 import { findGanasRoot } from "./graph/paths.js";
@@ -7,6 +5,7 @@ import { selectNextTask } from "./graph/select.js";
 import type { Graph } from "./graph/types.js";
 import { validateGraph } from "./graph/validate.js";
 import type { Task } from "./model/index.js";
+import { exists } from "./util/fsprobe.js";
 
 /**
  * DÒNG CHẢY — trạng thái dự án → **đúng một** bước kế tiếp.
@@ -318,5 +317,5 @@ export async function flowContext(cwd: string): Promise<FlowContext> {
 
 /** Có `.git` không — `dirty` vô nghĩa với dự án không dùng git. */
 export function hasGit(root: string): boolean {
-  return existsSync(`${root}/.git`);
+  return exists(`${root}/.git`);
 }

@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 
 import { DIRS, ganasPath } from "./graph/paths.js";
@@ -7,6 +6,7 @@ import type { Graph, Sourced } from "./graph/types.js";
 import type { Icebox } from "./model/icebox.js";
 import { readState, type State, writeState } from "./state.js";
 import { runShell } from "./util/exec.js";
+import { exists, listDir } from "./util/fsprobe.js";
 
 /**
  * Sub-thư mục trong `runs/` chứa ghi chú thô của `ganas note` — TÁCH khỏi
@@ -227,8 +227,8 @@ async function collectStaleIn(
   now: number,
 ): Promise<StaleRun[]> {
   const out: StaleRun[] = [];
-  if (!existsSync(dir)) return out;
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
+  if (!exists(dir)) return out;
+  for (const entry of await listDir(dir)) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
     const sessionId = entry.name.slice(0, -3);
     if (state.sessions[sessionId]) continue; // phiên còn đang bind — không đụng
@@ -256,7 +256,7 @@ async function archive(root: string, relFile: string, archiveDirName: string): P
   const dst = join(root, dstRel);
   await mkdir(dirname(dst), { recursive: true });
 
-  if (existsSync(join(root, ".git"))) {
+  if (exists(join(root, ".git"))) {
     const result = await runShell(
       `git mv -- ${quote(relative(root, src))} ${quote(relative(root, dst))}`,
       { cwd: root, timeoutMs: 15_000 },

@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -7,6 +6,7 @@ import { DIRS, ganasPath } from "./graph/paths.js";
 import type { Graph } from "./graph/types.js";
 import type { ExitCriterion, Task } from "./model/index.js";
 import { judge, runShell } from "./util/exec.js";
+import { exists } from "./util/fsprobe.js";
 
 export interface CriterionResult {
   criterion: ExitCriterion;
@@ -111,7 +111,7 @@ async function checkCriterion(
 
     case "artifact": {
       const file = join(ctx.root, criterion.path);
-      if (!existsSync(file)) {
+      if (!exists(file)) {
         return { criterion, label, status: "fail", reason: `file chưa tồn tại` };
       }
       if (criterion.must_contain) {
@@ -139,7 +139,7 @@ async function checkCriterion(
         };
       }
       const file = ganasPath(ctx.root, DIRS.runs, `${ctx.sessionId}.md`);
-      return existsSync(file)
+      return exists(file)
         ? { criterion, label, status: "pass" }
         : {
             criterion,

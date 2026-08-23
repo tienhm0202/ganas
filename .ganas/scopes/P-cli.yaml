@@ -11,6 +11,7 @@ modules:
   - M-templates
   - M-render
   - M-workflow
+  - M-cli-core
   - M-mcp
 entry: M-cli
 

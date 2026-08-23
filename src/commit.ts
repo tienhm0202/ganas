@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +6,7 @@ import { evaluateTreeCriteria, type GateResult } from "./gate.js";
 import type { Graph } from "./graph/types.js";
 import type { Task } from "./model/index.js";
 import { runShell } from "./util/exec.js";
+import { exists } from "./util/fsprobe.js";
 
 /**
  * Dựng commit message TỪ dữ liệu đã kiểm chứng, không phải văn xuôi tự bịa.
@@ -114,7 +114,7 @@ export async function checkStagedTree(root: string, task: Task): Promise<StagedT
     }
 
     const modules = join(root, "node_modules");
-    if (existsSync(modules)) {
+    if (exists(modules)) {
       await symlink(modules, join(dir, "node_modules"), "dir").catch(() => undefined);
     }
 
