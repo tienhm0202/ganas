@@ -105,3 +105,17 @@
     - commit:d4b63ed
   scope: P-cli
   status: open
+- id: ICE-007
+  title: Chẻ một thư mục thành nhiều khối làm mồ côi file hướng dẫn của thư mục đó
+  found_at: 2026-08-23T10:20:56.731Z
+  review_after_days: 30
+  weight: 2
+  ease: 3
+  why_deferred: "Chưa cản ai: file vẫn nằm đúng chỗ và agent vẫn đọc được. Sửa
+    đúng cách đụng tới phép suy moduleGuideDir và cả luật agent-guide, nên phải
+    là một đề xuất riêng chứ không nhét vào D-006."
+  anchors:
+    - src/model/module.ts:moduleGuideDir
+    - commit:98f5e80
+  scope: P-hook
+  status: open

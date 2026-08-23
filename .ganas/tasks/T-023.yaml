@@ -1,0 +1,45 @@
+id: T-023
+title: "M-cli và M-commands: sửa nhãn nature, và tách phần thuần lẫn trong đó"
+serves:
+  - G-001
+implements: D-006
+scope: P-cli
+status: todo
+estimated_context: medium
+model: verifier
+blocked_by:
+  - T-022
+
+context_contract:
+  must_read:
+    - path: "test/module-nature.test.ts"
+      why: "Hai khối này đang nằm trong danh sách miễn trừ của test đó — xoá miễn trừ là điều kiện hoàn thành"
+    - path: "src/commands/CLAUDE.md"
+      why: "Tài liệu vùng đã mô tả M-commands là lớp điều phối; sửa nhãn thì phải sửa cả đoạn mở đầu"
+  facts: []
+  open_questions:
+    - "src/commands/_common.ts và hook.ts thuần — tách ra khối lõi riêng, hay để nguyên vì chúng chỉ là chỗ nối dây?"
+
+touches:
+  - M-cli
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/module-nature.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/cli-help.test.ts'"
+  - kind: verification
+    target: "M-cli/V-cli-smoke"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Hai khối cuối còn lệch nhãn sau T-022. `M-cli` trộn `cli.ts` (ghi stdout) với
+  `util/args.ts` (thuần). `M-commands` có 19/21 file ghi stdout — đó là bản
+  chất của một lớp adapter CLI, nên nhãn `io` là đúng chứ không phải thoả hiệp;
+  phần thuần lẫn trong từng lệnh (`rankProposals`, `ownedPaths`…) là việc chẻ
+  tiếp, không gộp vào task này.
+
+  Điều kiện hoàn thành THẬT: `EXEMPT` trong `test/module-nature.test.ts` rỗng
+  đi. Còn miễn trừ thì còn nợ.
