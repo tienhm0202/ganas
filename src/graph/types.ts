@@ -123,6 +123,28 @@ export interface LedgerEntry {
   output?: string;
 }
 
+/**
+ * Một import TƯƠNG ĐỐI bắt được trong mã nguồn.
+ *
+ * Kiểu thuần, khai ở khối lá: chỗ ĐỌC file là `graph/load.ts` (`nature: io`),
+ * chỗ ĐỐI CHIẾU là `graph/validate.ts` (`nature: code`) — mà lõi thì không
+ * được tự `readFile`. Cùng lược đồ với `gitignoreRaw`: vỏ đọc, lõi soi.
+ */
+export interface CodeImport {
+  /** Specifier đúng như viết trong code, vd `"./paths.js"`. */
+  specifier: string;
+  /**
+   * Import này chỉ mang KIỂU — `import type {...}`, hoặc `import { type A,
+   * type B }` mà MỌI tên đều `type`.
+   *
+   * Đo được điều này là cả lý do trường tồn tại: cạnh chỉ mang kiểu biến mất
+   * sau khi biên dịch, nên nó là chỗ RẺ NHẤT để cắt một chu trình — chuyển
+   * kiểu xuống một khối lá là xong, luồng chạy không đổi. `hint` của
+   * `spine/module-cycle-code` phải chỉ ra được cạnh nào như vậy.
+   */
+  typeOnly: boolean;
+}
+
 /** Một phát hiện của validator, luôn quy về được `file:line`. */
 export interface Diagnostic {
   severity: Severity;
@@ -179,6 +201,22 @@ export interface Graph {
   loadDiagnostics: Diagnostic[];
   /** Nội dung `.gitignore` ở gốc dự án, nếu có — dùng để đối chiếu `LOCAL_ONLY`. */
   gitignoreRaw: string | null;
+  /**
+   * Import THẬT của mã nguồn: đường dẫn file tương đối gốc dự án (dấu `/`) →
+   * các specifier TƯƠNG ĐỐI mà file đó import.
+   *
+   * Tồn tại vì `spine/module-cycle` chỉ soi `depends_on` ĐÃ KHAI, mà bản đồ
+   * khai thiếu thì một chu trình có thật trong code vẫn vô hình: chu trình
+   * `M-graph-read ↔ M-load ↔ M-verify` sống nhiều tuần dưới một `ganas
+   * validate` sạch không một lỗi, chỉ lộ ra khi có người ngồi khai cạnh bằng
+   * tay (T-042). Bản đồ càng thiếu càng sạch — đúng chiều khuyến khích ngược
+   * mà trường này bịt lại.
+   *
+   * CHỈ chứa file nằm trong `paths` của một khối nào đó: file không thuộc khối
+   * nào không sinh cạnh nào, đọc nó là phí — và `loadGraph` chạy ở MỌI lệnh
+   * ganas, kể cả hook trong vòng lặp sửa file.
+   */
+  codeImports: Map<string, readonly CodeImport[]>;
 }
 
 export function hasErrors(diags: readonly Diagnostic[]): boolean {

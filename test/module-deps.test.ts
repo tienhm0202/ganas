@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
 
-import { parse } from "yaml";
-
-import { matchesAny } from "../src/util/glob.js";
+import { loadGraph } from "../src/graph/load.js";
+import type { Graph } from "../src/graph/types.js";
+import { codeModuleEdges, validateGraph } from "../src/graph/validate.js";
 
 /**
  * `depends_on` của bản đồ phải khớp IMPORT THẬT trong code.
@@ -22,74 +21,45 @@ import { matchesAny } from "../src/util/glob.js";
  *
  * Không cái nào sinh cảnh báo, vì `computeDebt` chỉ kiểm những cạnh ĐÃ KHAI:
  * bản đồ càng thiếu càng sạch. Test này bịt đúng chiều khuyến khích ngược đó.
+ *
+ * Từ T-043 phép đo KHÔNG còn nằm ở đây: `loadGraph` đọc import thật vào
+ * `graph.codeImports`, `codeModuleEdges()` suy cạnh từ đó, và `validateGraph`
+ * phát `spine/module-cycle-code`. Test gọi thẳng ba thứ đó — một phép đo, một
+ * chỗ sửa. Bản Tarjan thứ hai từng sống ở file này đã bỏ: hai phép đo lệch
+ * nhau là hỏng cả hai.
  */
 
 const ROOT = join(import.meta.dirname, "..");
 
-interface ModuleDoc {
-  id: string;
-  paths?: string[];
-  depends_on?: string[];
+let cached: Graph | undefined;
+
+/** Nạp graph của chính repo này đúng MỘT lần cho cả file. */
+async function repoGraph(): Promise<Graph> {
+  cached ??= await loadGraph(ROOT);
+  return cached;
 }
 
-function modules(): ModuleDoc[] {
-  const dir = join(ROOT, ".ganas", "modules");
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".yaml"))
-    .map((f) => parse(readFileSync(join(dir, f), "utf8")) as ModuleDoc);
+/** Cạnh `nguồn → đích` suy từ import thật — đúng phép đo mà validator dùng. */
+async function realEdges(): Promise<Set<string>> {
+  const edges = codeModuleEdges(await repoGraph());
+  return new Set(edges.map((e) => `${e.to} → ${e.from}`));
 }
 
-function sourceFiles(dir = "src"): string[] {
-  const out: string[] = [];
-  for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
-    const rel = `${dir}/${e.name}`;
-    if (e.isDirectory()) out.push(...sourceFiles(rel));
-    else if (e.name.endsWith(".ts")) out.push(rel);
-  }
-  return out;
-}
-
-/**
- * Cạnh `nguồn → đích` suy từ import thật.
- *
- * PHẢI bắt cả `import()` ĐỘNG: `cli.ts` nạp từng lệnh và `flow.ts` nạp
- * `boundary.js` đều đi đường đó. Bỏ sót thì hai cạnh ĐÚNG bị báo oan là "không
- * import nào đỡ" — đã vấp đúng chỗ này lúc đo lần đầu.
- */
-function realEdges(): Set<string> {
-  const mods = modules();
-  const ownerOf = (f: string): string | undefined =>
-    mods.find((m) => matchesAny(f, m.paths ?? []))?.id;
-
-  const edges = new Set<string>();
-  for (const f of sourceFiles()) {
-    const from = ownerOf(f);
-    if (!from) continue;
-    const text = readFileSync(join(ROOT, f), "utf8");
-    for (const m of text.matchAll(/(?:from|import\()\s*"(\.[^"]+)"/g)) {
-      const abs = resolve(dirname(join(ROOT, f)), m[1]!.replace(/\.js$/, ".ts"));
-      const to = ownerOf(relative(ROOT, abs));
-      if (!to || to === from) continue;
-      edges.add(`${to} → ${from}`);
-    }
-  }
-  return edges;
-}
-
-function declaredEdges(): Set<string> {
+async function declaredEdges(): Promise<Set<string>> {
   const out = new Set<string>();
-  for (const m of modules()) for (const d of m.depends_on ?? []) out.add(`${d} → ${m.id}`);
+  const graph = await repoGraph();
+  for (const [id, m] of graph.modules) for (const d of m.value.depends_on) out.add(`${d} → ${id}`);
   return out;
 }
 
 /* --- Vế 2: siết CHẶT, không có tập đóng nào ------------------------------- */
 
-test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó", () => {
+test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó", async () => {
   // Vế bắt được cả ba lỗi kể trên. KHÔNG khai miễn trừ ở đây: một cạnh không
   // import nào đỡ là cạnh sai chiều hoặc đã chết, và cả hai đều phải sửa chứ
   // không phải ghi nhận.
-  const real = realEdges();
-  const unbacked = [...declaredEdges()].filter((e) => !real.has(e)).sort();
+  const real = await realEdges();
+  const unbacked = [...(await declaredEdges())].filter((e) => !real.has(e)).sort();
 
   assert.deepEqual(
     unbacked,
@@ -102,21 +72,34 @@ test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó",
 
 /* --- Vế 1: tập ĐÓNG, chỉ được ngắn đi ------------------------------------ */
 
-test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đã khai", () => {
+test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đã khai", async () => {
   /**
-   * 72 cạnh code CÓ mà bản đồ CHƯA khai.
+   * 74 cạnh code CÓ mà bản đồ CHƯA khai.
    *
    * Từ 67 xuống 66 ở T-041: `M-hook-io → M-hook-policy` biến mất vì kiểu
    * `HookInput`/`HookOutput` đã chuyển về lõi, cắt chu trình policy ↔ io
    * (PR-012).
    *
-   * Từ 66 lên 72 ở T-042, và đây là ngoại lệ DUY NHẤT cho luật "chỉ ngắn đi":
+   * Từ 66 lên 72 ở T-042, và đó là ngoại lệ THỨ NHẤT cho luật "chỉ ngắn đi":
    * `M-graph-read` bị CHẺ làm hai (`types.ts`+`paths.ts` sang khối lá
    * `M-graph-base`), nên một cạnh cũ đi tới khối cũ thành hai cạnh đi tới hai
    * khối mới. KHÔNG một import xuyên khối MỚI nào được thêm — mười một cạnh
    * `M-graph-base → …` xuất hiện, hai cạnh chỉ đổi tên khối đích, năm cạnh cũ
    * biến mất (`M-load → M-graph-read` cộng bốn cạnh `M-graph-read → …` đổi
    * chủ).
+   *
+   * Từ 72 lên 74 ở T-043, ngoại lệ THỨ HAI, và hai dòng mới có hai nguyên nhân
+   * khác hẳn nhau:
+   *
+   *  - `M-exec → M-build` KHÔNG mới, nó chỉ vừa NHÌN THẤY ĐƯỢC. Bản đo cũ ở
+   *    file này chỉ duyệt `src/`; validator duyệt mọi file `.ts` nằm trong
+   *    `paths` của một khối, nên `release/version.test.ts` (thuộc `M-build`)
+   *    lần đầu được tính — nó import `../src/util/exec.js` từ trước tới nay.
+   *    Đây đúng là loại cạnh mà bản đo hẹp giấu đi.
+   *  - `M-util → M-validate` thì MỚI thật: `codeModuleEdges()` cần `matchesAny`
+   *    để quy file về khối. Không có đường nào tránh — phép quy file→khối phải
+   *    THUẦN và phải trùng khít với `paths`, mà `matchesAny` là chỗ DUY NHẤT
+   *    cài phép đó.
    *
    * `M-verify → M-cli-core` và `M-verify → M-hook-policy` thì KHÔNG mất, và
    * đó là cái giá đã trả có chủ đích: `verify/ledger.ts` TÁI XUẤT bốn tên đã
@@ -128,7 +111,7 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
    * P-cli và P-hook.
    *
    * KHÔNG thêm chúng vào `depends_on` một lượt: mỗi cạnh mới đẻ một
-   * `uncovered-edge`, tức 72 hợp đồng cổng phải khai — việc lớn hơn hẳn và
+   * `uncovered-edge`, tức 74 hợp đồng cổng phải khai — việc lớn hơn hẳn và
    * phải do người quyết.
    *
    * Tập ĐÓNG, so bằng `deepEqual`: thêm import xuyên khối mới mà quên khai
@@ -142,6 +125,7 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-cli-core → M-cli",
     "M-cli-core → M-commands",
     "M-cli-core → M-mcp",
+    "M-exec → M-build",
     "M-exec → M-commands",
     "M-exec → M-graph-read",
     "M-exec → M-util",
@@ -197,6 +181,7 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-util → M-graph-base",
     "M-util → M-load",
     "M-util → M-mcp",
+    "M-util → M-validate",
     "M-validate → M-commands",
     "M-validate → M-hook-io",
     "M-validate → M-workflow",
@@ -210,8 +195,8 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-workflow → M-hook-io",
   ].sort();
 
-  const declared = declaredEdges();
-  const missing = [...realEdges()].filter((e) => !declared.has(e)).sort();
+  const declared = await declaredEdges();
+  const missing = [...(await realEdges())].filter((e) => !declared.has(e)).sort();
 
   assert.deepEqual(
     missing,
@@ -224,63 +209,7 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
 
 /* --- Vế 3: sơ đồ khối phải KHÔNG có chu trình ----------------------------- */
 
-/**
- * Tarjan: mọi thành phần liên thông mạnh của một đồ thị có hướng, trong một
- * lượt duyệt sâu. Thành phần cỡ > 1 nghĩa là có chu trình đi qua mọi khối
- * trong đó.
- */
-function stronglyConnectedComponents(edges: Iterable<string>): string[][] {
-  const adjacency = new Map<string, string[]>();
-  const nodes = new Set<string>();
-  for (const edge of edges) {
-    const [from, to] = edge.split(" → ");
-    nodes.add(from!);
-    nodes.add(to!);
-    const list = adjacency.get(from!);
-    if (list) list.push(to!);
-    else adjacency.set(from!, [to!]);
-  }
-
-  const index = new Map<string, number>();
-  const lowLink = new Map<string, number>();
-  const onStack = new Set<string>();
-  const stack: string[] = [];
-  const components: string[][] = [];
-  let counter = 0;
-
-  const visit = (v: string): void => {
-    index.set(v, counter);
-    lowLink.set(v, counter);
-    counter++;
-    stack.push(v);
-    onStack.add(v);
-
-    for (const w of adjacency.get(v) ?? []) {
-      if (!index.has(w)) {
-        visit(w);
-        lowLink.set(v, Math.min(lowLink.get(v)!, lowLink.get(w)!));
-      } else if (onStack.has(w)) {
-        lowLink.set(v, Math.min(lowLink.get(v)!, index.get(w)!));
-      }
-    }
-
-    if (lowLink.get(v) === index.get(v)) {
-      const component: string[] = [];
-      for (;;) {
-        const w = stack.pop()!;
-        onStack.delete(w);
-        component.push(w);
-        if (w === v) break;
-      }
-      components.push(component.sort());
-    }
-  };
-
-  for (const v of nodes) if (!index.has(v)) visit(v);
-  return components;
-}
-
-test("⭐ sơ đồ khối suy từ import thật không có chu trình", () => {
+test("⭐ sơ đồ khối suy từ import thật không có chu trình", async () => {
   /**
    * Sơ đồ khối có chu trình thì KHÔNG lan truyền được độ tin.
    *
@@ -299,18 +228,26 @@ test("⭐ sơ đồ khối suy từ import thật không có chu trình", () => 
    *
    * T-042 cắt nó bằng cách tách khối LÁ `M-graph-base` (`graph/types.ts` +
    * `graph/paths.ts`), không phải bằng cách bỏ bớt cạnh khai báo.
+   *
+   * T-043 chuyển phép đo vào chính `validateGraph`, nên test này KHÔNG còn
+   * bản Tarjan riêng: nó đòi đúng thứ `ganas validate` đòi. Một phép đo, một
+   * chỗ sửa — bản thứ hai chỉ chờ ngày lệch khỏi bản thứ nhất.
    */
-  const cyclic = stronglyConnectedComponents(realEdges())
-    .filter((component) => component.length > 1)
-    .map((component) => component.join(" ↔ "))
-    .sort();
+  const cycles = validateGraph(await repoGraph()).filter(
+    (d) => d.code === "spine/module-cycle-code",
+  );
 
   assert.deepEqual(
-    cyclic,
+    cycles.map((d) => `${d.message}\n${d.hint ?? ""}`),
     [],
     `Sơ đồ khối có CHU TRÌNH — độ tin không lan truyền được qua nó.\n` +
       `Cắt bằng cách tách phần dùng chung ra một khối lá, KHÔNG bằng cách\n` +
-      `giấu cạnh: cạnh đo từ import thật, bản đồ khai thiếu không làm nó biến mất.\n` +
-      cyclic.join("\n"),
+      `giấu cạnh: cạnh đo từ import thật, bản đồ khai thiếu không làm nó biến mất.`,
+  );
+
+  assert.equal(
+    cycles.every((d) => d.severity === "error"),
+    true,
+    "chu trình khối phải là lỗi CHẶN, không phải cảnh báo",
   );
 });

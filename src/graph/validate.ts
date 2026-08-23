@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 import type { AnchorObject, ExitCriterion, Proposal } from "../model/index.js";
 import {
@@ -10,6 +10,7 @@ import {
   modulePathsOverlap,
 } from "../model/index.js";
 import { exists } from "../util/fsprobe.js";
+import { matchesAny } from "../util/glob.js";
 import { lineOfPath } from "../util/yaml.js";
 import { defHash, entryAt, ledgerCorruption, verifyChain } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
@@ -23,6 +24,77 @@ import type { Diagnostic, Graph, Sourced } from "./types.js";
  * các luật cần nhìn cả graph: liên kết treo, mục tiêu mồ côi, vòng lặp, và tính
  * nhất quán giữa task / design / phạm vi.
  */
+
+/* ------------------------------------------------------------------------- *
+ * Cạnh sơ đồ khối suy từ IMPORT THẬT
+ *
+ * `spine/module-cycle` bên dưới chỉ soi `depends_on` ĐÃ KHAI, nên nó sạch đúng
+ * bằng mức bản đồ đầy đủ — bản đồ khai thiếu càng nhiều thì càng ít lỗi. Chu
+ * trình `M-graph-read ↔ M-load ↔ M-verify` sống nhiều tuần dưới một `ganas
+ * validate` không một lỗi vì đúng chiều khuyến khích ngược đó (T-042).
+ *
+ * Phép đo ở đây THUẦN: nội dung file đã do `graph/load.ts` (`nature: io`) đọc
+ * sẵn vào `graph.codeImports`. Lõi không được tự `readFile` — xem
+ * `.claude/rules/architecture.md`.
+ * ------------------------------------------------------------------------- */
+
+/** Một cạnh sơ đồ khối suy từ import thật trong mã nguồn. */
+export interface CodeEdge {
+  /** Khối chứa file ĐI import. */
+  from: string;
+  /** Khối chứa file BỊ import. */
+  to: string;
+  /**
+   * MỌI import đỡ cạnh này đều chỉ mang kiểu.
+   *
+   * Cạnh như vậy biến mất sau khi biên dịch, nên nó là chỗ RẺ NHẤT để cắt một
+   * chu trình: chuyển kiểu xuống một khối lá là xong, luồng chạy không đổi.
+   * Đo trên cây trước T-042: 10 cạnh chỉ mang kiểu, 72 cạnh có import giá trị —
+   * bỏ riêng nhóm đầu thì chu trình co từ ba khối xuống hai.
+   */
+  typeOnly: boolean;
+}
+
+/** Khoá gộp hai đầu một cạnh. Id khối không chứa khoảng trắng nên không nhập nhằng. */
+function edgeKey(from: string, to: string): string {
+  return `${from} ${to}`;
+}
+
+/**
+ * Cạnh `khối nguồn → khối đích` suy từ `graph.codeImports`.
+ *
+ * Phải TRÙNG KHÍT với phép đo trong `test/module-deps.test.ts` — hai phép đo
+ * lệch nhau là hỏng cả hai, nên test đó gọi thẳng hàm này thay vì tự dựng bản
+ * thứ hai.
+ */
+export function codeModuleEdges(graph: Graph): CodeEdge[] {
+  const owners = [...graph.modules].map(([id, m]) => ({ id, paths: m.value.paths }));
+  const cache = new Map<string, string | undefined>();
+  const ownerOf = (file: string): string | undefined => {
+    if (cache.has(file)) return cache.get(file);
+    const id = owners.find((o) => matchesAny(file, o.paths))?.id;
+    cache.set(file, id);
+    return id;
+  };
+
+  const edges = new Map<string, CodeEdge>();
+  for (const [file, imports] of graph.codeImports) {
+    const from = ownerOf(file);
+    if (!from) continue;
+    for (const imp of imports) {
+      // `./x.js` trong mã TypeScript ESM trỏ tới `./x.ts` trên đĩa.
+      const target = posix.join(posix.dirname(file), imp.specifier.replace(/\.js$/, ".ts"));
+      const to = ownerOf(target);
+      // Import trong CÙNG một khối không phải cạnh của sơ đồ khối.
+      if (!to || to === from) continue;
+      const seen = edges.get(edgeKey(from, to));
+      // Một import GIÁ TRỊ là đủ để cạnh thôi "chỉ mang kiểu".
+      if (seen) seen.typeOnly = seen.typeOnly && imp.typeOnly;
+      else edges.set(edgeKey(from, to), { from, to, typeOnly: imp.typeOnly });
+    }
+  }
+  return [...edges.values()];
+}
 
 /** Định vị dòng của một field trong file nguồn của bản ghi. */
 function at(
@@ -551,6 +623,45 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
     });
   }
 
+  // Vế thứ hai của cùng một câu hỏi, đo trên IMPORT THẬT thay vì trên lời khai.
+  // Hai vế không thay thế nhau: cạnh khai mà code không có là cạnh chết, cạnh
+  // code có mà không ai khai là chu trình VÔ HÌNH — thứ đã sống nhiều tuần
+  // dưới một `ganas validate` sạch không một lỗi.
+  const codeEdges = codeModuleEdges(graph);
+  const codeAdjacency = new Map<string, string[]>();
+  for (const edge of codeEdges) {
+    const list = codeAdjacency.get(edge.from);
+    if (list) list.push(edge.to);
+    else codeAdjacency.set(edge.from, [edge.to]);
+  }
+  const codeCycle = findCycle(codeAdjacency);
+  if (codeCycle) {
+    const head = graph.modules.get(codeCycle[0]!)!;
+    const typeOnlyOf = new Map(codeEdges.map((e) => [edgeKey(e.from, e.to), e.typeOnly]));
+    const legs = codeCycle.slice(0, -1).map((from, i) => {
+      const to = codeCycle[i + 1]!;
+      return { label: `${from} → ${to}`, typeOnly: typeOnlyOf.get(edgeKey(from, to)) === true };
+    });
+    const cheap = legs.filter((leg) => leg.typeOnly).map((leg) => leg.label);
+    diags.push({
+      severity: "error",
+      code: "spine/module-cycle-code",
+      message:
+        `vòng lặp phụ thuộc giữa các khối, suy từ IMPORT THẬT trong code: ` + codeCycle.join(" → "),
+      file: head.file,
+      line: at(graph, head, "paths"),
+      hint:
+        `Cạnh trong vòng: ` +
+        legs.map((leg) => leg.label + (leg.typeOnly ? " (chỉ `import type`)" : "")).join(", ") +
+        `.\n` +
+        (cheap.length > 0
+          ? `Cắt rẻ nhất ở cạnh chỉ mang kiểu (${cheap.join(", ")}): kiểu biến mất sau khi ` +
+            `biên dịch, nên chuyển nó xuống một khối lá là xong — luồng chạy không đổi.`
+          : `Không cạnh nào chỉ mang kiểu — phải tách phần dùng chung ra một khối LÁ, không ` +
+            `phải bỏ bớt \`depends_on\`: cạnh đo từ import thật, khai thiếu không làm nó biến mất.`),
+    });
+  }
+
   const taskEdges = new Map<string, readonly string[]>();
   for (const [id, t] of graph.tasks) taskEdges.set(id, t.value.blocked_by);
   const taskCycle = findCycle(taskEdges);
@@ -801,7 +912,6 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
     }
   }
 
-
   /* --- Bản đồ code: tài liệu vùng và vùng chồng nhau ---------------------- *
    * Cả hai đều `warning`, KHÔNG `error`, và đó là một quyết định chứ không
    * phải sự dè dặt: ganas phải cài được lên dự án CŨ vốn có cấu trúc khác.
@@ -993,10 +1103,26 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
    * ghi lại thứ họ ĐANG BIẾT. Xem PR-009. */
 
   const anchored: { id: string; file: string; anchors: readonly AnchorObject[] }[] = [
-    ...[...graph.facts.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
-    ...[...graph.claims.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
-    ...[...graph.icebox.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
-    ...[...graph.proposals.values()].map((x) => ({ id: x.value.id, file: x.file, anchors: x.value.anchors })),
+    ...[...graph.facts.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors,
+    })),
+    ...[...graph.claims.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors,
+    })),
+    ...[...graph.icebox.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors,
+    })),
+    ...[...graph.proposals.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors,
+    })),
   ];
 
   for (const rec of anchored) {

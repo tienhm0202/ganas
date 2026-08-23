@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import type { ZodIssue, ZodTypeAny } from "zod";
 import { z } from "zod";
 
+import type { Module } from "../model/index.js";
 import {
   LATEST_SCHEMA_VERSION,
   zClaim,
@@ -20,10 +21,11 @@ import {
   zTask,
 } from "../model/index.js";
 import { GanasError } from "../util/errors.js";
+import { matchesAny } from "../util/glob.js";
 import { lineOfPath, readYamlFile } from "../util/yaml.js";
 import { indexByTarget, readLedger } from "../verify/ledger.js";
-import { CONFIG_FILE, DIRS, ganasPath } from "./paths.js";
-import type { Diagnostic, Graph, LoadedYaml, Sourced } from "./types.js";
+import { CONFIG_FILE, DIRS, GANAS_DIR, ganasPath } from "./paths.js";
+import type { CodeImport, Diagnostic, Graph, LoadedYaml, Sourced } from "./types.js";
 
 /** Đổi issue của zod thành Diagnostic có `file:line`. */
 function issuesToDiagnostics(
@@ -244,6 +246,144 @@ async function collectArray<S extends ZodTypeAny>(
   return { items, diagnostics, sources };
 }
 
+/* ------------------------------------------------------------------------- *
+ * Import thật của mã nguồn — vỏ ĐỌC, lõi ĐỐI CHIẾU
+ *
+ * `spine/module-cycle` chỉ soi `depends_on` ĐÃ KHAI, nên một chu trình có thật
+ * trong code vẫn vô hình khi bản đồ khai thiếu — bản đồ càng thiếu càng sạch.
+ * Chỗ đọc nội dung file phải nằm ở đây (`nature: io`); `graph/validate.ts`
+ * (`nature: code`) chỉ được nhận dữ liệu đã đọc sẵn qua `Graph`. Cùng lược đồ
+ * với `gitignoreRaw`.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Bắt import TƯƠNG ĐỐI trong mã nguồn.
+ *
+ * PHẢI bắt cả `import()` ĐỘNG: `cli.ts` nạp từng lệnh và `flow.ts` nạp
+ * `boundary.js` đều đi đường đó. Bỏ sót thì hai cạnh ĐÚNG bị báo oan là
+ * "không import nào đỡ" — đã vấp đúng chỗ này lúc đo lần đầu ở
+ * `test/module-deps.test.ts`.
+ */
+const RELATIVE_IMPORT = /(?:from|import\()\s*"(\.[^"]+)"/g;
+
+/** Vị trí bắt đầu mệnh đề của câu `import`/`export` gần nhất trước `at`. */
+function clauseBefore(text: string, at: number): string | undefined {
+  let start = -1;
+  for (const kw of text.slice(0, at).matchAll(/\b(?:import|export)\b/g)) {
+    start = kw.index + kw[0].length;
+  }
+  return start === -1 ? undefined : text.slice(start, at).trim();
+}
+
+/**
+ * Import này có chỉ mang KIỂU không.
+ *
+ * Hai dạng, thiếu một là đo hụt: `import type { A } from "..."` (cả câu là
+ * kiểu) và `import { type A, type B } from "..."` (từng tên là kiểu). Một tên
+ * giá trị lẫn vào là đủ để cạnh thành cạnh thật — `import Foo, { type B }`
+ * vẫn kéo module kia vào lúc chạy.
+ */
+function isTypeOnlyClause(clause: string): boolean {
+  if (/^type\b/.test(clause)) return true;
+  const braced = /^\{([\s\S]*)\}$/.exec(clause);
+  if (!braced) return false;
+  const names = braced[1]!
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  return names.length > 0 && names.every((n) => /^type\b/.test(n));
+}
+
+/** Mọi import tương đối của một file mã nguồn, kèm chuyện nó có chỉ mang kiểu không. */
+function extractImports(text: string): CodeImport[] {
+  const out: CodeImport[] = [];
+  for (const m of text.matchAll(RELATIVE_IMPORT)) {
+    // `import(...)` chạy lúc CHẠY, nên không bao giờ là import chỉ-kiểu.
+    const dynamic = m[0].startsWith("import");
+    const clause = dynamic ? undefined : clauseBefore(text, m.index);
+    out.push({
+      specifier: m[1]!,
+      typeOnly: clause !== undefined && isTypeOnlyClause(clause),
+    });
+  }
+  return out;
+}
+
+/** Thư mục không bao giờ chứa code của dự án — đi vào là phí, và `.ganas/` là dữ liệu. */
+const SKIP_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "target",
+  "vendor",
+  ".next",
+  ".venv",
+  "__pycache__",
+  GANAS_DIR,
+]);
+
+/** Đoạn đầu CỐ ĐỊNH của một glob — phần trước ký tự đại diện đầu tiên. */
+function literalPrefix(glob: string): string {
+  const normalized = glob.split("\\").join("/").replace(/^\.\//, "");
+  const cut = normalized.search(/[*?[{]/);
+  return cut === -1 ? normalized : normalized.slice(0, cut);
+}
+
+/**
+ * Thư mục này có đáng bước vào không.
+ *
+ * File khớp một glob thì nó bắt đầu bằng tiền tố cố định của glob đó, nên MỌI
+ * thư mục tổ tiên của nó hoặc là tiền tố của đoạn cố định, hoặc nằm trong đoạn
+ * cố định. Cắt theo đúng hai điều kiện đó thì không bỏ sót file nào, mà cây
+ * `test/`, `docs/`, `.claude/` thì không phải duyệt — `loadGraph` chạy ở MỌI
+ * lệnh ganas, kể cả hook trong vòng lặp sửa file.
+ */
+function worthEntering(dir: string, prefixes: readonly string[]): boolean {
+  return prefixes.some((p) => p === "" || p.startsWith(`${dir}/`) || dir.startsWith(p));
+}
+
+/**
+ * Đọc import thật của mọi file `.ts` NẰM TRONG `paths` của một khối.
+ *
+ * File không thuộc khối nào không sinh cạnh nào, nên đọc nó là phí thuần.
+ */
+async function collectCodeImports(
+  root: string,
+  modules: Iterable<Sourced<Module>>,
+): Promise<Map<string, readonly CodeImport[]>> {
+  const patterns: string[] = [];
+  for (const m of modules) patterns.push(...m.value.paths);
+  const out = new Map<string, readonly CodeImport[]>();
+  if (patterns.length === 0) return out;
+  const prefixes = patterns.map(literalPrefix);
+
+  const walk = async (dir: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(dir ? join(root, dir) : root, { withFileTypes: true });
+    } catch {
+      // Thư mục không đọc được thì bỏ nhánh rồi đi tiếp — không huỷ cả lượt nạp
+      // vì một quyền đọc thiếu.
+      return;
+    }
+    for (const entry of entries) {
+      const rel = dir ? `${dir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        if (!worthEntering(rel, prefixes)) continue;
+        await walk(rel);
+      } else if (entry.isFile() && entry.name.endsWith(".ts") && matchesAny(rel, patterns)) {
+        out.set(rel, extractImports(await readFile(join(root, rel), "utf8")));
+      }
+    }
+  };
+
+  await walk("");
+  return out;
+}
+
 /** Nạp toàn bộ .ganas/ thành graph. Lỗi được gom lại, không ném giữa chừng. */
 export async function loadGraph(root: string): Promise<Graph> {
   const configFile = ganasPath(root, CONFIG_FILE);
@@ -301,6 +441,8 @@ export async function loadGraph(root: string): Promise<Graph> {
       collectArray([ganasPath(root, DIRS.icebox)], zIcebox, root, "icebox"),
     ]);
 
+  const codeImports = await collectCodeImports(root, modules.items.values());
+
   return {
     root,
     config: parsedConfig.data,
@@ -317,6 +459,7 @@ export async function loadGraph(root: string): Promise<Graph> {
     ledger,
     ledgerRaw,
     gitignoreRaw,
+    codeImports,
     sources: new Map([
       ...goals.sources,
       ...designs.sources,

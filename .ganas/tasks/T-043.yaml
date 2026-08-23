@@ -1,0 +1,97 @@
+id: T-043
+title: "Chu trình khối suy từ import thật thành lỗi của ganas validate"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "test/module-deps.test.ts"
+      why: "realEdges() và test SCC — logic đã chạy được, nay phải về src/ và bỏ trùng
+        lặp"
+    - path: "src/graph/validate.ts"
+      why: "spine/module-cycle đã có sẵn, nhưng chỉ soi depends_on ĐÃ KHAI"
+    - path: "src/graph/load.ts"
+      why: "Tiền lệ gitignoreRaw: vỏ đọc nội dung, lõi đối chiếu"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-graph-base
+  - M-load
+  - M-validate
+
+exit_contract:
+  - kind: artifact
+    path: "src/graph/validate.ts"
+    must_contain: "spine/module-cycle-code"
+  - kind: command
+    run: "npx tsx --test 'test/module-cycle-code.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/debt.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-graph-base/V-graph-base-shape"
+  - kind: verification
+    target: "M-load/V-load-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  `spine/module-cycle` đã tồn tại nhưng chỉ soi `depends_on` ĐÃ KHAI, nên nó
+  sạch trong khi code có chu trình thật — đúng chỗ hỏng mà PR-013/T-042 vừa trả
+  giá: vòng `M-graph-read ↔ M-load ↔ M-verify` sống nhiều tuần dưới một `ganas
+  validate` không một lỗi. Lúc mới sinh nó là MỘT dòng import sai chỗ; lúc bị
+  bắt nó đã thành việc chẻ khối. Chi phí sửa tỉ lệ với thời gian nó sống, nên
+  chỗ bắt phải là validate chứ không phải một test ai đó nhớ chạy.
+
+  Chiều phụ thuộc phải theo tiền lệ `gitignoreRaw`: `loadGraph` (M-load, vỏ) đọc
+  nội dung file `.ts`, gắn lên `Graph` một trường mới; `validateGraph`
+  (M-validate, lõi) vẫn THUẦN và chỉ đối chiếu. Không cho `validate.ts` tự
+  `readFile` — đó là đúng thứ `.claude/rules/architecture.md` cấm.
+
+  Đo trên cây trước T-042: 10 cạnh chỉ có `import type`, 72 cạnh có import giá
+  trị. Nếu bỏ cạnh type-only thì chu trình co từ ba khối xuống hai
+  (`M-graph-read ↔ M-verify`) — tức type-only KHÔNG phải thuốc chữa, nhưng biết
+  một cạnh là type-only thì biết cách sửa rẻ nhất (chuyển kiểu xuống khối lá).
+  Nên validator ĐẾM CẢ hai loại — cùng phép đo với `realEdges()`, hai chỗ không
+  được lệch nhau — nhưng `hint` phải nói rõ cạnh nào chỉ là `import type`.
+
+  Bỏ trùng lặp: sau khi validator có thật, test SCC trong
+  `test/module-deps.test.ts` không nên giữ bản Tarjan thứ hai. Cho nó gọi
+  `validateGraph` và đòi không có `spine/module-cycle-code` — một phép đo, một
+  chỗ sửa.
+
+  Phải chứng minh validator BẮT ĐƯỢC, không phải chỉ chạy được:
+  `test/module-cycle-code.test.ts` dựng một dự án tạm có chu trình thật giữa hai
+  khối rồi đòi validate ra đúng mã lỗi đó. Một validator chưa bao giờ đỏ là một
+  validator chưa tồn tại.
+
+  Chi phí phải đo, không được đoán: `loadGraph` chạy ở MỌI lệnh ganas, kể cả
+  hook trong vòng lặp sửa file. Đo thời gian `ganas validate` trước và sau, ghi
+  con số thật vào báo cáo. Chỉ đọc file `.ts` nằm trong `paths` của khối nào đó
+  — file không thuộc khối nào thì không sinh cạnh, đọc là phí.
+
+  Ranh giới: task này chỉ được sửa file thuộc M-graph-base, M-load, M-validate,
+  cộng hai file test đã nêu đích danh trong `exit_contract`. Chạm ra ngoài là
+  `ganas commit` sẽ chặn — T-042 đã trả giá đúng chỗ này.
+
+  `test/debt.test.ts` vào ranh giới qua chính lệnh trong `exit_contract` — cùng
+  cơ chế `contractPathRefs` mà T-041 dùng cho `test/hooks.test.ts`. Không tránh
+  được: guard ở đó đếm số mã lỗi tĩnh trong `validate.ts`, mà task này BẮT BUỘC
+  thêm một mã (`spine/module-cycle-code`). Vế thật của guard — mọi mã đều có
+  điểm trong `debt.ts` — vẫn xanh; chỉ hằng số đếm là cũ. Sửa hằng số mà không
+  đưa file vào ranh giới thì `ganas commit` không stage nó, và cây được commit
+  vẫn đỏ.
+done_at: 2026-08-23T14:54:42.894Z

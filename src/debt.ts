@@ -118,6 +118,11 @@ const SCORES: Record<string, DebtScore> = {
 
   /* --- chu trình: chỉ sửa được bằng cách thiết kế lại phụ thuộc ----------- */
   "spine/module-cycle": { weight: 3, ease: 1 },
+  // Cùng hậu quả với `spine/module-cycle` — độ tin không lan truyền được — nên
+  // cùng `weight`. `ease` KHÔNG giống: cạnh ở đây đo từ import thật, nên sửa
+  // là sửa CODE (chuyển kiểu xuống khối lá, tách phần dùng chung), không phải
+  // sửa một dòng YAML. Không có đường tắt nào, kể cả đường tắt sai.
+  "spine/module-cycle-code": { weight: 3, ease: 1 },
   "spine/task-cycle": { weight: 3, ease: 1 },
   "spine/design-cycle": { weight: 3, ease: 1 },
   // Chu trình decision KHÁC hẳn ba cái trên, cả hai trục — đừng chấm theo họ
