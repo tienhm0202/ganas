@@ -1,0 +1,39 @@
+id: T-022
+title: "Test chặn nhãn nature lệch với I/O thật của khối"
+serves:
+  - G-001
+implements: D-006
+scope: P-graph-core
+status: todo
+estimated_context: medium
+model: main
+blocked_by:
+  - T-021
+
+context_contract:
+  must_read:
+    - path: "test/module-map.test.ts"
+      why: "Khuôn test đọc .ganas/modules/*.yaml rồi đối chiếu với cây code thật"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-validate
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/module-nature.test.ts'"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Lớp cưỡng chế cuối của D-006, và là lý do cả chuỗi này không vô ích sau sáu
+  tháng. Phân loại lại bằng chính phép đếm của bản rà: đọc/ghi nội dung, sinh
+  tiến trình, stdin/stdout ⇒ io; chỉ tra trạng thái ⇒ không tính (luật T-018).
+  Đỏ khi `nature` khai lệch với thực tế.
+
+  Nhãn còn lệch mà CHƯA sửa được thì phải khai miễn trừ TƯỜNG MINH kèm lý do
+  trong chính test — cùng khuôn `EXEMPT` của test/no-dead-ends.ts. Danh sách
+  miễn trừ im lặng thì test này chỉ là trang trí.

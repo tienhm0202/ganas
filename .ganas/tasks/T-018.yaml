@@ -1,0 +1,43 @@
+id: T-018
+title: "Viết luật công cụ io dùng chung vào file luật VÀ vào template phát cho dự án khác"
+serves:
+  - G-001
+implements: D-006
+scope: P-cli
+status: todo
+estimated_context: small
+model: main
+
+context_contract:
+  must_read:
+    - path: ".claude/rules/architecture.md"
+      why: "File luật đang thi hành — chỗ phải sửa"
+    - path: "src/templates/project.ts"
+      why: "architectureRuleMd() phát ĐÚNG file đó cho mọi dự án ganas init; sửa một chỗ mà quên chỗ kia là dựng lại mâu thuẫn hai nguồn"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-templates
+
+exit_contract:
+  - kind: artifact
+    path: ".claude/rules/architecture.md"
+    must_contain: "công cụ"
+  - kind: artifact
+    path: "src/templates/project.ts"
+    must_contain: "công cụ io dùng chung"
+  - kind: command
+    run: "npx tsx --test 'test/init.test.ts'"
+  - kind: verification
+    target: "M-templates/V-templates-init"
+
+notes: >-
+  Luật phải nêu được RANH GIỚI, không chỉ nêu kết luận: tra trạng thái đơn giản
+  (existsSync/stat/readdir) là công cụ; đọc/ghi nội dung, sinh tiến trình, nói
+  chuyện qua stdin/stdout là chạm ra ngoài. Và phải nói vì sao ranh giới nằm ở
+  đó — hàm chỉ tra sự tồn tại vẫn test được bằng một thư mục tạm, còn hàm đọc
+  ghi nội dung thì kéo theo cả định dạng dữ liệu và lỗi phân tích cú pháp.
+
+  Đây là task ĐI ĐẦU của D-006. Chẻ khối trước khi luật được viết thì mỗi lần
+  chẻ một kiểu, và không ai đối chiếu được với cái gì.

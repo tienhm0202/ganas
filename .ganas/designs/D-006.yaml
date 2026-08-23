@@ -1,0 +1,47 @@
+id: D-006
+title: "Tách lõi khỏi I/O trên toàn bản đồ, và viết ra luật công cụ io dùng chung"
+serves:
+  - G-001
+summary: >-
+  Rà cơ học cả 17 khối (script đếm hàm node:fs/child_process/process.std* thật
+  sự được gọi trong từng file) cho ra một kết luận khác hẳn cách nhìn cũ: chỗ
+  lệch KHÔNG rải đều, và quá nửa số cảnh báo biến mất khi áp một luật mà chủ
+  dự án vừa chốt.
+
+  LUẬT (chốt 2026-08-23): một phép tra trạng thái đơn giản — `existsSync`,
+  `stat`, `readdir` — là CÔNG CỤ io dùng chung. Hàm nghiệp vụ gọi công cụ đó
+  KHÔNG vì thế mà thành io; nó chỉ đang dùng công cụ. Chỉ đọc/ghi nội dung,
+  sinh tiến trình con, hay nói chuyện qua stdin/stdout mới là chạm ra ngoài
+  thật.
+
+  Luật này PHẢI được viết vào `.claude/rules/architecture.md` và vào template
+  `architectureRuleMd()` cùng lúc. File luật đó đang nói lõi "không tự mở file"
+  — hiểu chặt thì chính `graph/paths.ts`, `render/brief.ts`, `graph/validate.ts`
+  đều vi phạm chỉ vì gọi `existsSync`. Áp luật mới mà không sửa file luật là
+  dựng đúng cái mâu thuẫn hai-nguồn-sự-thật mà D-004 vừa dọn, lần này ở tầng
+  luật, và ganas còn PHÁT file luật đó cho mọi dự án `ganas init`.
+
+  Sau khi áp luật, phần còn lại thật sự lệch, theo ba nhóm khác nhau:
+
+  (1) KHAI LÕI NHƯNG CẢ KHỐI LÀ I/O NẶNG — không có gì để tách, chỉ sai nhãn:
+  M-claim (mkdir/open/rm/rename/writeFile), M-load (readdir/readFile).
+
+  (2) TRỘN THẬT, phải chẻ: M-hooks (handlers.ts chỉ `stat` ⇒ thành lõi được
+  ngay khi `stat` đi qua công cụ chung; io.ts giữ stdin/stdout) — PR-004.
+  M-workflow khai io nhưng `boundary.ts` và `search.ts` không chạm gì —
+  PR-005. M-verify khai io nhưng `lint.ts` và `mutate.ts` thuần. M-cli trộn
+  `cli.ts` (stdout) với `util/args.ts` (thuần).
+
+  (3) LỚP ADAPTER ĐÚNG NGHĨA, chỉ sai nhãn: M-commands — 19/21 file in ra
+  stdout, đó là bản chất của một lệnh CLI. Nhãn phải là io; phần lõi nằm lẫn
+  trong từng lệnh (vd `rankProposals`, `ownedPaths`) là việc chẻ tiếp, không
+  gộp vào đây.
+
+  Thứ tự bắt buộc: viết luật trước (T-018), dựng công cụ tra dùng chung
+  (T-019), rồi mới chẻ — chẻ trước khi có luật thì mỗi lần chẻ một kiểu.
+
+  Lớp cưỡng chế cuối: một test đọc `.ganas/modules/*.yaml`, phân loại lại bằng
+  chính phép đếm của bản rà, và đỏ khi nhãn `nature` lệch với thực tế. Không có
+  nó thì bản đồ trôi lại đúng chỗ cũ sau vài tháng, im lặng như lần này.
+status: active
+created_at: 2026-08-23T00:00:00Z

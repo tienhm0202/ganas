@@ -1,0 +1,41 @@
+id: T-019
+title: "Công cụ tra trạng thái dùng chung, thay cho existsSync rải rác"
+serves:
+  - G-001
+implements: D-006
+scope: P-graph-core
+status: todo
+estimated_context: medium
+model: verifier
+blocked_by:
+  - T-018
+
+context_contract:
+  must_read:
+    - path: "src/util/exec.ts"
+      why: "Khuôn công cụ io dùng chung đã có sẵn một cái — giữ cùng hình"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-util
+  - M-graph-read
+
+exit_contract:
+  - kind: artifact
+    path: "src/util/fsprobe.ts"
+    must_contain: "export"
+  - kind: command
+    run: "npx tsx --test 'test/fsprobe.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-util/V-util-glob"
+  - kind: verification
+    target: "M-graph-read/V-graph-read-trace"
+
+notes: >-
+  Gom `existsSync`/`stat`/`readdir` vào một chỗ để luật T-018 có chỗ bám thật,
+  chứ không chỉ là một đoạn văn. Chuyển các chỗ chỉ TRA (graph/paths.ts,
+  render/brief.ts, graph/validate.ts, hooks/handlers.ts, flow.ts) sang dùng nó —
+  nhưng CHUYỂN DẦN theo phạm vi, task này chỉ lo phần trong P-graph-core.

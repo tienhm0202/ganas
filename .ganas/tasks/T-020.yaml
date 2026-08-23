@@ -1,0 +1,42 @@
+id: T-020
+title: "Chẻ src/hooks/ thành khối quyết định thuần và khối chạm I/O"
+serves:
+  - G-001
+implements: D-006
+scope: P-hook
+status: todo
+estimated_context: large
+model: main
+blocked_by:
+  - T-019
+
+context_contract:
+  must_read:
+    - path: "src/hooks/CLAUDE.md"
+      why: "Tài liệu vùng đang ghi chú chính mâu thuẫn này — phải sửa lại sau khi chẻ"
+    - path: "src/hooks/handlers.ts"
+      why: "Sáu handler lặp lại đúng một hình gather → quyết định → emit; đường chẻ nằm ở ngoặc giữa"
+  facts: []
+  open_questions:
+    - "loadGraph/computeFreshness/evaluateGate có được coi là công cụ dùng chung như existsSync không, hay phải truyền dữ liệu đã nạp vào? Bản rà nói KHÔNG — chúng đọc nội dung, không phải tra trạng thái."
+
+touches:
+  - M-hooks
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/hooks.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-hooks/V-hooks-smoke"
+
+notes: >-
+  Hiện thực PR-004. Bản rà cơ học làm việc này NHẸ hơn dự tính ban đầu:
+  handlers.ts chỉ dùng đúng `stat`, nên sau T-019 nó không còn chạm syscall nào
+  — phần khó còn lại chỉ là loadGraph/evaluateGate, và đó là truyền dữ liệu vào
+  chứ không phải gỡ syscall.
+
+  54 test trong test/hooks.test.ts chạy end-to-end qua sáu handler là lưới an
+  toàn: refactor này KHÔNG được đổi hành vi, và test phải xanh không sửa một
+  dòng kỳ vọng nào. Sửa kỳ vọng test để refactor xanh là tự tay tháo lưới.

@@ -2,13 +2,25 @@ id: PR-005
 title: "src/boundary.ts thuần nhưng nằm trong M-workflow khai nature: io"
 scope: P-cli
 problem: >-
-  Cùng một lớp lỗi mà PR-004 nói, ở khối thứ hai — nên nó không phải chuyện riêng của src/hooks/. M-workflow khai nature: io và gom bảy file điều phối lệnh, nhưng src/boundary.ts trong đó KHÔNG chạm I/O lần nào: nó chỉ import kiểu dữ liệu, hằng số đường dẫn và hàm khớp glob, rồi tính ranh giới code của task từ graph đã nạp sẵn. Nó là lõi nằm trong khối khai là vỏ. Hệ quả giống hệt: ai đọc bản đồ để hỏi lõi-hay-vỏ đều nhận sai, và phần thuần bị kéo theo mọi ràng buộc của khối io.
+  Cùng một lớp lỗi mà PR-004 nói, ở khối thứ hai — nên nó không phải chuyện
+  riêng của src/hooks/. M-workflow khai nature: io và gom bảy file điều phối
+  lệnh, nhưng src/boundary.ts trong đó KHÔNG chạm I/O lần nào: nó chỉ import
+  kiểu dữ liệu, hằng số đường dẫn và hàm khớp glob, rồi tính ranh giới code của
+  task từ graph đã nạp sẵn. Nó là lõi nằm trong khối khai là vỏ. Hệ quả giống
+  hệt: ai đọc bản đồ để hỏi lõi-hay-vỏ đều nhận sai, và phần thuần bị kéo theo
+  mọi ràng buộc của khối io.
 proposed_change: >-
-  Tách src/boundary.ts (và soát lại buildCommitMessage trong src/commit.ts, cũng thuần) ra một khối lõi riêng của P-cli, để M-workflow chỉ còn phần thật sự chạm đĩa và chạy git. Làm SAU PR-004 và theo cùng khuôn — hai lần chẻ cùng kiểu thì nên có cùng hình, nếu không bản đồ lại lệch theo kiểu khác.
+  Tách src/boundary.ts (và soát lại buildCommitMessage trong src/commit.ts, cũng
+  thuần) ra một khối lõi riêng của P-cli, để M-workflow chỉ còn phần thật sự
+  chạm đĩa và chạy git. Làm SAU PR-004 và theo cùng khuôn — hai lần chẻ cùng
+  kiểu thì nên có cùng hình, nếu không bản đồ lại lệch theo kiểu khác.
 anchors:
   - "src/boundary.ts:1"
   - ".ganas/modules/M-workflow.yaml:4"
 weight: 3
 ease: 3
 found_at: "2026-08-23T09:33:41.925Z"
-status: pending
+status: approved
+decided_by: "@tienhm"
+decided_at: 2026-08-23T09:39:02.613Z
+promoted_to: T-021

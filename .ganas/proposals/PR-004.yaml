@@ -2,9 +2,28 @@ id: PR-004
 title: "Tách src/hooks/ thành khối quyết định thuần và khối chạm I/O"
 scope: P-hook
 problem: >-
-  handlers.ts (616 dòng) trộn hai thứ khác hẳn nhau. Phần THUẦN: predicate nhận đường dẫn (isEntityPath, isProposalPath), phép đọc nội dung sắp ghi (writtenText, setsProposalDecision, PROPOSAL_DECISION_PATTERN), phép chấm mức cưỡng chế (denyOrWarnPreTool), và các chuỗi lý do — chúng chỉ nhận dữ liệu vào rồi trả HookOutput, không đụng đĩa. Phần CHẠM I/O: sáu handler, mỗi cái lặp lại đúng một hình findGanasRoot → loadGraph → taskForSession/claimTask/bindSession/markTouched → computeFreshness/evaluateGate → quyết định → generateHandoff. Vì trộn, phần quyết định không test được nếu không dựng một dự án giả trên đĩa, và không nhãn nature nào mô tả đúng khối — PR-003 đã bị từ chối vì cố tìm nhãn vừa thay vì sửa chỗ trộn.
+  handlers.ts (616 dòng) trộn hai thứ khác hẳn nhau. Phần THUẦN: predicate nhận
+  đường dẫn (isEntityPath, isProposalPath), phép đọc nội dung sắp ghi
+  (writtenText, setsProposalDecision, PROPOSAL_DECISION_PATTERN), phép chấm mức
+  cưỡng chế (denyOrWarnPreTool), và các chuỗi lý do — chúng chỉ nhận dữ liệu vào
+  rồi trả HookOutput, không đụng đĩa. Phần CHẠM I/O: sáu handler, mỗi cái lặp
+  lại đúng một hình findGanasRoot → loadGraph →
+  taskForSession/claimTask/bindSession/markTouched →
+  computeFreshness/evaluateGate → quyết định → generateHandoff. Vì trộn, phần
+  quyết định không test được nếu không dựng một dự án giả trên đĩa, và không
+  nhãn nature nào mô tả đúng khối — PR-003 đã bị từ chối vì cố tìm nhãn vừa thay
+  vì sửa chỗ trộn.
 proposed_change: >-
-  Chẻ P-hook làm hai khối. M-hook-policy (nature: code, lõi): các hàm thuần nhận dữ liệu ĐÃ nạp sẵn rồi trả HookOutput — toàn bộ predicate, chuỗi lý do, phép chấm enforcement, và phép dựng additionalContext. M-hook-io (nature: io): sáu handler + io.ts, chỉ làm gather → gọi policy → emit; nó khai depends_on M-hook-policy, đúng chiều adapter phụ thuộc lõi. Hai chỗ khó phải xử tường minh chứ không được lờ đi: (1) preToolUse hiện gọi fileExists GIỮA lúc quyết định, nên io phải gom sẵn dữ kiện đó vào một HookContext trước khi gọi policy; (2) pendingDispatchNudge tự loadGraph giữa chừng, phải đảo thành nhận graph từ ngoài. Lưới an toàn có sẵn: 54 test trong test/hooks.test.ts chạy end-to-end qua đúng sáu handler, nên đây là refactor không đổi hành vi và có chỗ bám.
+  Chẻ P-hook làm hai khối. M-hook-policy (nature: code, lõi): các hàm thuần nhận
+  dữ liệu ĐÃ nạp sẵn rồi trả HookOutput — toàn bộ predicate, chuỗi lý do, phép
+  chấm enforcement, và phép dựng additionalContext. M-hook-io (nature: io): sáu
+  handler + io.ts, chỉ làm gather → gọi policy → emit; nó khai depends_on
+  M-hook-policy, đúng chiều adapter phụ thuộc lõi. Hai chỗ khó phải xử tường
+  minh chứ không được lờ đi: (1) preToolUse hiện gọi fileExists GIỮA lúc quyết
+  định, nên io phải gom sẵn dữ kiện đó vào một HookContext trước khi gọi policy;
+  (2) pendingDispatchNudge tự loadGraph giữa chừng, phải đảo thành nhận graph từ
+  ngoài. Lưới an toàn có sẵn: 54 test trong test/hooks.test.ts chạy end-to-end
+  qua đúng sáu handler, nên đây là refactor không đổi hành vi và có chỗ bám.
 anchors:
   - "src/hooks/handlers.ts:180"
   - "src/hooks/handlers.ts:295"
@@ -12,4 +31,7 @@ anchors:
 weight: 4
 ease: 2
 found_at: "2026-08-23T09:33:41.605Z"
-status: pending
+status: approved
+decided_by: "@tienhm"
+decided_at: 2026-08-23T09:39:02.298Z
+promoted_to: T-020
