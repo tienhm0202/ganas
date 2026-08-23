@@ -1,0 +1,38 @@
+id: T-027
+title: "config.build_check: khai lệnh kiểm toàn dự án trong schema"
+serves:
+  - G-001
+implements: D-005
+scope: P-graph-core
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/model/config.ts"
+      why: "Chỗ khai schema config; có luật cảnh báo khoá lạ nên thêm khoá phải đúng chỗ"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+
+exit_contract:
+  - kind: artifact
+    path: "src/model/config.ts"
+    must_contain: "build_check"
+  - kind: command
+    run: "npx tsx --test 'test/config-version.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+
+notes: >-
+  Chỉ SCHEMA, không dùng tới — phần dùng nằm ở T-028 (P-cli). Tách hai vì hai
+  phạm vi, đúng luật một-task-một-phạm-vi.
+
+  `build_check` là TUỲ CHỌN và mặc định trống: dự án không khai thì `ganas
+  commit` bỏ qua phép kiểm toàn dự án kèm một dòng báo, không phải đỏ. Bắt buộc
+  khai là chặn đứng mọi dự án cũ ngay lần commit đầu.

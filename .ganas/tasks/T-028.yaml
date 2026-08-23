@@ -1,0 +1,54 @@
+id: T-028
+title: "ganas commit chạy build_check trên cây stage, so với MỐC chứ không so với xanh"
+serves:
+  - G-001
+implements: D-005
+scope: P-cli
+status: todo
+estimated_context: medium
+model: main
+blocked_by:
+  - T-027
+
+context_contract:
+  must_read:
+    - path: "src/commit.ts"
+      why: "checkStagedTree đã dựng sẵn cây tạm từ index — thêm phép kiểm vào đúng chỗ đó, đừng dựng cây thứ hai"
+    - path: ".ganas/proposals/PR-007.yaml"
+      why: "Quyết định (a') và ba điều kiện không-được-kẹt nằm nguyên văn ở đó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-workflow
+  - M-commands
+
+exit_contract:
+  - kind: artifact
+    path: "src/commit.ts"
+    must_contain: "buildCheck"
+  - kind: command
+    run: "npx tsx --test 'test/commit-build-check.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/commit-staged-tree.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Ba điều kiện BẮT BUỘC, thiếu một là task chưa xong — mỗi cái phải có test
+  riêng dựng đúng tình huống:
+
+  1. Cây stage đỏ NHƯNG HEAD cũng đỏ ⇒ KHÔNG chặn, chỉ báo "dự án đang đỏ sẵn".
+     Không có điều này thì một commit hỏng của người khác khoá cả đội, và dự án
+     cũ chưa bao giờ sạch không commit nổi commit đầu tiên.
+  2. Cây stage đỏ mà HEAD xanh ⇒ CHẶN. Đây là đúng lớp lỗi đã cắn hai lần
+     (commit fc99e87, commit c865211).
+  3. Không chạy được (thiếu lệnh, hết giờ, dựng cây lỗi) ⇒ `skipped` kèm lý do,
+     KHÔNG phải đỏ.
+
+  Lượt chạy trên HEAD chỉ được phát sinh khi cây stage ĐỎ — đường thường vẫn
+  một lượt.
