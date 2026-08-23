@@ -3,7 +3,7 @@ scope: P-hook
 title: "Phán quyết của hook: chặn hay cho qua, và nói gì với người"
 nature: code
 paths:
-  - "src/hooks/policy.ts"
+  - "src/hooks/policy/**"
 status: surveyed
 verify:
   - id: V-hook-policy-pure

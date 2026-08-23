@@ -1,15 +1,15 @@
 import { relative } from "node:path";
 
-import { evaluateGate } from "../gate.js";
-import { claimNextTask, claimTask, releaseClaimsForSession } from "../graph/claim.js";
-import { computeFreshness } from "../graph/freshness.js";
-import { loadGraph } from "../graph/load.js";
-import { CONFIG_FILE, findGanasRoot, GANAS_DIR, ganasPath } from "../graph/paths.js";
-import { type Candidate, rankedCandidates, selectNextTask } from "../graph/select.js";
-import { validateGraph } from "../graph/validate.js";
-import { generateHandoff } from "../handoff.js";
-import { enforcementFor } from "../model/index.js";
-import { renderBrief } from "../render/brief.js";
+import { evaluateGate } from "../../gate.js";
+import { claimNextTask, claimTask, releaseClaimsForSession } from "../../graph/claim.js";
+import { computeFreshness } from "../../graph/freshness.js";
+import { loadGraph } from "../../graph/load.js";
+import { CONFIG_FILE, findGanasRoot, GANAS_DIR, ganasPath } from "../../graph/paths.js";
+import { type Candidate, rankedCandidates, selectNextTask } from "../../graph/select.js";
+import { validateGraph } from "../../graph/validate.js";
+import { generateHandoff } from "../../handoff.js";
+import { enforcementFor } from "../../model/index.js";
+import { renderBrief } from "../../render/brief.js";
 import {
   bindSession,
   clearTouched,
@@ -19,10 +19,9 @@ import {
   releaseSession,
   sessionRecord,
   taskForSession,
-} from "../state.js";
-import { existsAsync } from "../util/fsprobe.js";
-import { ledgerPath } from "../verify/ledger.js";
-import { ALLOW, type HookInput, type HookOutput } from "./io.js";
+} from "../../state.js";
+import { existsAsync } from "../../util/fsprobe.js";
+import { ledgerPath } from "../../verify/ledger.js";
 import {
   applyEnforcement,
   decideEntityOverwrite,
@@ -37,7 +36,8 @@ import {
   ruleForDiagnostics,
   shellLooksLikeWrite,
   WRITE_TOOLS,
-} from "./policy.js";
+} from "../policy/index.js";
+import { ALLOW, type HookInput, type HookOutput } from "./io.js";
 /* ------------------------------------------------------------------------- *
  * SessionStart — phiên mới biết phải làm gì
  * ------------------------------------------------------------------------- */

@@ -1,0 +1,55 @@
+id: T-024
+title: "Chẻ thư mục theo ranh giới khối cho src/hooks/, mỗi khối một tài liệu vùng"
+serves:
+  - G-001
+implements: D-006
+scope: P-hook
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/hooks/CLAUDE.md"
+      why: "File đang mô tả CẢ HAI khối — chính chỗ phá luật một chiều, phải chẻ đôi
+        theo khối"
+    - path: ".claude/rules/agent-guide.md"
+      why: "Một khối → một file hướng dẫn ở thư mục gốc của khối đó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hook-policy
+  - M-hook-io
+
+exit_contract:
+  - kind: artifact
+    path: "src/hooks/policy/CLAUDE.md"
+    must_contain: "## Cạm bẫy đã trả giá"
+  - kind: artifact
+    path: "src/hooks/io/CLAUDE.md"
+    must_contain: "## Cạm bẫy đã trả giá"
+  - kind: artifact
+    path: ".ganas/modules/M-hook-policy.yaml"
+    must_contain: "src/hooks/policy/**"
+  - kind: command
+    run: "npx tsx --test 'test/hooks.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/hook-policy.test.ts'"
+  - kind: command
+    run: "npx tsx --test 'test/module-map.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+  - kind: verification
+    target: "M-hook-policy/V-hook-policy-pure"
+
+notes: >-
+  Hiện thực PR-006, phần HẸP. Sau task này mỗi khối nhận `dir/**` nên
+  `moduleGuideDir()` trả về thư mục thật, `scope/module-missing-guide` đòi được
+  file hướng dẫn, và `ganas commit` stage được nó — ba thứ hiện đang hở.
+
+  KHÔNG đụng M-workflow / M-cli / M-cli-core: cùng lớp vấn đề nhưng là sắp xếp
+  lại bố cục `src/`, xứng đáng một mục tiêu riêng.
+done_at: 2026-08-23T10:32:56.810Z

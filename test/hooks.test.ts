@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { evaluateGate } from "../src/gate.js";
 import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
-import * as handlers from "../src/hooks/handlers.js";
+import * as handlers from "../src/hooks/io/handlers.js";
 import { renderBrief } from "../src/render/brief.js";
 import { bindSession, markTouched, readState, TOUCHED_PATHS_CAP, touchedPathsFor } from "../src/state.js";
 import { moduleTargets, runTarget } from "../src/verify/run.js";

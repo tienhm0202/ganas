@@ -11,7 +11,7 @@ import {
   ruleForDiagnostics,
   shellLooksLikeWrite,
   type WriteTarget,
-} from "../src/hooks/policy.js";
+} from "../src/hooks/policy/index.js";
 
 /**
  * Phán quyết của hook, test THUẦN.
