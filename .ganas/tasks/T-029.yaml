@@ -1,0 +1,52 @@
+id: T-029
+title: "Guard trường schema soi được cả zConfig, và khai được đường đọc gián tiếp"
+serves:
+  - G-001
+implements: D-006
+scope: P-graph-core
+status: done
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "test/no-dead-ends.test.ts"
+      why: "Phép trích tên trường và luật người-đọc nằm ở Luật 3 của file này"
+    - path: "src/model/config.ts"
+      why: "zConfig khai ở cấp cao nhất — chính hình dạng mà regex cũ bỏ sót"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-validate
+
+exit_contract:
+  - kind: artifact
+    path: "test/no-dead-ends.test.ts"
+    must_contain: "READ_VIA"
+  - kind: command
+    run: "npx tsx --test 'test/no-dead-ends.test.ts'"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Hiện thực PR-008. CHỈ sửa file test, không đụng code sản phẩm — rủi ro hồi quy
+  gần như bằng không, và đó là lý do task này tách khỏi chuyện anchor lỏng
+  (chuyện kia đụng src/model/anchor.ts).
+
+  `READ_VIA` KHÔNG phải danh sách miễn trừ. Nó là lời khai "trường này đọc qua
+  accessor nào", và test phải kiểm cả ba vế của lời khai: accessor có thật và
+  được export từ src/model/; trường xuất hiện trong file khai accessor; accessor
+  được gọi từ NGOÀI src/model/. Thiếu vế thứ ba thì trường vẫn chết, chỉ chết
+  chậm hơn một tầng.
+
+  Đo trước khi làm (2026-08-23): nới regex chỉ nổ đúng hai trường —
+  `enforcement` và `enforcement_rules`. `build_check` đã có người đọc thật sau
+  T-028 nên tự hết, không cần khai gì.
+
+  Nếu sau này regex bắt nhầm khoá trong object literal của `.default(...)`, cách
+  sửa KHÔNG phải nhét vào EXEMPT mà là dạy phép trích bỏ qua thân
+  `.default(...)`. Ghi câu này ngay cạnh regex.
+done_at: 2026-08-23T11:29:02.664Z

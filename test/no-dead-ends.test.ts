@@ -121,11 +121,31 @@ test("⭐ không chuỗi nào trong src/ trỏ vào thư mục .ganas/ không t�
  * Luật 3: mọi trường schema phải có NGƯỜI ĐỌC ngoài src/model/
  * ------------------------------------------------------------------------- */
 
-/** Tên trường khai trong các `z.object({...})` của một file model. */
+/**
+ * Tên trường khai trong các `z.object({...})` của một file model.
+ *
+ * Thụt lề `{2,}`, KHÔNG phải `{4}`. Bản cũ đòi đúng bốn dấu cách nên chỉ thấy
+ * schema khai LỒNG trong một biến, và bỏ sót sạch schema khai ở cấp cao nhất —
+ * cả chín trường của `zConfig` chưa bao giờ được soi tới, cho tới khi
+ * `build_check` được thêm vào mà guard vẫn xanh (PR-008).
+ *
+ * Nếu về sau phép trích bắt nhầm khoá trong object literal của một giá trị mặc
+ * định (`.default({ … })`), cách sửa KHÔNG phải nhét tên đó vào `EXEMPT` — mà
+ * là dạy hàm này bỏ qua thân `.default(...)`. Nhét vào miễn trừ là giấu một
+ * khiếm khuyết của phép trích dưới danh nghĩa một quyết định.
+ */
 function schemaFields(text: string): string[] {
   const fields = new Set<string>();
   for (const m of text.matchAll(/z\s*\n?\s*\.object\(\{([\s\S]*?)\n\s*\}\)/g)) {
-    for (const f of m[1]!.matchAll(/^\s{4}(\w+):/gm)) fields.add(f[1]!);
+    const body = m[1]!;
+    // Chỉ lấy trường ở CẤP NGOÀI CÙNG của khối, suy bằng thụt lề nhỏ nhất gặp
+    // được. Lấy mọi cấp thì vơ luôn khoá của object tuỳ chọn zod
+    // (`{ required_error: … }`) — thứ không phải trường schema, và báo chúng là
+    // "không ai đọc" thì cảnh báo mất nghĩa ngay từ ngày đầu.
+    const indents = [...body.matchAll(/^( +)\w+:/gm)].map((x) => x[1]!.length);
+    if (indents.length === 0) continue;
+    const outer = Math.min(...indents);
+    for (const f of body.matchAll(new RegExp(`^ {${outer}}(\\w+):`, "gm"))) fields.add(f[1]!);
   }
   return [...fields];
 }
@@ -142,12 +162,40 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
   const EXEMPT: Record<string, string> = {
     notes: "ô ghi chú tự do cho người, cố ý không có code nào đọc",
     id: "khoá của mọi Map trong graph — đọc gián tiếp qua .get()/.keys()",
+    note: "ghi chú tự do cho người trên anchor commit — cùng loại `notes`, cố ý không code nào đọc",
+    quote: "trích dẫn của anchor URL, HIỆN chưa nối dây ở đâu — xem PR-009, không phải chuyện cố ý",
   };
+
+  /**
+   * Trường không ai chạm THẲNG, nhưng được đọc qua một accessor công khai của
+   * chính model — cả dự án gọi hàm đó thay vì với tay vào trường.
+   *
+   * KHÁC `EXEMPT`: đây không phải miễn trừ mà là một LỜI KHAI về đường đọc
+   * gián tiếp, và ba vế của lời khai đều bị kiểm ở test ngay dưới. Vế thứ ba
+   * (accessor phải được gọi từ NGOÀI src/model/) là vế dễ quên nhất: thiếu nó
+   * thì trường vẫn chết, chỉ chết chậm hơn đúng một tầng.
+   */
+  const READ_VIA: Record<string, string> = {
+    enforcement: "enforcementFor",
+    enforcement_rules: "enforcementFor",
+    url: "formatAnchor",
+    fetched_at: "formatAnchor",
+    line_end: "formatAnchor",
+  };
+  const modelText = all
+    .filter((x) => x.path.startsWith("src/model/"))
+    .map((f) => f.text)
+    .join("\n");
 
   const dead: string[] = [];
   for (const f of all.filter((x) => x.path.startsWith("src/model/"))) {
     for (const field of schemaFields(f.text)) {
       if (EXEMPT[field]) continue;
+
+      // Đọc gián tiếp: trường phải xuất hiện đâu đó trong src/model/, và
+      // accessor phải có thật. Vế "accessor được gọi từ ngoài" kiểm ở test riêng.
+      const via = READ_VIA[field];
+      if (via && new RegExp(`\\.${field}\\b|\\["${field}"\\]`).test(modelText)) continue;
       // Ba cách một trường được đọc: `.x`, `["x"]`, hoặc destructure `{ x }`.
       const re = new RegExp(`\\.${field}\\b|\\["${field}"\\]|\\{[^}]*\\b${field}\\b[^}]*\\}\\s*=`);
       if (!re.test(haystack)) dead.push(`${f.path} — \`${field}\``);
@@ -159,7 +207,8 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
     [],
     `Trường khai trong schema nhưng KHÔNG code nào ngoài src/model/ đọc.\n` +
       `Một trường không ai đọc là một lời hứa suông: người dùng điền vào rồi tin\n` +
-      `rằng nó có tác dụng. Hoặc nối dây cho nó, hoặc xoá đi.\n` +
+      `rằng nó có tác dụng. Ba đường hợp lệ: nối dây cho nó, khai đường đọc gián\n` +
+      `tiếp trong READ_VIA, hoặc xoá đi.\n` +
       dead.join("\n"),
   );
 });
@@ -230,4 +279,35 @@ test("⭐ không ai đọc thẳng sổ cái để tự kết luận độ tươ
       `thêm vào ALLOWED kèm LÝ DO nói rõ đó là câu hỏi gì.\n` +
       offenders.join("\n"),
   );
+});
+
+test("⭐ mọi accessor khai trong READ_VIA đều có thật và được gọi từ NGOÀI src/model/", async () => {
+  // Vế dễ quên nhất của một lời khai đường-đọc-gián-tiếp. Accessor không ai gọi
+  // thì trường vẫn chết, chỉ chết chậm hơn đúng một tầng — và lời khai lúc đó
+  // thành tấm bình phong, tệ hơn không khai gì.
+  const all = await srcFiles();
+  const modelText = all
+    .filter((f) => f.path.startsWith("src/model/"))
+    .map((f) => f.text)
+    .join("\n");
+  const outside = all
+    .filter((f) => !f.path.startsWith("src/model/"))
+    .map((f) => f.text)
+    .join("\n");
+
+  // Giữ ĐỒNG BỘ với READ_VIA của test trên. Hai chỗ khai vì hai test chạy độc
+  // lập; lệch nhau thì test này đỏ trước, đó là chủ ý.
+  const ACCESSORS = ["enforcementFor", "formatAnchor"];
+
+  const broken: string[] = [];
+  for (const fn of ACCESSORS) {
+    if (!new RegExp(`export function ${fn}\\b`).test(modelText)) {
+      broken.push(`${fn} — không phải hàm export trong src/model/`);
+    }
+    if (!new RegExp(`\\b${fn}\\b`).test(outside)) {
+      broken.push(`${fn} — không nơi nào ngoài src/model/ gọi tới`);
+    }
+  }
+
+  assert.deepEqual(broken, [], `READ_VIA khai một đường đọc không tồn tại:\n${broken.join("\n")}`);
 });
