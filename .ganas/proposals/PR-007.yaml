@@ -1,0 +1,15 @@
+id: PR-007
+title: "Phép chấm lại trên cây stage chỉ mạnh bằng exit_contract của task"
+scope: P-cli
+problem: >-
+  T-016 dựng phép chấm lại trên cây sắp commit để chặn đúng lớp lỗi của T-010. Nhưng nó chỉ chạy NHỮNG LỆNH TASK KHAI. T-024 khai validate + ba lệnh test, không khai npm run typecheck — nên khi việc di chuyển file trong P-hook buộc phải sửa src/commands/hook.ts (P-cli, ngoài ranh giới), file đó bị bỏ lại, cây được commit KHÔNG biên dịch được, và phép chấm lại vẫn xanh vì ba lệnh test kia đều nằm trong ranh giới nên chạy tốt. Lại phải amend tay, đúng như commit fc99e87 trước đây. Nói cách khác: lớp bảo vệ mới không hỏng, nó chỉ mù đúng chỗ hợp đồng của task không nhìn tới.
+proposed_change: >-
+  Chọn một trong hai. (a) ganas commit LUÔN chạy thêm một phép kiểm toàn dự án trên cây đã stage, ngoài các lệnh trong exit_contract — lệnh đó khai một lần trong .ganas/config.yaml (vd build_check: npm run typecheck), dự án không khai thì bỏ qua kèm cảnh báo. (b) validate cảnh báo khi exit_contract của một task KHÔNG có lệnh nào chạm toàn dự án, tức là task đó tự nhận chỉ kiểm được phần của mình. Đường (a) chặn thật; đường (b) rẻ hơn nhưng vẫn để lọt nếu người bỏ qua cảnh báo.
+anchors:
+  - "src/commit.ts:checkStagedTree"
+  - ".ganas/tasks/T-024.yaml:exit_contract"
+  - "commit:c865211"
+weight: 4
+ease: 3
+found_at: "2026-08-23T10:34:08.867Z"
+status: pending

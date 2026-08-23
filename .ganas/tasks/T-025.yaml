@@ -1,0 +1,47 @@
+id: T-025
+title: "fsprobe biết đọc mtime; dọn nốt chỗ tra thẳng trong P-graph-core"
+serves:
+  - G-001
+implements: D-006
+scope: P-graph-core
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "test/fsprobe.test.ts"
+      why: "Danh sách PENDING là đầu bài — xoá được dòng nào thì task coi như xong phần đó"
+    - path: "src/util/fsprobe.ts"
+      why: "Thêm phép đọc mtime vào đúng chỗ, không mở cửa cho readFile"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-fsprobe
+  - M-freshness
+  - M-verify
+
+exit_contract:
+  - kind: artifact
+    path: "src/util/fsprobe.ts"
+    must_contain: "mtime"
+  - kind: command
+    run: "npx tsx --test 'test/fsprobe.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: verification
+    target: "M-fsprobe/V-fsprobe-probe"
+  - kind: verification
+    target: "M-freshness/V-freshness-staleness"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+
+notes: >-
+  Dọn ba dòng PENDING thuộc phạm vi này: `graph/freshness.ts — stat`,
+  `verify/ledger.ts — existsSync`, và mở đường cho `prune.ts — stat` (T-026 mới
+  xoá được dòng đó, vì prune.ts nằm ở P-cli).
+
+  `mtimeMs` là TRA trạng thái, đúng vế công cụ của luật. Nhưng đừng nhân dịp
+  thêm `readFile` vào fsprobe — đó là vế bên kia, và thêm vào là biến công cụ
+  tra thành cửa hậu cho mọi thứ.

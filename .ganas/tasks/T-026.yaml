@@ -1,0 +1,45 @@
+id: T-026
+title: "Dọn nốt chỗ tra thẳng trong P-cli: lớp lệnh, brief, prune"
+serves:
+  - G-001
+implements: D-006
+scope: P-cli
+status: todo
+estimated_context: medium
+model: verifier
+blocked_by:
+  - T-025
+
+context_contract:
+  must_read:
+    - path: "test/fsprobe.test.ts"
+      why: "Danh sách PENDING là đầu bài; sau task này nó phải RỖNG"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-commands
+  - M-render
+  - M-workflow
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/fsprobe.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-render/V-render-brief"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+
+notes: >-
+  Bảy dòng PENDING còn lại: năm file trong src/commands/, src/render/brief.ts,
+  và src/prune.ts (dòng `stat` chỉ xoá được sau khi T-025 thêm mtime vào
+  fsprobe — vì thế mới `blocked_by`).
+
+  ĐIỀU KIỆN HOÀN THÀNH THẬT: mảng `PENDING` trong test/fsprobe.test.ts rỗng.
+  Còn dòng nào thì task chưa xong, dù mọi lệnh khác đều xanh.
