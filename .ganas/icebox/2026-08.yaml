@@ -120,8 +120,65 @@
   scope: P-hook
   status: closed
   closed_at: 2026-08-23T10:30:03.355Z
-  closed_reason: "Chẩn đoán sai. Không phải lỗ hổng của moduleGuideDir hay luật agent-guide —
-    hai thứ đó hành xử đúng thiết kế. Lỗi là ở chỗ chẻ nửa vời: tách làm hai
-    khối nhưng để cả hai dùng chung một thư mục, nên không khối nào NHẬN thư
-    mục, và đương nhiên không khối nào sở hữu file hướng dẫn ở đó. Thay bằng
-    PR-006."
+  closed_reason: "Chẩn đoán sai. Không phải lỗ hổng của moduleGuideDir hay luật
+    agent-guide — hai thứ đó hành xử đúng thiết kế. Lỗi là ở chỗ chẻ nửa vời:
+    tách làm hai khối nhưng để cả hai dùng chung một thư mục, nên không khối nào
+    NHẬN thư mục, và đương nhiên không khối nào sở hữu file hướng dẫn ở đó. Thay
+    bằng PR-006."
+- id: ICE-008
+  title: ganas commit bỏ sót file task thật sự sửa khi exit_contract không nhắc tới nó
+  found_at: 2026-08-24T15:51:43.923Z
+  review_after_days: 30
+  weight: 4
+  ease: 3
+  why_deferred: "ganas commit stage `paths` của khối trong `touches` cộng đường
+    dẫn nhắc trong exit_contract (src/boundary.ts). T-046 sửa
+    test/ledger.test.ts và test/ledger-chain.test.ts nhưng exit_contract chỉ
+    nhắc test/module-deps.test.ts, nên hai file đó không được stage: commit
+    ce78bc6 xoá export type LedgerEntry trong khi chính hai file test tại commit
+    đó vẫn nhập tên ấy từ verify/ledger.js. Phải amend tay mới vào. Bỏ sót diễn
+    ra IM LẶNG — commit báo thành công, gate xanh. Task nào sửa file test ngoài
+    danh sách exit_contract đều dính."
+  anchors:
+    - src/boundary.ts:1
+    - commit:ce78bc6
+  scope: P-graph-core
+  status: open
+- id: ICE-009
+  title: Không lệnh nào typecheck thư mục test — lỗi kiểu trong test không nổi lên
+    ở đâu
+  found_at: 2026-08-24T15:51:54.378Z
+  review_after_days: 30
+  weight: 4
+  ease: 4
+  why_deferred: "tsconfig.json khai exclude: [node_modules, plugin/dist, test],
+    nên npm run typecheck (tsc -p tsconfig.json --noEmit) không soi test/. Lúc
+    chạy thì tsx bóc import type đi, nên một import type trỏ tới export không
+    còn tồn tại vẫn pass npm test. Đo được ở commit ce78bc6: test/ledger.test.ts
+    nhập type LedgerEntry từ verify/ledger.js sau khi dòng export đó đã bị xoá,
+    cả typecheck lẫn npm test đều xanh. Đây là lý do lỗ hổng ICE-008 không nổi
+    lên ở bất kỳ đâu. Cân nhắc thêm một tsconfig riêng phủ test/ vào script
+    typecheck."
+  anchors:
+    - tsconfig.json:1
+    - commit:ce78bc6
+  scope: P-graph-core
+  status: open
+- id: ICE-010
+  title: exit_contract không task nào chấm npm run lint — gate xanh trong khi cây
+    lint đỏ
+  found_at: 2026-08-24T15:52:04.110Z
+  review_after_days: 30
+  weight: 3
+  ease: 5
+  why_deferred: "T-044 đạt gate đủ 5/5 và commit được (31752b8) trong khi
+    src/commands/trace.ts đang lint đỏ (simple-import-sort/imports). Không
+    exit_contract nào trong chuỗi T-044/T-045/T-046 có mục npm run lint, mà
+    package.json có sẵn script lint. Phải sửa bằng commit riêng 8cb40a8 sau khi
+    phát hiện tay. Cân nhắc: thêm npm run lint vào exit_contract mặc định lúc
+    sinh task, hoặc vào pre-commit hook."
+  anchors:
+    - commit:31752b8
+    - commit:8cb40a8
+  scope: P-graph-core
+  status: open
