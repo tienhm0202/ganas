@@ -4,63 +4,130 @@ title: "Vỏ I/O của hook: đọc stdin, gom dữ liệu từ đĩa, phát JSO
 nature: io
 paths:
   - "src/hooks/io/**"
-# Cổng VÀO = ĐỦ những gì khối này nhập, từ CẢ HAI khối thượng nguồn. Khai một
+# Cổng VÀO = ĐỦ những gì khối này nhập, từ MỌI khối thượng nguồn. Khai một
 # nửa thì cạnh cũng xanh (T-032 chỉ kiểm giao), nhưng lúc đó `contract.inputs`
 # nói dối về khối — và phép kiểm PHỦ mất luôn thứ để đối chiếu.
+#
+# Bảng dưới do MÁY sinh từ chữ ký thật, không chép tay:
+#   node scripts/gen-ports.mjs --scope P-hook
 contract:
   inputs:
-    - name: decideWriteEarly
-      shape: "(t: WriteTarget) => WriteStep"
-    - name: decideEntityOverwrite
-      shape: "(exists: boolean) => WriteStep"
-    - name: decideProposalWrite
-      shape: "(mode: Enforcement) => HookOutput"
-    - name: denyPreTool
-      shape: "(reason: string) => HookOutput"
-    - name: applyEnforcement
-      shape: "(mode: Enforcement, body: string) => HookOutput"
-    - name: ruleForDiagnostics
-      shape: "(diags: readonly Diagnostic[]) => EnforcementRule"
-    - name: knowledgeWriteBody
-      shape: "(rel: string, diags: readonly Diagnostic[], rule: EnforcementRule, nudgeTail: string) => string"
-    - name: locate
-      shape: "(raw: string, cwd: string, root: string) => { abs: string; rel: string }"
-    - name: inRepoTree
-      shape: "(rel: string | undefined) => rel is string"
-    - name: shellLooksLikeWrite
-      shape: "(command: string) => boolean"
-    - name: WRITE_TOOLS
-      shape: "Set<string>"
-    - name: PLAN_APPROVED_REASON
-      shape: "string"
-    - name: DISPATCH_NUDGE_REASON
-      shape: "string"
+    # từ M-claim (src/graph/claim.ts, src/state.ts)
+    - name: bindSession
+      shape: "(root: string, sessionId: string, taskId: string) => Promise<void>"
     - name: claimNextTask
       shape: "(graph: Graph, root: string, sessionId: string, opts?: SelectOptions) => Promise<Candidate | null>"
     - name: claimTask
       shape: "(root: string, taskId: string, sessionId: string, ttlMinutes: number) => Promise<boolean>"
-    - name: releaseClaimsForSession
-      shape: "(root: string, sessionId: string) => Promise<void>"
-    - name: bindSession
-      shape: "(root: string, sessionId: string, taskId: string) => Promise<void>"
-    - name: releaseSession
-      shape: "(root: string, sessionId: string) => Promise<void>"
-    - name: taskForSession
-      shape: "(root: string, sessionId?: string) => Promise<string | null>"
-    - name: sessionRecord
-      shape: "(root: string, sessionId: string) => Promise<SessionRecord | null>"
-    - name: markTouched
-      shape: "(root: string, sessionId: string, relPath?: string, fromSubagent?: boolean) => Promise<void>"
     - name: clearTouched
       shape: "(root: string, sessionId: string) => Promise<void>"
     - name: dispatchNudgedFor
       shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<boolean>"
     - name: markDispatchNudged
       shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: markTouched
+      shape: "(root: string, sessionId: string, relPath?: string, fromSubagent?: boolean) => Promise<void>"
+    - name: releaseClaimsForSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: releaseSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: sessionRecord
+      shape: "(root: string, sessionId: string) => Promise<SessionRecord | null>"
+    - name: taskForSession
+      shape: "(root: string, sessionId?: string) => Promise<string | null>"
+    # từ M-freshness (src/graph/freshness.ts)
+    - name: computeFreshness
+      shape: "(graph: Graph, opts?: { now?: number; }) => Promise<Map<string, VerificationState>>"
+    # từ M-fsprobe (src/util/fsprobe.ts)
+    - name: existsAsync
+      shape: "(path: string) => Promise<boolean>"
+    # từ M-graph-base (src/graph/paths.ts)
+    - name: CONFIG_FILE
+      shape: '"config.yaml"'
+    - name: findGanasRoot
+      shape: "(from?: string) => string | null"
+    - name: GANAS_DIR
+      shape: '".ganas"'
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+    # từ M-graph-read (src/graph/select.ts)
+    - name: Candidate
+      shape: "{ task: Sourced<Task>; blockers: string[] }"
+    - name: rankedCandidates
+      shape: "(graph: Graph, opts?: SelectOptions) => Candidate[]"
+    - name: selectNextTask
+      shape: "(graph: Graph, opts?: SelectOptions) => Candidate | null"
+    # từ M-hook-policy (src/hooks/policy/index.ts, src/hooks/policy/types.ts)
+    - name: ALLOW
+      shape: "HookOutput"
+    - name: applyEnforcement
+      shape: "(mode: Enforcement, body: string) => HookOutput"
+    - name: decideEntityOverwrite
+      shape: "(exists: boolean) => WriteStep"
+    - name: decideProposalWrite
+      shape: "(mode: Enforcement) => HookOutput"
+    - name: decideWriteEarly
+      shape: "(t: WriteTarget) => WriteStep"
+    - name: denyPreTool
+      shape: "(reason: string) => HookOutput"
+    - name: DISPATCH_NUDGE_REASON
+      shape: "string"
+    - name: HookInput
+      shape: "interface"
+    - name: HookOutput
+      shape: "interface"
+    - name: inRepoTree
+      shape: "(rel: string | undefined) => rel is string"
+    - name: knowledgeWriteBody
+      shape: "(rel: string, diags: readonly Diagnostic[], rule: EnforcementRule, nudgeTail: string) => string"
+    - name: locate
+      shape: "(raw: string, cwd: string, root: string) => { abs: string; rel: string }"
+    - name: PLAN_APPROVED_REASON
+      shape: "string"
+    - name: ruleForDiagnostics
+      shape: "(diags: readonly Diagnostic[]) => EnforcementRule"
+    - name: shellLooksLikeWrite
+      shape: "(command: string) => boolean"
+    - name: WRITE_TOOLS
+      shape: "Set<string>"
+    # từ M-load (src/graph/load.ts)
+    - name: loadGraph
+      shape: "(root: string) => Promise<Graph>"
+    # từ M-model (src/model/config.ts)
+    - name: enforcementFor
+      shape: "(config: Config, rule: EnforcementRule) => Enforcement"
+    # từ M-render (src/render/brief.ts)
+    - name: renderBrief
+      shape: "(input: BriefInput) => string"
+    # từ M-validate (src/graph/validate.ts)
+    - name: validateGraph
+      shape: "(graph: Graph, opts?: { now?: number; }) => Diagnostic[]"
+    # từ M-verify (src/verify/ledger.ts)
+    - name: ledgerPath
+      shape: "(root: string) => string"
+    # từ M-workflow (src/gate.ts, src/handoff.ts)
+    - name: evaluateGate
+      shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
+    - name: generateHandoff
+      shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined; }) => Promise<HandoffResult>"
 
+# Chỉ hai cạnh đầu (M-claim, M-hook-policy) nằm TRỌN trong P-hook. Mười cạnh
+# còn lại XUYÊN PHẠM VI — nguồn ở P-graph-core và P-cli — nên `contract.outputs`
+# đầu nguồn cùng bằng chứng `kind: contract` phải do chính phạm vi đó khai.
+# T-038 chỉ khai được đầu ĐÍCH; `ganas trace` còn hở ở đấy là ĐÚNG thiết kế.
 depends_on:
-  - M-hook-policy
   - M-claim
+  - M-hook-policy
+  - M-freshness
+  - M-fsprobe
+  - M-graph-base
+  - M-graph-read
+  - M-load
+  - M-model
+  - M-render
+  - M-validate
+  - M-verify
+  - M-workflow
 status: surveyed
 verify:
   - id: V-hooks-smoke

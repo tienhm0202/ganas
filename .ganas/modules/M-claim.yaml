@@ -10,7 +10,27 @@ paths:
 # chỉ chịu trách nhiệm cho cổng CHÍNH NÓ cấp. Nên khai ở đây phải là chữ ký
 # THẬT: đổi chữ ký trong code mà quên sửa dòng này thì cạnh đỏ — đó là toàn bộ
 # giá trị. Khai chung chung ("kết quả", "dữ liệu") biến cạnh thành ô đã điền.
+#
+# Bảng dưới do MÁY sinh từ chữ ký thật, không chép tay:
+#   node scripts/gen-ports.mjs --scope P-hook
 contract:
+  inputs:
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: DIRS
+      shape: "object"
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+    - name: Graph
+      shape: "interface"
+    - name: STATE_FILE
+      shape: '"state.json"'
+    # từ M-graph-read (src/graph/select.ts)
+    - name: Candidate
+      shape: "{ task: Sourced<Task>; blockers: string[] }"
+    - name: rankedCandidates
+      shape: "(graph: Graph, opts?: SelectOptions) => Candidate[]"
+    - name: SelectOptions
+      shape: "{ preferScope?: string | undefined }"
   outputs:
     - name: claimNextTask
       shape: "(graph: Graph, root: string, sessionId: string, opts?: SelectOptions) => Promise<Candidate | null>"
@@ -34,6 +54,13 @@ contract:
       shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<boolean>"
     - name: markDispatchNudged
       shape: "(root: string, sessionId: string) => Promise<void>"
+
+# Hai cạnh này XUYÊN PHẠM VI: nguồn nằm trong P-graph-core, nên đầu kia
+# (`contract.outputs` của M-graph-base / M-graph-read, cộng bằng chứng
+# `kind: contract`) phải do chính phạm vi đó khai. T-038 chỉ khai được đầu ĐÍCH.
+depends_on:
+  - M-graph-base
+  - M-graph-read
 
 status: surveyed
 verify:

@@ -9,34 +9,67 @@ paths:
 # chỉ chịu trách nhiệm cho cổng CHÍNH NÓ cấp. Nên khai ở đây phải là chữ ký
 # THẬT: đổi chữ ký trong code mà quên sửa dòng này thì cạnh đỏ — đó là toàn bộ
 # giá trị. Khai chung chung ("kết quả", "dữ liệu") biến cạnh thành ô đã điền.
+#
+# Bảng dưới do MÁY sinh từ chữ ký thật, không chép tay:
+#   node scripts/gen-ports.mjs --scope P-hook
 contract:
+  inputs:
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: CONFIG_FILE
+      shape: '"config.yaml"'
+    - name: Diagnostic
+      shape: "interface"
+    - name: DIRS
+      shape: "object"
+    - name: GANAS_DIR
+      shape: '".ganas"'
+    - name: LEDGER_FILE
+      shape: '"verify-ledger.jsonl"'
+    # từ M-model (src/model/config.ts)
+    - name: Enforcement
+      shape: "(typeof ENFORCEMENT)[number]"
+    - name: EnforcementRule
+      shape: "(typeof ENFORCEMENT_RULES)[number]"
   outputs:
-    - name: decideWriteEarly
-      shape: "(t: WriteTarget) => WriteStep"
+    - name: ALLOW
+      shape: "HookOutput"
+    - name: applyEnforcement
+      shape: "(mode: Enforcement, body: string) => HookOutput"
     - name: decideEntityOverwrite
       shape: "(exists: boolean) => WriteStep"
     - name: decideProposalWrite
       shape: "(mode: Enforcement) => HookOutput"
+    - name: decideWriteEarly
+      shape: "(t: WriteTarget) => WriteStep"
     - name: denyPreTool
       shape: "(reason: string) => HookOutput"
-    - name: applyEnforcement
-      shape: "(mode: Enforcement, body: string) => HookOutput"
-    - name: ruleForDiagnostics
-      shape: "(diags: readonly Diagnostic[]) => EnforcementRule"
+    - name: DISPATCH_NUDGE_REASON
+      shape: "string"
+    - name: HookInput
+      shape: "interface"
+    - name: HookOutput
+      shape: "interface"
+    - name: inRepoTree
+      shape: "(rel: string | undefined) => rel is string"
     - name: knowledgeWriteBody
       shape: "(rel: string, diags: readonly Diagnostic[], rule: EnforcementRule, nudgeTail: string) => string"
     - name: locate
       shape: "(raw: string, cwd: string, root: string) => { abs: string; rel: string }"
-    - name: inRepoTree
-      shape: "(rel: string | undefined) => rel is string"
+    - name: PLAN_APPROVED_REASON
+      shape: "string"
+    - name: ruleForDiagnostics
+      shape: "(diags: readonly Diagnostic[]) => EnforcementRule"
     - name: shellLooksLikeWrite
       shape: "(command: string) => boolean"
     - name: WRITE_TOOLS
       shape: "Set<string>"
-    - name: PLAN_APPROVED_REASON
-      shape: "string"
-    - name: DISPATCH_NUDGE_REASON
-      shape: "string"
+
+# Hai cạnh này XUYÊN PHẠM VI: nguồn nằm trong P-graph-core, nên đầu kia
+# (`contract.outputs` của M-graph-base / M-model, cộng bằng chứng
+# `kind: contract`) phải do chính phạm vi đó khai. T-038 chỉ khai được đầu ĐÍCH.
+depends_on:
+  - M-graph-base
+  - M-model
 
 status: surveyed
 verify:

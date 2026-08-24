@@ -74,7 +74,7 @@ test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó",
 
 test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đã khai", async () => {
   /**
-   * 52 cạnh code CÓ mà bản đồ CHƯA khai.
+   * 38 cạnh code CÓ mà bản đồ CHƯA khai.
    *
    * Từ 67 xuống 66 ở T-041: `M-hook-io → M-hook-policy` biến mất vì kiểu
    * `HookInput`/`HookOutput` đã chuyển về lõi, cắt chu trình policy ↔ io
@@ -121,6 +121,16 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
    * chữ ký thật (`node scripts/gen-ports.mjs --scope P-graph-core`), không
    * chép tay: `shape` so khớp từng ký tự nên chép tay là chắc chắn lệch.
    *
+   * Từ 52 xuống 38 ở T-038, phần P-hook của PR-014: đúng 14 cạnh có ĐÍCH thuộc
+   * P-hook được khai. KHÁC T-036 ở một chỗ đắt: cả 14 cạnh này XUYÊN PHẠM VI —
+   * 12 nguồn ở P-graph-core, 2 (`M-render`, `M-workflow`) ở P-cli — nên chỉ đầu
+   * ĐÍCH khai được (`depends_on` + `contract.inputs` của M-hook-policy /
+   * M-hook-io / M-claim). `contract.outputs` đầu nguồn nằm trong file khối của
+   * phạm vi khác và task này KHÔNG sửa chúng, nên sơ đồ còn cạnh nửa vời và
+   * `ganas trace` chưa sạch — có chủ đích, `exit_contract` của T-038 không đòi
+   * trace sạch. Dòng ở đây xoá được vì `declaredEdges()` chỉ đọc `depends_on`.
+   * Bảng cổng vẫn do MÁY sinh: `node scripts/gen-ports.mjs --scope P-hook`.
+   *
    * Ghi chú số đếm: đoạn T-043 ở trên nói 74 và số đó ĐÚNG lúc viết. Hai dòng
    * mất đi sau đó là do PR-014, không phải sai số: T-044 (commit:31752b8) gỡ
    * `M-verify → M-cli-core`, T-045 (commit:e6c78e7) gỡ `M-verify → M-hook-policy`
@@ -141,48 +151,34 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-exec → M-commands",
     "M-exec → M-workflow",
     "M-freshness → M-commands",
-    "M-freshness → M-hook-io",
     "M-freshness → M-render",
     "M-freshness → M-workflow",
     "M-fsprobe → M-commands",
-    "M-fsprobe → M-hook-io",
     "M-fsprobe → M-render",
     "M-fsprobe → M-workflow",
-    "M-graph-base → M-claim",
     "M-graph-base → M-cli-core",
     "M-graph-base → M-commands",
-    "M-graph-base → M-hook-io",
-    "M-graph-base → M-hook-policy",
     "M-graph-base → M-render",
     "M-graph-base → M-templates",
     "M-graph-base → M-workflow",
-    "M-graph-read → M-claim",
     "M-graph-read → M-commands",
-    "M-graph-read → M-hook-io",
     "M-graph-read → M-render",
     "M-graph-read → M-workflow",
     "M-hook-io → M-commands",
     "M-load → M-commands",
-    "M-load → M-hook-io",
     "M-load → M-workflow",
     "M-model → M-cli-core",
     "M-model → M-commands",
-    "M-model → M-hook-io",
-    "M-model → M-hook-policy",
     "M-model → M-render",
     "M-model → M-templates",
     "M-model → M-workflow",
-    "M-render → M-hook-io",
     "M-util → M-cli",
     "M-util → M-cli-core",
     "M-util → M-commands",
     "M-util → M-mcp",
     "M-validate → M-commands",
-    "M-validate → M-hook-io",
     "M-validate → M-workflow",
     "M-verify → M-commands",
-    "M-verify → M-hook-io",
-    "M-workflow → M-hook-io",
   ].sort();
 
   const declared = await declaredEdges();
