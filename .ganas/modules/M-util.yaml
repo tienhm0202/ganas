@@ -7,32 +7,44 @@ paths:
   - "src/util/glob.ts"
   - "src/util/shell.ts"
 
-# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). Khối này
-# là NGUỒN của hai cạnh (→ M-fsprobe, → M-verify). `outputs` khai đủ những gì
-# `verify/run.ts` và `verify/mutate.ts` thật sự import từ `glob.ts`/`shell.ts`.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
 #
-# Cổng VÀO: `glob.ts` nhập `listDir` từ `M-fsprobe`. Chiều `depends_on` bên dưới
-# đã được ĐẢO LẠI ở T-034 cho khớp code — bản cũ (T-019) khai ngược, và cạnh
-# giả sinh ra từ chiều sai đó đã bị gỡ.
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-util
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
 contract:
   inputs:
+    # từ M-exec (src/util/exec.ts)
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv; }) => Promise<ExecResult>"
+    # từ M-fsprobe (src/util/fsprobe.ts)
     - name: listDir
       shape: "(dir: string) => Promise<DirEntry[]>"
   outputs:
+    - name: GanasError
+      shape: "class"
     - name: listProjectFiles
       shape: "(root: string) => Promise<string[]>"
-    - name: matchesAny
-      shape: "(path: string, patterns: readonly string[]) => boolean"
     - name: looksLikePath
       shape: "(token: string) => boolean"
+    - name: matchesAny
+      shape: "(path: string, patterns: readonly string[]) => boolean"
+    - name: NotInitializedError
+      shape: "class"
     - name: stripOperators
       shape: "(token: string) => string"
-    - name: tokenSpans
-      shape: "(command: string) => TokenSpan[]"
     - name: TokenSpan
       shape: "{ text: string; start: number }"
+    - name: tokenSpans
+      shape: "(command: string) => TokenSpan[]"
 
 depends_on:
+  - M-exec
   - M-fsprobe
 status: surveyed
 verify:
@@ -40,13 +52,35 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/glob.test.ts'"
     expect: exit_zero
+  - id: V-util-to-freshness
+    kind: contract
+    to: M-freshness
+    run: >-
+      grep -qF "export async function listProjectFiles(" src/util/glob.ts &&
+      grep -qF "export function matchesAny(" src/util/glob.ts
+  - id: V-util-to-graph-base
+    kind: contract
+    to: M-graph-base
+    run: >-
+      grep -qF "export class NotInitializedError extends GanasError {" src/util/errors.ts
+  - id: V-util-to-load
+    kind: contract
+    to: M-load
+    run: >-
+      grep -qF "export class GanasError extends Error {" src/util/errors.ts &&
+      grep -qF "export function matchesAny(" src/util/glob.ts
+  - id: V-util-to-validate
+    kind: contract
+    to: M-validate
+    run: >-
+      grep -qF "export function matchesAny(" src/util/glob.ts
   - id: V-util-to-verify
     kind: contract
     to: M-verify
     run: >-
-      grep -q "export async function listProjectFiles(root: string): Promise<string\[\]> {" src/util/glob.ts &&
-      grep -q "export function matchesAny(path: string, patterns: readonly string\[\]): boolean {" src/util/glob.ts &&
-      grep -q "export function looksLikePath(token: string): boolean {" src/util/shell.ts &&
-      grep -q "export function stripOperators(token: string): string {" src/util/shell.ts &&
-      grep -q "export function tokenSpans(command: string): TokenSpan\[\] {" src/util/shell.ts &&
-      grep -q "export interface TokenSpan {" src/util/shell.ts
+      grep -qF "export async function listProjectFiles(" src/util/glob.ts &&
+      grep -qF "export function looksLikePath(" src/util/shell.ts &&
+      grep -qF "export function matchesAny(" src/util/glob.ts &&
+      grep -qF "export function stripOperators(" src/util/shell.ts &&
+      grep -qF "export interface TokenSpan {" src/util/shell.ts &&
+      grep -qF "export function tokenSpans(" src/util/shell.ts

@@ -5,25 +5,49 @@ nature: io
 paths:
   - "src/util/exec.ts"
 
-# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `outputs`
-# khai hai cổng mà `verify/run.ts`, `verify/ledger.ts`, `verify/mutate.ts`
-# thật sự import từ khối này.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
+#
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-exec
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
 contract:
+  inputs:
+    # từ M-model (src/model/common.ts)
+    - name: Expect
+      shape: "z.infer<typeof zExpect>"
   outputs:
-    - name: runShell
-      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv }) => Promise<ExecResult>"
     - name: judge
       shape: "(result: ExecResult, expect: Expect) => Judgement"
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv; }) => Promise<ExecResult>"
 
+depends_on:
+  - M-model
 status: surveyed
 verify:
   - id: V-exec-run
     kind: probe
     run: "npx tsx --test 'test/verify-run.test.ts'"
     expect: exit_zero
+  - id: V-exec-to-graph-read
+    kind: contract
+    to: M-graph-read
+    run: >-
+      grep -qF "export function judge(" src/util/exec.ts &&
+      grep -qF "export function runShell(" src/util/exec.ts
+  - id: V-exec-to-util
+    kind: contract
+    to: M-util
+    run: >-
+      grep -qF "export function runShell(" src/util/exec.ts
   - id: V-exec-to-verify
     kind: contract
     to: M-verify
     run: >-
-      grep -q "export function runShell(" src/util/exec.ts &&
-      grep -q "export function judge(result: ExecResult, expect: Expect): Judgement {" src/util/exec.ts
+      grep -qF "export function judge(" src/util/exec.ts &&
+      grep -qF "export function runShell(" src/util/exec.ts

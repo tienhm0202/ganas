@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: large
 model: main
 
@@ -66,3 +66,4 @@ notes: >-
   `shape` do MÁY sinh từ chính code (bảng cổng dựng một lần, áp cho cả ba phạm
   vi). Chép tay 224 cổng qua ba phạm vi thì lệch là chắc chắn, mà lệch `shape`
   giữa hai khối là cạnh đỏ ở một chỗ chẳng ai ngờ.
+done_at: 2026-08-24T16:20:04.729Z

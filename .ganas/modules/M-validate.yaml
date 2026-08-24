@@ -6,17 +6,93 @@ paths:
   - "src/graph/validate.ts"
   - "src/debt.ts"
 
-# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `validate.ts`
-# chỉ thật sự import MỘT tên từ M-load: `lineOfPath` (quy dòng lỗi schema về
-# đúng `file:line`). Không khai thêm gì — khai cổng không thật sự dùng là nói
-# dối về khối, y như cắt bớt.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
+#
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-validate
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
+#
+# Khối CUỐI nguồn của phạm vi: không khối nào trong sơ đồ nhập từ nó, nên
+# chỉ có `inputs`.
 contract:
   inputs:
+    # từ M-fsprobe (src/util/fsprobe.ts)
+    - name: exists
+      shape: "(path: string) => boolean"
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: Diagnostic
+      shape: "interface"
+    - name: GANAS_DIR
+      shape: '".ganas"'
+    - name: Graph
+      shape: "interface"
+    - name: LEDGER_FILE
+      shape: '"verify-ledger.jsonl"'
+    - name: LOCAL_ONLY
+      shape: "readonly string[]"
+    - name: Severity
+      shape: '"error" | "warning" | "info"'
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    # từ M-graph-read (src/graph/trace.ts)
+    - name: DebtItem
+      shape: "interface"
+    - name: DebtKind
+      shape: '"uncovered-edge" | "uncovered-port" | "broken-contract" | "unverified-module"'
+    # từ M-load (src/util/yaml.ts)
     - name: lineOfPath
       shape: "(loaded: LoadedYaml, path: readonly (string | number)[]) => number | undefined"
+    # từ M-model (src/model/anchor.ts, src/model/common.ts, src/model/config.ts, src/model/icebox.ts, src/model/knowledge.ts, src/model/module.ts, src/model/proposal.ts, src/model/task.ts, src/model/verification.ts)
+    - name: AnchorObject
+      shape: "z.infer<typeof zAnchorObject>"
+    - name: evalWeakness
+      shape: "(v: EvalVerification) => EvalWeakness | null"
+    - name: ExitCriterion
+      shape: "z.infer<typeof zExitCriterion>"
+    - name: formatAnchor
+      shape: "(a: AnchorObject) => string"
+    - name: freshnessOf
+      shape: "({ fact, depsChangedAt, now }: FreshnessInput) => Freshness"
+    - name: guideFileName
+      shape: "(harness: Harness) => string"
+    - name: Icebox
+      shape: "z.infer<typeof zIcebox>"
+    - name: moduleGuideDir
+      shape: "(paths: readonly string[]) => string | undefined"
+    - name: modulePathsOverlap
+      shape: "(a: readonly string[], b: readonly string[]) => boolean"
+    - name: Proposal
+      shape: "z.infer<typeof zProposal>"
+    - name: ScoreValue
+      shape: "z.infer<typeof zScoreValue>"
+    # từ M-util (src/util/glob.ts)
+    - name: matchesAny
+      shape: "(path: string, patterns: readonly string[]) => boolean"
+    # từ M-verify (src/verify/ledger.ts, src/verify/lint.ts)
+    - name: defHash
+      shape: "(definition: unknown, statement?: string) => string"
+    - name: entryAt
+      shape: "(index: Map<string, LedgerEntry[]>, target: string, at: string) => LedgerEntry | undefined"
+    - name: ledgerCorruption
+      shape: "(root: string) => number"
+    - name: lintProbe
+      shape: "(input: LintInput) => LintFinding[]"
+    - name: verifyChain
+      shape: "(entries: readonly LedgerEntry[]) => ChainVerdict"
 
 depends_on:
+  - M-fsprobe
+  - M-graph-base
+  - M-graph-read
   - M-load
+  - M-model
+  - M-util
+  - M-verify
 status: surveyed
 verify:
   - id: V-validate-smoke

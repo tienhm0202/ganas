@@ -6,15 +6,42 @@ paths:
   - "src/graph/load.ts"
   - "src/util/yaml.ts"
 
-# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
-# gộp đủ những gì `load.ts` thật sự import từ M-model: hằng số version cộng
-# 11 schema Zod dùng để `.parse()` từng loại thực thể. `outputs` khai
-# `lineOfPath` (từ `util/yaml.ts`, cũng nằm trong `paths` của khối này) — cổng
-# duy nhất mà M-validate thật sự import từ khối này.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
+#
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-load
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
 contract:
   inputs:
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: CodeImport
+      shape: "{ specifier: string; typeOnly: boolean }"
+    - name: CONFIG_FILE
+      shape: '"config.yaml"'
+    - name: Diagnostic
+      shape: "interface"
+    - name: DIRS
+      shape: "object"
+    - name: GANAS_DIR
+      shape: '".ganas"'
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+    - name: Graph
+      shape: "interface"
+    - name: LoadedYaml
+      shape: "interface"
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    # từ M-model (src/model/config.ts, src/model/design.ts, src/model/goal.ts, src/model/icebox.ts, src/model/knowledge.ts, src/model/module.ts, src/model/proposal.ts, src/model/scope.ts, src/model/task.ts)
     - name: LATEST_SCHEMA_VERSION
-      shape: "number"
+      shape: "1"
+    - name: Module
+      shape: "z.infer<typeof zModule>"
     - name: zClaim
       shape: "ZodTypeAny"
     - name: zConfig
@@ -37,12 +64,25 @@ contract:
       shape: "ZodTypeAny"
     - name: zTask
       shape: "ZodTypeAny"
+    # từ M-util (src/util/errors.ts, src/util/glob.ts)
+    - name: GanasError
+      shape: "class"
+    - name: matchesAny
+      shape: "(path: string, patterns: readonly string[]) => boolean"
+    # từ M-verify (src/verify/ledger.ts)
+    - name: indexByTarget
+      shape: "(entries: readonly LedgerEntry[]) => Map<string, LedgerEntry[]>"
+    - name: readLedger
+      shape: "(root: string) => Promise<LedgerEntry[]>"
   outputs:
     - name: lineOfPath
       shape: "(loaded: LoadedYaml, path: readonly (string | number)[]) => number | undefined"
 
 depends_on:
+  - M-graph-base
   - M-model
+  - M-util
+  - M-verify
 status: surveyed
 verify:
   - id: V-load-smoke
@@ -53,4 +93,4 @@ verify:
     kind: contract
     to: M-validate
     run: >-
-      grep -q "export function lineOfPath(" src/util/yaml.ts
+      grep -qF "export function lineOfPath(" src/util/yaml.ts

@@ -5,51 +5,70 @@ nature: code
 paths:
   - "src/model/**"
 
-# `portIssues()` so `name` và so `shape` KHỚP TỪNG KÝ TỰ, và mỗi cạnh chỉ chịu
-# trách nhiệm cho cổng CHÍNH NÓ cấp (T-032). Khối này là NGUỒN của bốn cạnh
-# (→ M-graph-base, → M-graph-read, → M-load, → M-verify) nên `outputs` phải gộp
-# đủ những gì cả bốn đích thật sự import — cắt bớt là nói dối về khối (T-034).
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
 #
-# Quy ước shape dùng trong khối này:
-#   - type suy ra từ schema (`export type X = z.infer<typeof zX>`) → khai
-#     đúng vế phải đó, chữ ký thật, grep được nguyên văn.
-#   - hằng số schema Zod (`export const zX = z...`) → khai "ZodTypeAny": kiểu
-#     tĩnh đầy đủ dài hàng chục dòng, không thực tế để so KHỚP TỪNG KÝ TỰ; đây
-#     là phân loại thật (không phải "dữ liệu"/"kết quả" chung chung) và cùng
-#     tinh thần với cách M-hook-policy khai `WRITE_TOOLS` là "Set<string>"
-#     thay vì tái hiện toàn bộ giá trị.
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-model
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
+#
+# Khối LÁ ở đầu nguồn: không nhập gì từ khối khác, nên chỉ có `outputs`.
 contract:
   outputs:
+    - name: AnchorObject
+      shape: "z.infer<typeof zAnchorObject>"
     - name: Claim
       shape: "z.infer<typeof zClaim>"
     - name: Config
       shape: "z.infer<typeof zConfig>"
+    - name: ContractVerification
+      shape: "z.infer<typeof zContractVerification>"
     - name: Decision
       shape: "z.infer<typeof zDecision>"
     - name: Design
       shape: "z.infer<typeof zDesign>"
+    - name: evalWeakness
+      shape: "(v: EvalVerification) => EvalWeakness | null"
+    - name: ExitCriterion
+      shape: "z.infer<typeof zExitCriterion>"
+    - name: Expect
+      shape: "z.infer<typeof zExpect>"
     - name: Fact
       shape: "z.infer<typeof zFact>"
+    - name: formatAnchor
+      shape: "(a: AnchorObject) => string"
+    - name: Freshness
+      shape: "(typeof FRESHNESS)[number]"
+    - name: freshnessOf
+      shape: "({ fact, depsChangedAt, now }: FreshnessInput) => Freshness"
     - name: Goal
       shape: "z.infer<typeof zGoal>"
+    - name: guideFileName
+      shape: "(harness: Harness) => string"
     - name: Icebox
       shape: "z.infer<typeof zIcebox>"
+    - name: LATEST_SCHEMA_VERSION
+      shape: "1"
     - name: Module
       shape: "z.infer<typeof zModule>"
+    - name: moduleGuideDir
+      shape: "(paths: readonly string[]) => string | undefined"
+    - name: modulePathsOverlap
+      shape: "(a: readonly string[], b: readonly string[]) => boolean"
     - name: Proposal
       shape: "z.infer<typeof zProposal>"
     - name: Scope
       shape: "z.infer<typeof zScope>"
+    - name: ScoreValue
+      shape: "z.infer<typeof zScoreValue>"
     - name: Task
       shape: "z.infer<typeof zTask>"
-    - name: ContractVerification
-      shape: "z.infer<typeof zContractVerification>"
     - name: Verification
       shape: "z.infer<typeof zVerification>"
-    - name: Expect
-      shape: "z.infer<typeof zExpect>"
-    - name: LATEST_SCHEMA_VERSION
-      shape: "number"
     - name: zClaim
       shape: "ZodTypeAny"
     - name: zConfig
@@ -79,54 +98,77 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/icebox-model.test.ts'"
     expect: exit_zero
-  # Bốn cạnh lõi → khối nền/đọc/nạp/kiểm — grep xác nhận từng type/schema mà
-  # đích tương ứng thật sự import vẫn còn đúng chữ ký trong file định nghĩa.
-  # T-042 chẻ `M-graph-read` làm hai: mười một type của `graph/types.ts` nay đi
-  # theo cạnh → M-graph-base, `graph/select.ts`/`graph/trace.ts` chỉ còn ba.
+  - id: V-model-to-exec
+    kind: contract
+    to: M-exec
+    run: >-
+      grep -qF "export type Expect = z.infer<typeof zExpect>;" src/model/common.ts
+  - id: V-model-to-freshness
+    kind: contract
+    to: M-freshness
+    run: >-
+      grep -qF "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
+      grep -qF "export type Freshness = (typeof FRESHNESS)[number];" src/model/knowledge.ts
   - id: V-model-to-graph-base
     kind: contract
     to: M-graph-base
     run: >-
-      grep -q "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
-      grep -q "export type Claim = z.infer<typeof zClaim>;" src/model/knowledge.ts &&
-      grep -q "export type Decision = z.infer<typeof zDecision>;" src/model/knowledge.ts &&
-      grep -q "export type Config = z.infer<typeof zConfig>;" src/model/config.ts &&
-      grep -q "export type Design = z.infer<typeof zDesign>;" src/model/design.ts &&
-      grep -q "export type Goal = z.infer<typeof zGoal>;" src/model/goal.ts &&
-      grep -q "export type Icebox = z.infer<typeof zIcebox>;" src/model/icebox.ts &&
-      grep -q "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
-      grep -q "export type Proposal = z.infer<typeof zProposal>;" src/model/proposal.ts &&
-      grep -q "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
-      grep -q "export type Task = z.infer<typeof zTask>;" src/model/task.ts
+      grep -qF "export type Claim = z.infer<typeof zClaim>;" src/model/knowledge.ts &&
+      grep -qF "export type Config = z.infer<typeof zConfig>;" src/model/config.ts &&
+      grep -qF "export type Decision = z.infer<typeof zDecision>;" src/model/knowledge.ts &&
+      grep -qF "export type Design = z.infer<typeof zDesign>;" src/model/design.ts &&
+      grep -qF "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
+      grep -qF "export type Goal = z.infer<typeof zGoal>;" src/model/goal.ts &&
+      grep -qF "export type Icebox = z.infer<typeof zIcebox>;" src/model/icebox.ts &&
+      grep -qF "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
+      grep -qF "export type Proposal = z.infer<typeof zProposal>;" src/model/proposal.ts &&
+      grep -qF "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
+      grep -qF "export type Task = z.infer<typeof zTask>;" src/model/task.ts
   - id: V-model-to-graph-read
     kind: contract
     to: M-graph-read
     run: >-
-      grep -q "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
-      grep -q "export type Task = z.infer<typeof zTask>;" src/model/task.ts &&
-      grep -q "export type ContractVerification = z.infer<typeof zContractVerification>;" src/model/verification.ts
+      grep -qF "export type ContractVerification = z.infer<typeof zContractVerification>;" src/model/verification.ts &&
+      grep -qF "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
+      grep -qF "export type Task = z.infer<typeof zTask>;" src/model/task.ts
   - id: V-model-to-load
     kind: contract
     to: M-load
     run: >-
-      grep -q "export const LATEST_SCHEMA_VERSION = 1;" src/model/config.ts &&
-      grep -q "export const zClaim = z" src/model/knowledge.ts &&
-      grep -q "export const zFact = z" src/model/knowledge.ts &&
-      grep -q "export const zDecision = z" src/model/knowledge.ts &&
-      grep -q "export const zConfig = z.object({" src/model/config.ts &&
-      grep -q "export const zDesign = z" src/model/design.ts &&
-      grep -q "export const zGoal = z" src/model/goal.ts &&
-      grep -q "export const zIcebox = z" src/model/icebox.ts &&
-      grep -q "export const zModule = z" src/model/module.ts &&
-      grep -q "export const zProposal = z" src/model/proposal.ts &&
-      grep -q "export const zScope = z" src/model/scope.ts &&
-      grep -q "export const zTask = z" src/model/task.ts
+      grep -qF "export const LATEST_SCHEMA_VERSION = 1;" src/model/config.ts &&
+      grep -qF "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
+      grep -qF "export const zClaim = z" src/model/knowledge.ts &&
+      grep -qF "export const zConfig = z.object(" src/model/config.ts &&
+      grep -qF "export const zDecision = z" src/model/knowledge.ts &&
+      grep -qF "export const zDesign = z" src/model/design.ts &&
+      grep -qF "export const zFact = z" src/model/knowledge.ts &&
+      grep -qF "export const zGoal = z" src/model/goal.ts &&
+      grep -qF "export const zIcebox = z" src/model/icebox.ts &&
+      grep -qF "export const zModule = z" src/model/module.ts &&
+      grep -qF "export const zProposal = z" src/model/proposal.ts &&
+      grep -qF "export const zScope = z" src/model/scope.ts &&
+      grep -qF "export const zTask = z" src/model/task.ts
+  - id: V-model-to-validate
+    kind: contract
+    to: M-validate
+    run: >-
+      grep -qF "export type AnchorObject = z.infer<typeof zAnchorObject>;" src/model/anchor.ts &&
+      grep -qF "export function evalWeakness(" src/model/verification.ts &&
+      grep -qF "export type ExitCriterion = z.infer<typeof zExitCriterion>;" src/model/task.ts &&
+      grep -qF "export function formatAnchor(" src/model/anchor.ts &&
+      grep -qF "export function freshnessOf(" src/model/knowledge.ts &&
+      grep -qF "export function guideFileName(" src/model/config.ts &&
+      grep -qF "export type Icebox = z.infer<typeof zIcebox>;" src/model/icebox.ts &&
+      grep -qF "export function moduleGuideDir(" src/model/module.ts &&
+      grep -qF "export function modulePathsOverlap(" src/model/module.ts &&
+      grep -qF "export type Proposal = z.infer<typeof zProposal>;" src/model/proposal.ts &&
+      grep -qF "export type ScoreValue = z.infer<typeof zScoreValue>;" src/model/common.ts
   - id: V-model-to-verify
     kind: contract
     to: M-verify
     run: >-
-      grep -q "export type Expect = z.infer<typeof zExpect>;" src/model/common.ts &&
-      grep -q "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
-      grep -q "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
-      grep -q "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
-      grep -q "export type Verification = z.infer<typeof zVerification>;" src/model/verification.ts
+      grep -qF "export type Expect = z.infer<typeof zExpect>;" src/model/common.ts &&
+      grep -qF "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
+      grep -qF "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
+      grep -qF "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
+      grep -qF "export type Verification = z.infer<typeof zVerification>;" src/model/verification.ts

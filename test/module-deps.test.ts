@@ -74,7 +74,7 @@ test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó",
 
 test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đã khai", async () => {
   /**
-   * 74 cạnh code CÓ mà bản đồ CHƯA khai.
+   * 52 cạnh code CÓ mà bản đồ CHƯA khai.
    *
    * Từ 67 xuống 66 ở T-041: `M-hook-io → M-hook-policy` biến mất vì kiểu
    * `HookInput`/`HookOutput` đã chuyển về lõi, cắt chu trình policy ↔ io
@@ -111,8 +111,20 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
    * P-cli và P-hook.
    *
    * KHÔNG thêm chúng vào `depends_on` một lượt: mỗi cạnh mới đẻ một
-   * `uncovered-edge`, tức 74 hợp đồng cổng phải khai — việc lớn hơn hẳn và
-   * phải do người quyết.
+   * `uncovered-edge`, tức từng ấy hợp đồng cổng phải khai — việc lớn hơn hẳn
+   * và phải do người quyết. PR-014 chẻ nó làm ba theo PHẠM VI.
+   *
+   * Từ 72 xuống 52 ở T-036, phần P-graph-core của PR-014: đúng 20 cạnh có ĐÍCH
+   * thuộc P-graph-core được khai, và nguồn của cả 20 cũng nằm trong chín khối
+   * của phạm vi đó — nên hai đầu (`depends_on` bên đích, `contract` hai bên)
+   * khép kín được mà không phải chờ P-cli/P-hook. Bảng cổng do MÁY sinh từ
+   * chữ ký thật (`node scripts/gen-ports.mjs --scope P-graph-core`), không
+   * chép tay: `shape` so khớp từng ký tự nên chép tay là chắc chắn lệch.
+   *
+   * Ghi chú số đếm: đoạn T-043 ở trên nói 74 và số đó ĐÚNG lúc viết. Hai dòng
+   * mất đi sau đó là do PR-014, không phải sai số: T-044 (commit:31752b8) gỡ
+   * `M-verify → M-cli-core`, T-045 (commit:e6c78e7) gỡ `M-verify → M-hook-policy`
+   * — cả hai là cạnh chết vì bốn file thôi nhập qua tái xuất của verify/ledger.
    *
    * Tập ĐÓNG, so bằng `deepEqual`: thêm import xuyên khối mới mà quên khai
    * `depends_on` thì đỏ; khai xong một cạnh mà quên xoá dòng cũng đỏ. Danh
@@ -127,37 +139,27 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-cli-core → M-mcp",
     "M-exec → M-build",
     "M-exec → M-commands",
-    "M-exec → M-graph-read",
-    "M-exec → M-util",
     "M-exec → M-workflow",
     "M-freshness → M-commands",
     "M-freshness → M-hook-io",
     "M-freshness → M-render",
     "M-freshness → M-workflow",
     "M-fsprobe → M-commands",
-    "M-fsprobe → M-freshness",
-    "M-fsprobe → M-graph-base",
     "M-fsprobe → M-hook-io",
     "M-fsprobe → M-render",
-    "M-fsprobe → M-validate",
-    "M-fsprobe → M-verify",
     "M-fsprobe → M-workflow",
     "M-graph-base → M-claim",
     "M-graph-base → M-cli-core",
     "M-graph-base → M-commands",
-    "M-graph-base → M-graph-read",
     "M-graph-base → M-hook-io",
     "M-graph-base → M-hook-policy",
-    "M-graph-base → M-load",
     "M-graph-base → M-render",
     "M-graph-base → M-templates",
-    "M-graph-base → M-validate",
     "M-graph-base → M-workflow",
     "M-graph-read → M-claim",
     "M-graph-read → M-commands",
     "M-graph-read → M-hook-io",
     "M-graph-read → M-render",
-    "M-graph-read → M-validate",
     "M-graph-read → M-workflow",
     "M-hook-io → M-commands",
     "M-load → M-commands",
@@ -165,31 +167,21 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-load → M-workflow",
     "M-model → M-cli-core",
     "M-model → M-commands",
-    "M-model → M-exec",
-    "M-model → M-freshness",
     "M-model → M-hook-io",
     "M-model → M-hook-policy",
     "M-model → M-render",
     "M-model → M-templates",
-    "M-model → M-validate",
     "M-model → M-workflow",
     "M-render → M-hook-io",
     "M-util → M-cli",
     "M-util → M-cli-core",
     "M-util → M-commands",
-    "M-util → M-freshness",
-    "M-util → M-graph-base",
-    "M-util → M-load",
     "M-util → M-mcp",
-    "M-util → M-validate",
     "M-validate → M-commands",
     "M-validate → M-hook-io",
     "M-validate → M-workflow",
     "M-verify → M-commands",
-    "M-verify → M-graph-read",
     "M-verify → M-hook-io",
-    "M-verify → M-load",
-    "M-verify → M-validate",
     "M-workflow → M-hook-io",
   ].sort();
 

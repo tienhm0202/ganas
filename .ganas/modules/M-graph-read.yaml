@@ -6,29 +6,70 @@ paths:
   - "src/graph/select.ts"
   - "src/graph/trace.ts"
 
-# T-042 tách `types.ts`/`paths.ts` sang khối lá `M-graph-base` để cắt chu trình
-# M-graph-read ↔ M-load ↔ M-verify (PR-013). Cổng ĐI THEO FILE: `Graph`,
-# `Sourced`, `ganasPath` và hai cạnh contract của chúng nay nằm ở
-# `M-graph-base`, không nhân đôi ở đây.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
 #
-# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
-# khai đúng ba type mà `select.ts`/`trace.ts` thật sự import từ M-model —
-# khai thêm cổng không dùng là nói dối về khối, y như cắt bớt. Khối này không
-# là NGUỒN của cạnh khai báo nào nên `outputs` để rỗng.
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-graph-read
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
 contract:
   inputs:
+    # từ M-exec (src/util/exec.ts)
+    - name: judge
+      shape: "(result: ExecResult, expect: Expect) => Judgement"
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv; }) => Promise<ExecResult>"
+    # từ M-graph-base (src/graph/types.ts)
+    - name: Graph
+      shape: "interface"
+    - name: LedgerResult
+      shape: "(typeof LEDGER_RESULT)[number]"
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    # từ M-model (src/model/module.ts, src/model/task.ts, src/model/verification.ts)
     - name: ContractVerification
       shape: "z.infer<typeof zContractVerification>"
     - name: Module
       shape: "z.infer<typeof zModule>"
     - name: Task
       shape: "z.infer<typeof zTask>"
+    # từ M-verify (src/verify/ledger.ts, src/verify/lint.ts)
+    - name: appendEntry
+      shape: "(root: string, entry: LedgerEntry) => Promise<void>"
+    - name: defHash
+      shape: "(definition: unknown, statement?: string) => string"
+    - name: hasBlockingFinding
+      shape: "(findings: readonly LintFinding[]) => boolean"
+    - name: lintProbe
+      shape: "(input: LintInput) => LintFinding[]"
+    - name: runContext
+      shape: '(root: string, by: string) => Promise<Pick<LedgerEntry, "by" | "git" | "host">>'
+    - name: sha256
+      shape: "(input: string) => string"
+  outputs:
+    - name: DebtItem
+      shape: "interface"
+    - name: DebtKind
+      shape: '"uncovered-edge" | "uncovered-port" | "broken-contract" | "unverified-module"'
 
 depends_on:
+  - M-exec
+  - M-graph-base
   - M-model
+  - M-verify
 status: surveyed
 verify:
   - id: V-graph-read-trace
     kind: probe
     run: "npx tsx --test 'test/trace.test.ts'"
     expect: exit_zero
+  - id: V-graph-read-to-validate
+    kind: contract
+    to: M-validate
+    run: >-
+      grep -qF "export interface DebtItem {" src/graph/trace.ts &&
+      grep -qF "export type DebtKind =" src/graph/trace.ts

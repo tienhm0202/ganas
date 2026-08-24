@@ -6,24 +6,25 @@ paths:
   - "src/graph/types.ts"
   - "src/graph/paths.ts"
 
-# Khối LÁ, tách ra ở T-042 để cắt chu trình M-graph-read ↔ M-load ↔ M-verify
-# (PR-013). "Lá" ở đây nghĩa hẹp và đo được: không file nào trong `paths` nhập
-# từ M-graph-read, M-load hay M-verify — nên ba khối đó cùng phụ thuộc khối
-# này mà không có đường quay lại. Ba nhóm định nghĩa đã chuyển về đây:
-# `LedgerEntry`/`LedgerResult`/`LEDGER_RESULT` (từ `verify/ledger.ts`),
-# `LEDGER_FILE` (từ `verify/ledger.ts`, nay nằm cạnh CONFIG_FILE/STATE_FILE),
-# và `LoadedYaml` (từ `util/yaml.ts`) — đều là kiểu/hằng thuần, chỗ CHẠM thật
-# vẫn nằm nguyên ở khối cũ.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
 #
-# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). `inputs`
-# gộp đủ 11 type mà `types.ts` thật sự import từ M-model. `outputs` khai đúng
-# những cổng mà M-verify và M-freshness thật sự import từ `types.ts`/`paths.ts`
-# — hai interface lớn (`Graph`, `LedgerEntry`) khai "interface" thay vì chép
-# hết field, cùng lý do "ZodTypeAny" ở M-model: so KHỚP TỪNG KÝ TỰ một
-# interface hàng chục dòng thì mọi lần thêm field không liên quan cũng làm
-# cạnh đỏ oan, còn `run` bên dưới vẫn grep đúng tên thật.
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-graph-base
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
+#
+# Khối LÁ tách ra ở T-042 để cắt chu trình M-graph-read ↔ M-load ↔ M-verify
+# (PR-013) — nó vẫn không nhập gì từ ba khối đó.
 contract:
   inputs:
+    # từ M-fsprobe (src/util/fsprobe.ts)
+    - name: exists
+      shape: "(path: string) => boolean"
+    # từ M-model (src/model/config.ts, src/model/design.ts, src/model/goal.ts, src/model/icebox.ts, src/model/knowledge.ts, src/model/module.ts, src/model/proposal.ts, src/model/scope.ts, src/model/task.ts)
     - name: Claim
       shape: "z.infer<typeof zClaim>"
     - name: Config
@@ -46,22 +47,43 @@ contract:
       shape: "z.infer<typeof zScope>"
     - name: Task
       shape: "z.infer<typeof zTask>"
+    # từ M-util (src/util/errors.ts)
+    - name: NotInitializedError
+      shape: "class"
   outputs:
+    - name: CodeImport
+      shape: "{ specifier: string; typeOnly: boolean }"
+    - name: CONFIG_FILE
+      shape: '"config.yaml"'
+    - name: Diagnostic
+      shape: "interface"
+    - name: DIRS
+      shape: "object"
+    - name: GANAS_DIR
+      shape: '".ganas"'
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
     - name: Graph
       shape: "interface"
-    - name: Sourced
-      shape: "{ value: T; file: string; index?: number }"
+    - name: LEDGER_FILE
+      shape: '"verify-ledger.jsonl"'
     - name: LedgerEntry
       shape: "interface"
     - name: LedgerResult
       shape: "(typeof LEDGER_RESULT)[number]"
-    - name: ganasPath
-      shape: "(root: string, ...parts: string[]) => string"
-    - name: LEDGER_FILE
-      shape: '"verify-ledger.jsonl"'
+    - name: LoadedYaml
+      shape: "interface"
+    - name: LOCAL_ONLY
+      shape: "readonly string[]"
+    - name: Severity
+      shape: '"error" | "warning" | "info"'
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
 
 depends_on:
+  - M-fsprobe
   - M-model
+  - M-util
 status: surveyed
 verify:
   - id: V-graph-base-shape
@@ -80,15 +102,46 @@ verify:
     kind: contract
     to: M-freshness
     run: >-
-      grep -q "export interface Graph {" src/graph/types.ts &&
-      grep -q "export interface LedgerEntry {" src/graph/types.ts
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export interface LedgerEntry {" src/graph/types.ts
+  - id: V-graph-base-to-graph-read
+    kind: contract
+    to: M-graph-read
+    run: >-
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export type LedgerResult = (typeof LEDGER_RESULT)[number];" src/graph/types.ts &&
+      grep -qF "export interface Sourced<T> {" src/graph/types.ts
+  - id: V-graph-base-to-load
+    kind: contract
+    to: M-load
+    run: >-
+      grep -qF "export interface CodeImport {" src/graph/types.ts &&
+      grep -qF "export const CONFIG_FILE = \"config.yaml\";" src/graph/paths.ts &&
+      grep -qF "export interface Diagnostic {" src/graph/types.ts &&
+      grep -qF "export const DIRS = {" src/graph/paths.ts &&
+      grep -qF "export const GANAS_DIR = \".ganas\";" src/graph/paths.ts &&
+      grep -qF "export function ganasPath(" src/graph/paths.ts &&
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export interface LoadedYaml {" src/graph/types.ts &&
+      grep -qF "export interface Sourced<T> {" src/graph/types.ts
+  - id: V-graph-base-to-validate
+    kind: contract
+    to: M-validate
+    run: >-
+      grep -qF "export interface Diagnostic {" src/graph/types.ts &&
+      grep -qF "export const GANAS_DIR = \".ganas\";" src/graph/paths.ts &&
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts &&
+      grep -qF "export const LOCAL_ONLY: readonly string[] = [\`\${DIRS.runs}/\`, \`\${DIRS.locks}/\`, STATE_FILE];" src/graph/paths.ts &&
+      grep -qF "export type Severity = \"error\" | \"warning\" | \"info\";" src/graph/types.ts &&
+      grep -qF "export interface Sourced<T> {" src/graph/types.ts
   - id: V-graph-base-to-verify
     kind: contract
     to: M-verify
     run: >-
-      grep -q "export interface Graph {" src/graph/types.ts &&
-      grep -q "export interface Sourced<T> {" src/graph/types.ts &&
-      grep -q "export interface LedgerEntry {" src/graph/types.ts &&
-      grep -q "export type LedgerResult = (typeof LEDGER_RESULT)\[number\];" src/graph/types.ts &&
-      grep -q "export function ganasPath(root: string, ...parts: string\[\]): string {" src/graph/paths.ts &&
-      grep -q "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts
+      grep -qF "export function ganasPath(" src/graph/paths.ts &&
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts &&
+      grep -qF "export interface LedgerEntry {" src/graph/types.ts &&
+      grep -qF "export type LedgerResult = (typeof LEDGER_RESULT)[number];" src/graph/types.ts &&
+      grep -qF "export interface Sourced<T> {" src/graph/types.ts

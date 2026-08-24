@@ -5,13 +5,26 @@ nature: io
 paths:
   - "src/util/fsprobe.ts"
 
-# Cổng RA = thứ `M-util` (glob.ts) thật sự nhập. Chiều này mới đúng code:
-# fsprobe không import gì từ M-util, còn glob.ts thì `import { listDir }`.
-# Bản đồ khai ngược từ T-019 tới T-034 mới bị phát hiện.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
+#
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-fsprobe
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
+#
+# Khối LÁ: chỗ DUY NHẤT tra trạng thái filesystem, không nhập gì từ khối khác.
 contract:
   outputs:
+    - name: exists
+      shape: "(path: string) => boolean"
     - name: listDir
       shape: "(dir: string) => Promise<DirEntry[]>"
+    - name: mtimeMs
+      shape: "(path: string) => Promise<number | undefined>"
 
 status: surveyed
 verify:
@@ -19,8 +32,28 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/fsprobe.test.ts'"
     expect: exit_zero
+  - id: V-fsprobe-to-freshness
+    kind: contract
+    to: M-freshness
+    run: >-
+      grep -qF "export async function mtimeMs(" src/util/fsprobe.ts
+  - id: V-fsprobe-to-graph-base
+    kind: contract
+    to: M-graph-base
+    run: >-
+      grep -qF "export function exists(" src/util/fsprobe.ts
   - id: V-fsprobe-to-util
     kind: contract
     to: M-util
     run: >-
-      grep -q "export async function listDir(dir: string): Promise<DirEntry\[\]>" src/util/fsprobe.ts
+      grep -qF "export async function listDir(" src/util/fsprobe.ts
+  - id: V-fsprobe-to-validate
+    kind: contract
+    to: M-validate
+    run: >-
+      grep -qF "export function exists(" src/util/fsprobe.ts
+  - id: V-fsprobe-to-verify
+    kind: contract
+    to: M-verify
+    run: >-
+      grep -qF "export function exists(" src/util/fsprobe.ts

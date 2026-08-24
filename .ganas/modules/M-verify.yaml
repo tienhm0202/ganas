@@ -5,34 +5,40 @@ nature: io
 paths:
   - "src/verify/**"
 
-# `portIssues()` so `name` và `shape` KHỚP TỪNG KÝ TỰ (T-032/T-034). Khối này
-# là ĐÍCH của bốn cạnh nên `inputs` phải gộp đủ những gì `run.ts`/`ledger.ts`/
-# `mutate.ts` thật sự import từ CẢ BỐN khối thượng nguồn — cắt bớt vì "gộp từ
-# M-model thôi cho gọn" là đúng thứ luật này cấm. `outputs` khai bảy cổng mà
-# M-freshness thật sự import từ `ledger.ts`/`run.ts`; `LedgerEntry` đã rời
-# khối này ở T-042 — kiểu đó nay khai ở `M-graph-base` (src/graph/types.ts),
-# và cổng đi theo file chứ không nhân đôi.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
+#
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-verify
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`,
+# `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
+# không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
+# tin cạnh đỏ nữa.
 contract:
   inputs:
     # từ M-exec (src/util/exec.ts)
     - name: judge
       shape: "(result: ExecResult, expect: Expect) => Judgement"
     - name: runShell
-      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv }) => Promise<ExecResult>"
-    # từ M-graph-base (src/graph/types.ts, src/graph/paths.ts)
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv; }) => Promise<ExecResult>"
+    # từ M-fsprobe (src/util/fsprobe.ts)
+    - name: exists
+      shape: "(path: string) => boolean"
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
     - name: Graph
       shape: "interface"
-    - name: Sourced
-      shape: "{ value: T; file: string; index?: number }"
+    - name: LEDGER_FILE
+      shape: '"verify-ledger.jsonl"'
     - name: LedgerEntry
       shape: "interface"
     - name: LedgerResult
       shape: "(typeof LEDGER_RESULT)[number]"
-    - name: ganasPath
-      shape: "(root: string, ...parts: string[]) => string"
-    - name: LEDGER_FILE
-      shape: '"verify-ledger.jsonl"'
-    # từ M-model (src/model/index.ts)
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    # từ M-model (src/model/common.ts, src/model/knowledge.ts, src/model/module.ts, src/model/scope.ts, src/model/verification.ts)
     - name: Expect
       shape: "z.infer<typeof zExpect>"
     - name: Fact
@@ -46,37 +52,58 @@ contract:
     # từ M-util (src/util/glob.ts, src/util/shell.ts)
     - name: listProjectFiles
       shape: "(root: string) => Promise<string[]>"
-    - name: matchesAny
-      shape: "(path: string, patterns: readonly string[]) => boolean"
     - name: looksLikePath
       shape: "(token: string) => boolean"
+    - name: matchesAny
+      shape: "(path: string, patterns: readonly string[]) => boolean"
     - name: stripOperators
       shape: "(token: string) => string"
-    - name: tokenSpans
-      shape: "(command: string) => TokenSpan[]"
     - name: TokenSpan
       shape: "{ text: string; start: number }"
+    - name: tokenSpans
+      shape: "(command: string) => TokenSpan[]"
   outputs:
-    - name: defHash
-      shape: "(definition: unknown, statement?: string) => string"
-    - name: fileHash
-      shape: "(path: string) => Promise<string>"
-    - name: historyFor
-      shape: "(index: Map<string, LedgerEntry[]>, target: string, k?: number) => LedgerEntry[]"
-    - name: lastFor
-      shape: "(index: Map<string, LedgerEntry[]>, target: string) => LedgerEntry | undefined"
     - name: allTargets
       shape: "(graph: Graph) => Target[]"
+    - name: appendEntry
+      shape: "(root: string, entry: LedgerEntry) => Promise<void>"
+    - name: defHash
+      shape: "(definition: unknown, statement?: string) => string"
     - name: depsHash
       shape: "(context: string[], root: string, allProjectFiles?: string[]) => Promise<string | undefined>"
+    - name: entryAt
+      shape: "(index: Map<string, LedgerEntry[]>, target: string, at: string) => LedgerEntry | undefined"
+    - name: fileHash
+      shape: "(path: string) => Promise<string>"
+    - name: hasBlockingFinding
+      shape: "(findings: readonly LintFinding[]) => boolean"
+    - name: historyFor
+      shape: "(index: Map<string, LedgerEntry[]>, target: string, k?: number) => LedgerEntry[]"
+    - name: indexByTarget
+      shape: "(entries: readonly LedgerEntry[]) => Map<string, LedgerEntry[]>"
+    - name: lastFor
+      shape: "(index: Map<string, LedgerEntry[]>, target: string) => LedgerEntry | undefined"
+    - name: ledgerCorruption
+      shape: "(root: string) => number"
+    - name: lintProbe
+      shape: "(input: LintInput) => LintFinding[]"
+    - name: readLedger
+      shape: "(root: string) => Promise<LedgerEntry[]>"
+    - name: runContext
+      shape: '(root: string, by: string) => Promise<Pick<LedgerEntry, "by" | "git" | "host">>'
+    - name: sha256
+      shape: "(input: string) => string"
     - name: Target
       shape: "interface"
+    - name: verifyChain
+      shape: "(entries: readonly LedgerEntry[]) => ChainVerdict"
 
 depends_on:
-  - M-model
-  - M-graph-base
-  - M-util
   - M-exec
+  - M-fsprobe
+  - M-graph-base
+  - M-model
+  - M-util
 status: surveyed
 verify:
   - id: V-verify-run
@@ -87,10 +114,35 @@ verify:
     kind: contract
     to: M-freshness
     run: >-
-      grep -q "export function defHash(definition: unknown, statement?: string): string {" src/verify/ledger.ts &&
-      grep -q "export async function fileHash(path: string): Promise<string> {" src/verify/ledger.ts &&
-      grep -q "export function lastFor(" src/verify/ledger.ts &&
-      grep -q "export function historyFor(" src/verify/ledger.ts &&
-      grep -q "export function allTargets(graph: Graph): Target\[\] {" src/verify/run.ts &&
-      grep -q "export async function depsHash(" src/verify/run.ts &&
-      grep -q "export interface Target {" src/verify/run.ts
+      grep -qF "export function allTargets(" src/verify/run.ts &&
+      grep -qF "export function defHash(" src/verify/ledger.ts &&
+      grep -qF "export async function depsHash(" src/verify/run.ts &&
+      grep -qF "export async function fileHash(" src/verify/ledger.ts &&
+      grep -qF "export function historyFor(" src/verify/ledger.ts &&
+      grep -qF "export function lastFor(" src/verify/ledger.ts &&
+      grep -qF "export interface Target {" src/verify/run.ts
+  - id: V-verify-to-graph-read
+    kind: contract
+    to: M-graph-read
+    run: >-
+      grep -qF "export async function appendEntry(" src/verify/ledger.ts &&
+      grep -qF "export function defHash(" src/verify/ledger.ts &&
+      grep -qF "export function hasBlockingFinding(" src/verify/lint.ts &&
+      grep -qF "export function lintProbe(" src/verify/lint.ts &&
+      grep -qF "export async function runContext(" src/verify/ledger.ts &&
+      grep -qF "export function sha256(" src/verify/ledger.ts
+  - id: V-verify-to-load
+    kind: contract
+    to: M-load
+    run: >-
+      grep -qF "export function indexByTarget(" src/verify/ledger.ts &&
+      grep -qF "export async function readLedger(" src/verify/ledger.ts
+  - id: V-verify-to-validate
+    kind: contract
+    to: M-validate
+    run: >-
+      grep -qF "export function defHash(" src/verify/ledger.ts &&
+      grep -qF "export function entryAt(" src/verify/ledger.ts &&
+      grep -qF "export function ledgerCorruption(" src/verify/ledger.ts &&
+      grep -qF "export function lintProbe(" src/verify/lint.ts &&
+      grep -qF "export function verifyChain(" src/verify/ledger.ts
