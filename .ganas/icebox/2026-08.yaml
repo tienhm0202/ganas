@@ -149,11 +149,25 @@
     mọi khối. Khác lần ce78bc6 ở chỗ hậu quả: 7bd3c88 một mình FAIL
     test/module-deps.test.ts (YAML khai 20 cạnh mới, MISSING_EDGES tại commit đó
     vẫn 72 dòng) — đo bằng git stash -u rồi chạy test tại HEAD. Nên đây không
-    phải nợ thẩm mỹ: ganas commit tạo ra được commit gãy mà vẫn báo thành công."
+    phải nợ thẩm mỹ: ganas commit tạo ra được commit gãy mà vẫn báo thành công.
+
+    LẦN THỨ BA ở T-038, cùng cơ chế và ĐOÁN TRƯỚC ĐƯỢC: phiên chính đã báo
+    trước khi chạy commit rằng test/module-deps.test.ts sẽ bị bỏ sót, vì
+    exit_contract của T-038 cũng chỉ có `ganas validate` và `npm test` —
+    không đường dẫn nào để boundary.ts rút ra. Commit 0e6408c một mình fail
+    test/module-deps.test.ts đúng như dự đoán, phải amend bù. Ba lần liên
+    tiếp (ce78bc6, 7bd3c88, 0e6408c) trên ba task khác nhau: đây là hành vi
+    hệ thống chứ không phải sơ suất từng lần. Điểm chung của cả ba: file
+    test/ chứa tập đóng mà task PHẢI sửa, nhưng không exit_contract nào nhắc
+    tên nó. Hướng chữa đáng cân nhắc — stage cả file đã đổi mà git thấy trong
+    paths của khối thuộc scope task, hoặc bắt ganas commit CẢNH BÁO khi cây
+    còn file đã đổi ngoài phạm vi (hiện chỉ báo cho .ganas/, không báo cho
+    test/ và scripts/)."
   anchors:
     - src/boundary.ts:1
     - commit:ce78bc6
     - commit:7bd3c88
+    - commit:0e6408c
     - .ganas/tasks/T-036.yaml:20
   scope: P-graph-core
   status: open
