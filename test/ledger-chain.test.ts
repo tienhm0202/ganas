@@ -3,11 +3,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { test } from "node:test";
 
 import { loadGraph } from "../src/graph/load.js";
+import type { LedgerEntry } from "../src/graph/types.js";
 import { validateGraph } from "../src/graph/validate.js";
 import {
   appendEntry,
   CHAIN_GENESIS,
-  type LedgerEntry,
   ledgerPath,
   readLedger,
   verifyChain,

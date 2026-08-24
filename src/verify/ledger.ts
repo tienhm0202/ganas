@@ -19,21 +19,9 @@ import { exists } from "../util/fsprobe.js";
  * là biết fact nào đã thật sự verify, thay vì phải chạy lại từ đầu.
  */
 
-/**
- * Tái xuất bốn tên đã chuyển sang khối lá `M-graph-base` ở T-042.
- *
- * Nguồn khai báo THẬT là `graph/paths.ts` (`LEDGER_FILE`) và `graph/types.ts`
- * (`LEDGER_RESULT`, `LedgerResult`, `LedgerEntry`) — chuyển về đó để cắt chu
- * trình khối M-graph-read ↔ M-load ↔ M-verify (PR-013). Tái xuất ở đây CHỈ để
- * người gọi ngoài phạm vi `P-graph-core` (`boundary.ts`, `commands/*`,
- * `hooks/policy/*`) không phải đổi dòng import trong cùng một task — đúng
- * tiền lệ T-041. Cái giá: hai cạnh `M-verify → M-cli-core` và
- * `M-verify → M-hook-policy` sống tiếp dù không còn lý do; dọn nốt là việc của
- * chính hai phạm vi đó (xem đề xuất kèm T-042).
- */
-export { LEDGER_FILE } from "../graph/paths.js";
-export type { LedgerEntry, LedgerResult } from "../graph/types.js";
-export { LEDGER_RESULT } from "../graph/types.js";
+// `LEDGER_FILE`, `LedgerEntry`, `LedgerResult`, `LEDGER_RESULT` khai báo ở
+// `graph/paths.ts` và `graph/types.ts` (khối lá `M-graph-base`, T-042). Đừng
+// tái xuất lại từ đây: tái xuất dựng lại đúng hai cạnh khối mà T-044/T-045 vừa gỡ.
 
 export function sha256(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16);

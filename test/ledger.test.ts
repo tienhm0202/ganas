@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { loadGraph } from "../src/graph/load.js";
+import type { LedgerEntry } from "../src/graph/types.js";
 import { validateGraph } from "../src/graph/validate.js";
 import * as handlers from "../src/hooks/io/handlers.js";
 import {
@@ -14,7 +15,6 @@ import {
   historyFor,
   indexByTarget,
   lastFor,
-  type LedgerEntry,
   ledgerPath,
   readLedger,
 } from "../src/verify/ledger.js";

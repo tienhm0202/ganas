@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: small
 model: scribe
 blocked_by:
@@ -44,3 +44,4 @@ notes: >-
 
   Không sinh và không giết cạnh khối nào: ba dòng này nhập từ M-graph-base, mà
   `verify/ledger.ts` vốn đã nhập `ganasPath` từ đó. `MISSING_EDGES` không đổi.
+done_at: 2026-08-24T15:39:52.873Z
