@@ -138,10 +138,23 @@
     ce78bc6 xoá export type LedgerEntry trong khi chính hai file test tại commit
     đó vẫn nhập tên ấy từ verify/ledger.js. Phải amend tay mới vào. Bỏ sót diễn
     ra IM LẶNG — commit báo thành công, gate xanh. Task nào sửa file test ngoài
-    danh sách exit_contract đều dính."
+    danh sách exit_contract đều dính.
+
+    TÁI PHÁT NẶNG HƠN ở T-036, cùng ngày: commit 7bd3c88 bỏ sót BA thứ, mỗi thứ
+    một đường rò khác nhau. (1) .ganas/modules/M-graph-base.yaml — task khai
+    touches thiếu đúng khối này (9/10 khối core), dù việc thật sự sửa nó.
+    (2) test/module-deps.test.ts — exit_contract của T-036 chỉ có `ganas
+    validate` và `npm test`, không nhắc đường dẫn nào, nên không có gì để
+    boundary.ts rút ra. (3) scripts/gen-ports.mjs — file mới, ngoài paths của
+    mọi khối. Khác lần ce78bc6 ở chỗ hậu quả: 7bd3c88 một mình FAIL
+    test/module-deps.test.ts (YAML khai 20 cạnh mới, MISSING_EDGES tại commit đó
+    vẫn 72 dòng) — đo bằng git stash -u rồi chạy test tại HEAD. Nên đây không
+    phải nợ thẩm mỹ: ganas commit tạo ra được commit gãy mà vẫn báo thành công."
   anchors:
     - src/boundary.ts:1
     - commit:ce78bc6
+    - commit:7bd3c88
+    - .ganas/tasks/T-036.yaml:20
   scope: P-graph-core
   status: open
 - id: ICE-009
