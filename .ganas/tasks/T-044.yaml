@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
 model: scribe
 
@@ -37,11 +37,12 @@ notes: >-
   `src/commands/trace.ts` và `src/commands/verify.ts` lấy `LedgerResult` từ
   `graph/types.js`.
 
-  Không sinh cạnh khối mới: cả ba file đã phụ thuộc M-graph-base từ trước.
-  Cạnh `M-verify → M-cli-core` sẽ CHẾT — xoá dòng đó khỏi `MISSING_EDGES`
-  trong `test/module-deps.test.ts`. Cạnh `M-verify → M-commands` thì KHÔNG:
+  Không sinh cạnh khối mới: cả ba file đã phụ thuộc M-graph-base từ trước. Cạnh
+  `M-verify → M-cli-core` sẽ CHẾT — xoá dòng đó khỏi `MISSING_EDGES` trong
+  `test/module-deps.test.ts`. Cạnh `M-verify → M-commands` thì KHÔNG:
   `commands/verify.ts` vẫn gọi `lastFor` của `verify/ledger.ts`, đó là import
   giá trị thật.
 
   ĐỪNG động vào `src/verify/ledger.ts` — nó thuộc P-graph-core, ngoài phạm vi
   này. Gỡ tái xuất là việc của T-046, sau khi cả T-044 và T-045 xong.
+done_at: 2026-08-24T15:18:43.068Z

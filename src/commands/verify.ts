@@ -1,7 +1,6 @@
-import type { Graph } from "../graph/types.js";
+import type { Graph, LedgerResult } from "../graph/types.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
-import type { LedgerResult } from "../verify/ledger.js";
 import { lastFor } from "../verify/ledger.js";
 import {
   allTargets,

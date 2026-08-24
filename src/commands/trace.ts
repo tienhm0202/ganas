@@ -7,7 +7,7 @@ import {
 } from "../graph/trace.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
-import type { LedgerResult } from "../verify/ledger.js";
+import type { LedgerResult } from "../graph/types.js";
 import { openProject } from "./_common.js";
 
 const MARK: Record<LedgerResult, string> = {

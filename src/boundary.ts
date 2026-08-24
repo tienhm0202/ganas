@@ -1,10 +1,9 @@
-import { DIRS, GANAS_DIR } from "./graph/paths.js";
+import { DIRS, GANAS_DIR, LEDGER_FILE } from "./graph/paths.js";
 import type { Graph } from "./graph/types.js";
 import type { Task } from "./model/index.js";
 import { TOUCHED_PATHS_CAP } from "./state.js";
 import { matchesAny } from "./util/glob.js";
 import { looksLikePath, stripOperators, tokenizeShell } from "./util/shell.js";
-import { LEDGER_FILE } from "./verify/ledger.js";
 
 /* ------------------------------------------------------------------------- *
  * Đường dẫn nhắc tới trong exit_contract

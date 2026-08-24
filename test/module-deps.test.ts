@@ -185,7 +185,6 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
     "M-validate → M-commands",
     "M-validate → M-hook-io",
     "M-validate → M-workflow",
-    "M-verify → M-cli-core",
     "M-verify → M-commands",
     "M-verify → M-graph-read",
     "M-verify → M-hook-io",
