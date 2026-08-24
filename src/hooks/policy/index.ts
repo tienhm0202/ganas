@@ -1,9 +1,8 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
-import { CONFIG_FILE, DIRS, GANAS_DIR } from "../../graph/paths.js";
+import { CONFIG_FILE, DIRS, GANAS_DIR, LEDGER_FILE } from "../../graph/paths.js";
 import type { Diagnostic } from "../../graph/types.js";
 import { type Enforcement, type EnforcementRule } from "../../model/index.js";
-import { LEDGER_FILE } from "../../verify/ledger.js";
 import type { HookOutput } from "./types.js";
 
 /**
