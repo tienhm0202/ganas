@@ -62,3 +62,8 @@ verify:
     run: >-
       grep -qF "export function judge(" src/util/exec.ts &&
       grep -qF "export function runShell(" src/util/exec.ts
+  - id: V-exec-to-build
+    kind: contract
+    to: M-build
+    run: >-
+      grep -qF "export function runShell(" src/util/exec.ts

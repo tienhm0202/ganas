@@ -1,0 +1,59 @@
+id: T-052
+title: "Khai bằng chứng contract cho cạnh M-exec → M-build ở đầu nguồn"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: done
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: ".ganas/tasks/T-051.yaml"
+      why: "Nửa đầu của chính việc này — cạnh và cổng đã khai ở đầu đích"
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "Khuôn khai bằng chứng kind: contract đã chạy được"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-exec
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-exec/V-exec-run"
+
+notes: >-
+  Nửa sau của T-051, và nó phải là task RIÊNG vì một lý do cấu trúc chứ không
+  phải vì chia nhỏ cho gọn.
+
+  `contractEdges()` (`src/graph/trace.ts:44`) lấy `from` của cạnh chính là khối
+  mà bằng chứng được khai TRÊN nó. Nên bằng chứng cho cạnh `M-exec → M-build`
+  bắt buộc nằm ở `M-exec.yaml` — `M-build` không khai hộ được. Mà `M-exec` thuộc
+  P-graph-core còn T-051 thuộc P-release, và `validate` chặn cứng bằng
+  `scope/task-touches-outside-scope`: một task chạm hai phạm vi thì không ai
+  nghiệm thu được nó.
+
+  Hệ quả tổng quát, đáng biết trước khi tạo cạnh xuyên phạm vi MỚI: không task
+  đơn lẻ nào vừa tạo được cạnh xuyên phạm vi vừa khai bằng chứng cho nó. Chuỗi
+  T-036→T-050 không vấp vì nó tạo cạnh trước rồi bù bằng chứng theo từng phạm vi
+  sau. T-051 tạo cạnh MỚI nên đâm thẳng vào chỗ này. Xem ICE về lỗ hổng này nếu
+  đã ghi.
+
+  Việc cụ thể: thêm một mục `verify` với `kind: contract`, `to: M-build` vào
+  `.ganas/modules/M-exec.yaml`, cho cổng `runShell` mà `M-build` đã khai ở
+  `contract.inputs` (commit của T-051). `contract.outputs` của M-exec đã đủ từ
+  T-048 (commit 4c2fb53), không phải thêm cổng.
+
+  `run` của bằng chứng đi qua `lintProbe`, lint đối chiếu lệnh với TÊN CỔNG —
+  lệnh chung chung sẽ bị `verify/probe-unrelated`. Dùng `grep -qF` chứ không
+  `grep -q`: chữ ký thật đầy ký tự regex, mỗi bản grep thoát một kiểu.
+
+  Xong thì `ganas trace` phải về 0 nợ kiểm chứng. Giữa T-051 và task này, sơ đồ
+  có đúng 1 mục `uncovered-edge` — đã lường trước, không phải hỏng.
+done_at: 2026-08-25T08:37:42.511Z
