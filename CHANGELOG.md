@@ -9,6 +9,228 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
+## Chưa phát hành
+
+- **Sơ đồ khối thôi là niềm tin có cấu trúc.** Lần chẻ bản đồ ở bản trước để
+  lại một trạng thái mà `ganas debt` chỉ ra được nhưng không ai chữa: **14 cạnh,
+  không cạnh nào có bằng chứng `kind: contract`**, và không khối nào khai
+  `contract.inputs`/`outputs` — tất cả để rỗng mặc định. `depends_on` chỉ khai
+  THỨ TỰ; nó không nói output khối nguồn có phủ được input khối đích không. Một
+  sơ đồ đủ cạnh vẫn có thể là sơ đồ chưa ai kiểm.
+
+  Nay, đo trên HEAD: **22 khối, 4 phạm vi, 94 cạnh — cạnh nào cũng `hợp đồng ✓`**,
+  và `ganas trace` in *"Không có nợ kiểm chứng nào trong sơ đồ"*. Cổng khai bằng
+  chính chữ ký thật của hàm được export: 228 cổng đầu ra và 361 cổng đầu vào
+  trong `.ganas/modules/`. `portIssues()` so `shape` **khớp từng ký tự**, nên
+  chữ ký trong code đổi mà YAML không đổi thì cạnh đỏ — đó là toàn bộ giá trị
+  của việc khai, và cũng là lý do không được khai một nửa cho đẹp bảng.
+
+  Chép tay vài trăm cổng thì lệch là chắc chắn, nên bảng cổng do **máy sinh**:
+  `scripts/gen-ports.mjs` đọc chữ ký bằng TypeScript compiler API — đúng bộ kiểm
+  mà `npm run typecheck` dùng — rồi in ra khối YAML để người dán. Script cố ý
+  KHÔNG ghi đè file, vì nó mù với import động và namespace import: dán nguyên
+  bản máy sinh sẽ xoá mất cổng đang có.
+
+  Lần thử đầu tiên thất bại, và cách nó thất bại đáng ghi lại: khai đủ cổng cho
+  một cạnh ĐƠN thì cơ chế chạy đúng (làm lệch một `shape` thì cạnh đỏ như mong
+  đợi), nhưng `portIssues()` duyệt TOÀN BỘ `inputs` của khối đích và đòi khối
+  nguồn xuất hết — nên khối có từ hai phụ thuộc trở lên, tức phần lớn khối ở
+  đây, thì mọi cạnh đều trượt. Hai đường vòng đều bị loại: `optional: true` làm
+  vòng lặp bỏ qua input, để lại một cạnh rỗng ruột; khai một nửa số cổng thì
+  `contract.inputs` nói dối về khối. Contract đã khai được **hoàn nguyên**, đồ
+  thị giữ 14 cạnh trần — trạng thái trung thực — cho tới khi phép kiểm được chẻ
+  làm hai tầng: từng cạnh kiểm **GIAO**, toàn sơ đồ kiểm **PHỦ**
+  (`uncovered-port`).
+
+- **`depends_on` lệch khỏi import thật, và hai chu trình sống nhiều tuần dưới
+  một `ganas validate` sạch không một lỗi.** `computeDebt` chỉ kiểm cạnh ĐÃ
+  KHAI, nên cạnh không khai thì không sinh nợ — bản đồ càng thiếu càng trông
+  sạch, chiều khuyến khích đang ngược. Ba cạnh sai lộ ra trong lúc khai hợp
+  đồng, cả ba đều im lặng: `M-fsprobe → M-util` và `M-cli → M-commands` sai
+  chiều, `M-render → M-workflow` lỗi thời từ lần một file đổi khối.
+
+  `test/module-deps.test.ts` nay đối chiếu `depends_on` với import thật **hai
+  vế** — cạnh khai mà code không có là cạnh chết, cạnh code có mà không ai khai
+  là chu trình vô hình — và giữ phần chưa khai trong một **tập đóng** phải khớp
+  từng dòng. Tập đó lên đỉnh **74 dòng** rồi về **0**.
+
+  Áp bảng cổng sinh bằng máy làm lộ hai chu trình có thật mà bản đồ đang giấu:
+  `{M-graph-read, M-load, M-verify}` và `{M-hook-io, M-hook-policy}` — cái sau
+  sinh ra từ chính lần chẻ khối trước đó. Cắt bằng hai nước rẻ nhất: đưa kiểu
+  `HookInput`/`HookOutput` về lõi (kiểu biến mất sau khi biên dịch, nên chuyển
+  nó xuống là xong, luồng chạy không đổi), và tách khối lá `M-graph-base`. Rồi
+  chu trình **suy từ import thật** thành lỗi `spine/module-cycle-code` của
+  `ganas validate`, kèm gợi ý chỉ thẳng vào cạnh chỉ mang `import type` để cắt.
+
+  Cái giá của lần cắt đó không bị để trôi mà được ghi thành đề xuất rồi dọn:
+  bốn file ở hai phạm vi khác vẫn nhập `LEDGER_FILE`/`LedgerResult` qua ba dòng
+  tái xuất của `verify/ledger.ts`, giữ sống hai cạnh không còn lý do nào đỡ. Dọn
+  hết người dùng trước, gỡ tái xuất sau.
+
+- **Đề xuất là thực thể, không phải một đoạn văn trong sổ phiên.** Một hướng đi
+  agent nghĩ ra giữa phiên trước đây không có chỗ nào để đậu: hoặc bịa thành
+  Task — giả vờ đã có người quyết — hoặc mất theo context. Nay `.ganas/proposals/`
+  là thực thể đủ vòng đời: `zProposal` có schema, loader và luật validate riêng
+  (`spine/proposal-missing-target`, `spine/proposal-duplicate-target`,
+  `spine/proposal-cycle`, `spine/proposal-missing-supersede`,
+  `scope/proposal-scope-not-found`, `knowledge/proposal-problem-equals-change` —
+  chép cùng một câu vào cả `problem` lẫn `change` là dấu hiệu chưa tách rời hai
+  thứ — và `knowledge/proposal-repeats-rejected`).
+
+  Lệnh `ganas proposal new | list | show | approve | reject`. `list` tự sắp theo
+  `weight` + `ease`, vì đó là chỗ DUY NHẤT hai trường đó được đọc. `approve` trỏ
+  `promoted_to` sang task sinh ra từ đề xuất, đúng như lời lệnh tự hứa.
+
+  Vế cưỡng chế: **một hook chặn model tự đặt `status: approved`**. Duyệt là
+  quyết định của người; thiếu lớp này thì "đề xuất" chỉ là một cách dài dòng để
+  agent tự cho phép mình.
+
+  Brief in **một dòng** đếm đề xuất pending cùng phạm vi, cố ý không in nội
+  dung — nội dung thì `ganas proposal show` có, còn mỗi phiên đều phải trả
+  context cho những dòng đó.
+
+- **`existsSync` rải rác thành một công cụ dùng chung, và nhãn `nature` có test
+  canh.** Luật kiến trúc nói lõi không được chạm I/O, nhưng gần như mọi hàm
+  nghiệp vụ đều có lúc phải hỏi *"chỗ này có tồn tại không"* — luật im về chỗ đó
+  thì nó tự mâu thuẫn, và cái tự mâu thuẫn thì không ai áp được.
+  `.claude/rules/architecture.md` nay tách rõ: tra trạng thái (`existsSync`,
+  `stat`, `readdir`) là **CÔNG CỤ**, dùng nó không làm hàm gọi nó thành `io`;
+  đọc/ghi NỘI DUNG, sinh tiến trình con, stdin/stdout, network, DB thì vẫn là
+  `io`, bọc đẹp đến đâu cũng vậy. Ranh giới nằm đúng đó vì nó là ranh giới của
+  việc TEST. Luật được viết vào cả file luật lẫn template `ganas init` phát cho
+  dự án khác.
+
+  Nới lỏng chỉ có nghĩa khi kèm điều kiện: công cụ phải nằm MỘT chỗ, nếu không
+  "công cụ" chỉ là tên gọi khác của "gọi thẳng". Chỗ đó là `src/util/fsprobe.ts`
+  (`exists`, `existsAsync`, `listDir`, `mtimeMs`), và `test/fsprobe.test.ts` giữ
+  danh sách file được phép tra thẳng.
+
+  Cả bản đồ được rà bằng script đếm hàm `node:fs` / `child_process` /
+  `process.std*` **thật sự được gọi** trong từng file, không đoán bằng mắt. Quá
+  nửa số cảnh báo biến mất dưới luật mới; phần còn lại là chỗ trộn thật, và chữa
+  bằng chẻ khối chứ không bằng đổi nhãn — đề xuất đổi `M-hooks` sang `nature: io`
+  đã bị **từ chối** vì nó đi tìm nhãn vừa với chỗ trộn thay vì sửa chỗ trộn.
+  `src/hooks/` chẻ thành `M-hook-policy` (quyết định thuần) và `M-hook-io`;
+  `boundary.ts` và `search.ts` rời `M-workflow` sang khối lõi `M-cli-core`.
+
+  `test/module-nature.test.ts` nay đối chiếu nhãn `nature` đã khai với I/O thật
+  trong `paths` của khối. Danh sách miễn trừ của nó **rỗng**.
+
+- **Tài liệu vùng nằm trong thư mục của khối.** Luật `agent-guide.md` ở v0.6.0
+  đã nói thông tin riêng một vùng phải nằm cạnh code, nhưng không gì sinh ra hay
+  canh việc đó — và một luật không ai canh thì chỉ đúng ở chỗ nó được viết. Nay
+  `ganas scope new` sinh sẵn khung (`moduleGuideMd`) cho khối mới, và
+  `ganas validate` có hai cảnh báo mức warning: `scope/module-missing-guide`
+  (khối chưa có tài liệu vùng) và `scope/module-paths-overlap` (hai khối chung
+  một vùng code). Ranh giới lấy từ `paths` của khối, không lấy từ cảm tính. Bản
+  này thêm tám tài liệu vùng trong `src/`.
+
+  Cạm bẫy đã trả giá một lần: chẻ một thư mục thành hai khối làm **mồ côi** file
+  hướng dẫn của thư mục đó — `src/hooks/CLAUDE.md` không khối nào nhận, nên
+  không task nào commit được nó bằng `ganas commit`. Chẩn đoán đầu tiên đổ lỗi
+  cho `moduleGuideDir`; sai, thứ đó hành xử đúng thiết kế. Lỗi là chẻ nửa vời:
+  tách hai khối nhưng để chung một thư mục, nên không khối nào NHẬN thư mục.
+  Chữa bằng chẻ **thư mục** theo ranh giới khối (`src/hooks/policy/`,
+  `src/hooks/io/`), mỗi khối một tài liệu vùng.
+
+- **`ganas commit` chấm lại `exit_contract` trên CÂY SẮP COMMIT, đỏ thì không
+  commit.** `ganas gate` chạy trên working tree, còn `ganas commit` chỉ stage
+  file trong ranh giới của task. Hai tập đó khác nhau, và chênh lệch giữa chúng
+  đã sinh ra một commit không biên dịch được: file trong ranh giới phụ thuộc một
+  file NGOÀI ranh giới đang sửa dở — working tree có đủ cả hai, commit thì
+  không. Phải amend tay mới gỡ được. Đây đúng lớp lỗi *"xanh ở máy tác giả, đỏ ở
+  mọi máy khác"* mà ganas tồn tại để chặn.
+
+  Nay `commit` dựng cây bằng `git write-tree` + `git archive` — chỉ đọc index,
+  không đụng working tree, khác `git stash --keep-index` ở chỗ đó — rồi chấm lại
+  `exit_contract` trên chính cây ấy. Đỏ thì file task được trả về nguyên trạng
+  (đánh dấu done là nói dối), nhưng index **giữ nguyên**: sửa xong chạy lại là
+  đi tiếp, không phải stage lại từ đầu. Cửa thoát có, kèm giá ghi rõ trong thông
+  báo: `ganas commit <id> --no-recheck`.
+
+  Phép chấm lại chỉ mạnh bằng `exit_contract` của task, nên thêm trường
+  `config.build_check` — một lệnh kiểm toàn dự án chạy trên cây stage. Nó so với
+  **MỐC**, không so với "xanh": chỉ chặn khi HEAD xanh mà cây stage đỏ, tức khi
+  commit này làm gãy thứ đang lành. Bản đòi cây stage phải xanh đã bị loại vì
+  kẹt cứng ba chỗ — HEAD đỏ sẵn thì cả đội không commit được gì, dự án cũ chưa
+  bao giờ sạch thì không commit nổi commit đầu, lệnh chập chờn thì kẹt ngẫu
+  nhiên. Mọi trường hợp không kết luận được là `skipped`, không phải đỏ.
+
+- **Cảnh báo "file ngoài ranh giới" thôi im.** Chẩn đoán đầu tiên sai — tưởng
+  thiếu cảnh báo. `outsideBoundary()` vốn đã có, và vốn được cả `gate` lẫn
+  `commit` gọi; nó chỉ hỏi nhầm nguồn: danh sách file đã sửa lấy từ **sổ phiên**
+  (`touchedPathsFor`), nên rỗng khi chạy không có `--session` và cả khi
+  `bindSession` đã thay bản ghi. Một cảnh báo gần như luôn im thì tệ hơn không
+  có cảnh báo, vì nó làm người ta tin là đã kiểm. Nay nguồn sự thật là
+  `git status` trên toàn cây — đúng cách `commit.ts` đã dùng sẵn cho `.ganas/`.
+
+- **`ganas prune` thôi archive task mà đề xuất đang trỏ `promoted_to` tới.**
+  Tầng archive gom `blocked_by`/`promoted_to` từ task, và bỏ qua proposal. Dời
+  24 task done làm bảy tham chiếu thành treo, `ganas validate` từ 0 lên 7 lỗi —
+  trong khi prune báo đã dọn xong, và `--dry-run` cũng không cảnh báo. Đã hoàn
+  lại rồi vá đúng chỗ hẹp: tập tham chiếu nay đếm cả `promoted_to` của đề xuất.
+  Chạy lại cùng lệnh đó: validate 0 lỗi, bảy task được giữ lại đúng như mong đợi.
+
+- **Lệnh trượt in được thân xác.** `judge()` chỉ đính `stderr` vào lý do thất
+  bại, mà `npm test` báo lỗi ra `stdout` — nên một lệnh đỏ chạy trong tiến trình
+  con của ganas chỉ nói `thoát với mã 1`, không để lại gì để truy. Đó là lý do
+  ba lần `npm test` đỏ chập chờn bên trong `gate`/`commit` không truy được
+  nguyên nhân, và một trong ba lần làm `ganas commit` từ chối nhầm một task đã
+  xanh. Nay `stderr` rỗng thì lấy **đuôi `stdout`**, và cả hai đường đều bỏ dòng
+  trống với khung ngăn xếp `at ...` trước khi cắt: giữ chúng lại thì hạn mức
+  dòng bị khung ngăn xếp ăn hết, đúng phần người đọc cần — tên ca đỏ, câu
+  assert — bị đẩy ra ngoài.
+
+- **Ba probe nghiệm thu luồng ghép thôi chạy `npm test`.** Ba phạm vi khai lệnh
+  nghiệm thu luồng ghép là `npm test`, một lệnh chung chung. Vấn đề không phải
+  thiếu độ phủ mà là **bản ghi nói quá**: `npm test` đỏ không chứng minh gì về
+  luồng ghép của riêng phạm vi đó, vì hàng trăm test khác cũng làm nó đỏ. Nay
+  mỗi phạm vi một test e2e riêng — `test/e2e-cli.test.ts`, `test/e2e-hook.test.ts`,
+  `test/e2e-graph-core.test.ts` — chạy luồng thật trên một dự án tạm, và kiểm cả
+  **chiều phải-đỏ**: gate phải báo đỏ TRƯỚC khi tiêu chí thật sự đạt, không phải
+  chấm một tiêu chí đã xanh sẵn.
+
+- **Sổ cái xác minh ghi dưới khoá.** `appendEntry` ghi `.ganas/verify-ledger.jsonl`
+  không khoá, mà chuỗi hash của sổ cái chính là thứ chứng minh nó không bị sửa
+  tay. ganas thì chủ động khuyến khích chạy sub-agent song song: hai `ganas verify`
+  chồng nhau có thể làm đứt chuỗi. Chưa gãy lần nào — nhưng đó là may, không
+  phải an toàn.
+
+  `withFileLock` đang nằm trong `M-claim` (phạm vi `P-hook`), nên dùng lại nó
+  sẽ bắt lõi đồ thị phụ thuộc ngược lên vỏ. Dựng khối nền `M-lock`
+  (`src/util/lock.ts`) làm chỗ DUY NHẤT khoá mutex quanh một lượt đọc-sửa-ghi
+  file dùng chung; `M-claim` bỏ bản riêng và nhập từ đó. Không nới vai
+  `M-fsprobe` cho việc này, vì nó tự khai là chỗ duy nhất TRA TRẠNG THÁI — mà
+  khoá thì tạo và xoá file.
+
+- **Hai chỗ vá cùng một lớp lỗi: thứ có trong schema mà không code nào đọc.**
+  `zUrlAnchor` có trường `quote` mà `formatAnchor` chưa bao giờ in — đúng chỗ
+  đau nhất để bỏ sót, vì lý do anchor URL bắt buộc `fetched_at` là web đổi, và
+  thứ duy nhất còn lại khi trang đã đổi chính là `quote`. Nay trích dẫn hiện ra,
+  và `validate` nhắc `knowledge/url-anchor-without-quote` khi thiếu.
+
+  Còn chính cái guard sinh ra để bắt lớp lỗi đó thì chưa bao giờ soi tới
+  `zConfig`: regex trích tên trường đòi đúng 4 dấu cách thụt lề, mà `zConfig`
+  khai ở cấp cao nhất nên trường của nó thụt 2 — chín trường lọt lưới, và guard
+  vẫn xanh. Vá đi kèm nới luật cho **đường đọc gián tiếp** (`READ_VIA`), nếu
+  không nó đẻ hai báo sai: `enforcement` và `enforcement_rules` không ai đọc
+  trực tiếp ngoài `src/model/`, nhưng chúng được đọc qua accessor công khai
+  `enforcementFor()`.
+
+- **Thay đổi phá vỡ tương thích với 0.6.0.** Bề mặt lệnh và schema `.ganas/`
+  chỉ được THÊM: `git diff v0.6.0..HEAD` trên `src/cli.ts`, `src/model/config.ts`
+  và `docs/COMMANDS.md` không có một dòng xoá nào, và `build_check` là trường
+  `optional`. Hai chỗ vẫn phá, cả hai là **hành vi** chứ không phải cú pháp:
+
+  1. `spine/module-cycle-code` là **lỗi**, không phải cảnh báo. Dự án có chu
+     trình import thật giữa các khối trước đây `ganas validate` sạch, nay đỏ.
+     Không có cờ tắt — chữa là cắt chu trình. (Mọi mã lỗi mới khác trong bản này
+     đều nằm trên thực thể `proposal`, vốn chưa tồn tại ở 0.6.0, nên không dự án
+     nào đang chạy có thể vấp phải.)
+  2. `ganas commit` **từ chối** khi `exit_contract` đỏ trên cây đã stage — cùng
+     một cây đó ở 0.6.0 vẫn commit được. Cửa thoát:
+     `ganas commit <id> --no-recheck`.
+
 ## v0.6.0 — 2026-08-21
 
 - **Luật tag thôi mô tả sai chính repo này.** `.claude/rules/ganas-git.md` khai
