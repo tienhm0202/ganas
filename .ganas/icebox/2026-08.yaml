@@ -142,48 +142,47 @@
 
     TÁI PHÁT NẶNG HƠN ở T-036, cùng ngày: commit 7bd3c88 bỏ sót BA thứ, mỗi thứ
     một đường rò khác nhau. (1) .ganas/modules/M-graph-base.yaml — task khai
-    touches thiếu đúng khối này (9/10 khối core), dù việc thật sự sửa nó.
-    (2) test/module-deps.test.ts — exit_contract của T-036 chỉ có `ganas
-    validate` và `npm test`, không nhắc đường dẫn nào, nên không có gì để
-    boundary.ts rút ra. (3) scripts/gen-ports.mjs — file mới, ngoài paths của
-    mọi khối. Khác lần ce78bc6 ở chỗ hậu quả: 7bd3c88 một mình FAIL
-    test/module-deps.test.ts (YAML khai 20 cạnh mới, MISSING_EDGES tại commit đó
-    vẫn 72 dòng) — đo bằng git stash -u rồi chạy test tại HEAD. Nên đây không
-    phải nợ thẩm mỹ: ganas commit tạo ra được commit gãy mà vẫn báo thành công.
+    touches thiếu đúng khối này (9/10 khối core), dù việc thật sự sửa nó. (2)
+    test/module-deps.test.ts — exit_contract của T-036 chỉ có `ganas validate`
+    và `npm test`, không nhắc đường dẫn nào, nên không có gì để boundary.ts rút
+    ra. (3) scripts/gen-ports.mjs — file mới, ngoài paths của mọi khối. Khác lần
+    ce78bc6 ở chỗ hậu quả: 7bd3c88 một mình FAIL test/module-deps.test.ts (YAML
+    khai 20 cạnh mới, MISSING_EDGES tại commit đó vẫn 72 dòng) — đo bằng git
+    stash -u rồi chạy test tại HEAD. Nên đây không phải nợ thẩm mỹ: ganas commit
+    tạo ra được commit gãy mà vẫn báo thành công.
 
-    LẦN THỨ BA ở T-038, cùng cơ chế và ĐOÁN TRƯỚC ĐƯỢC: phiên chính đã báo
-    trước khi chạy commit rằng test/module-deps.test.ts sẽ bị bỏ sót, vì
-    exit_contract của T-038 cũng chỉ có `ganas validate` và `npm test` —
-    không đường dẫn nào để boundary.ts rút ra. Commit 0e6408c một mình fail
-    test/module-deps.test.ts đúng như dự đoán, phải amend bù. Ba lần liên
-    tiếp (ce78bc6, 7bd3c88, 0e6408c) trên ba task khác nhau: đây là hành vi
-    hệ thống chứ không phải sơ suất từng lần. Điểm chung của cả ba: file
-    test/ chứa tập đóng mà task PHẢI sửa, nhưng không exit_contract nào nhắc
-    tên nó.
+    LẦN THỨ BA ở T-038, cùng cơ chế và ĐOÁN TRƯỚC ĐƯỢC: phiên chính đã báo trước
+    khi chạy commit rằng test/module-deps.test.ts sẽ bị bỏ sót, vì exit_contract
+    của T-038 cũng chỉ có `ganas validate` và `npm test` — không đường dẫn nào
+    để boundary.ts rút ra. Commit 0e6408c một mình fail test/module-deps.test.ts
+    đúng như dự đoán, phải amend bù. Ba lần liên tiếp (ce78bc6, 7bd3c88,
+    0e6408c) trên ba task khác nhau: đây là hành vi hệ thống chứ không phải sơ
+    suất từng lần. Điểm chung của cả ba: file test/ chứa tập đóng mà task PHẢI
+    sửa, nhưng không exit_contract nào nhắc tên nó.
 
     CHẨN ĐOÁN LẠI sau khi đọc code — bản ghi trước đề xuất “bắt ganas commit
     CẢNH BÁO khi cây còn file đã đổi ngoài phạm vi”, nhưng cảnh báo đó ĐÃ TỒN
     TẠI: outsideBoundary() ở src/boundary.ts:145, gọi từ commands/gate.ts:25 và
-    commands/commit.ts:175. Nó im vì hỏi NHẦM NGUỒN: commit.ts:170 lấy danh
-    sách file đã sửa từ touchedPathsFor() — tức sổ phiên .ganas/state.json —
-    chứ không phải git. Hai đường rò: (1) gọi CLI không kèm --session thì
-    sessionId là “cli”, không khớp bản ghi nào, touched rỗng nên
-    outsideBoundary trả rỗng; (2) ngay cả đúng session cũng mất, vì bindSession
-    thay cả bản ghi khi task đổi (src/state.ts:63) — đo được: phiên e96d9596
-    ghi 0 touched_paths dù vừa sửa cả chục file. Nghịch lý đáng chú ý:
-    commit.ts:87 ĐÃ dùng `git status --porcelain -z -uall` để dựng danh sách
-    foreign, nhưng chỉ soi trong .ganas/ — nên file kho tri thức lạc chỗ thì bị
-    bắt (M-graph-base.yaml ở T-036), file code lạc chỗ thì lọt.
+    commands/commit.ts:175. Nó im vì hỏi NHẦM NGUỒN: commit.ts:170 lấy danh sách
+    file đã sửa từ touchedPathsFor() — tức sổ phiên .ganas/state.json — chứ
+    không phải git. Hai đường rò: (1) gọi CLI không kèm --session thì sessionId
+    là “cli”, không khớp bản ghi nào, touched rỗng nên outsideBoundary trả rỗng;
+    (2) ngay cả đúng session cũng mất, vì bindSession thay cả bản ghi khi task
+    đổi (src/state.ts:63) — đo được: phiên e96d9596 ghi 0 touched_paths dù vừa
+    sửa cả chục file. Nghịch lý đáng chú ý: commit.ts:87 ĐÃ dùng `git status
+    --porcelain -z -uall` để dựng danh sách foreign, nhưng chỉ soi trong .ganas/
+    — nên file kho tri thức lạc chỗ thì bị bắt (M-graph-base.yaml ở T-036), file
+    code lạc chỗ thì lọt.
 
     HAI MỨC CHỮA. Mức ngay, không sửa code — khai `kind: artifact` cho file đó
     trong exit_contract: contractPathRefs() đưa c.path thẳng vào taskBoundary,
-    schema đã có (src/model/task.ts:53), T-001/T-013 dùng sẵn. ĐÃ LÀM cho
-    T-037 và có kết quả: commit bfc6ee5 stage đủ test/module-deps.test.ts,
-    lần đầu trong bốn task ganas commit không bỏ sót gì, và HEAD tự chạy test
-    xanh. Mức gốc, chưa làm — đổi nguồn sự thật của outsideBoundary từ sổ phiên
-    sang git status, đúng cái commit.ts:87 đã làm cho .ganas/: chỉ cần nới
-    pathspec ra toàn cây. Git luôn biết file nào đổi bất kể session id, bất kể
-    hook ghi kịp không, bất kể sub-agent hay phiên chính sửa."
+    schema đã có (src/model/task.ts:53), T-001/T-013 dùng sẵn. ĐÃ LÀM cho T-037
+    và có kết quả: commit bfc6ee5 stage đủ test/module-deps.test.ts, lần đầu
+    trong bốn task ganas commit không bỏ sót gì, và HEAD tự chạy test xanh. Mức
+    gốc, chưa làm — đổi nguồn sự thật của outsideBoundary từ sổ phiên sang git
+    status, đúng cái commit.ts:87 đã làm cho .ganas/: chỉ cần nới pathspec ra
+    toàn cây. Git luôn biết file nào đổi bất kể session id, bất kể hook ghi kịp
+    không, bất kể sub-agent hay phiên chính sửa."
   anchors:
     - src/boundary.ts:1
     - commit:ce78bc6
@@ -229,4 +228,27 @@
     - commit:31752b8
     - commit:8cb40a8
   scope: P-graph-core
+  status: open
+- id: ICE-011
+  title: npm test đỏ chập chờn, ba lần đều bên trong tiến trình con của ganas
+  found_at: 2026-08-25T03:52:42.206Z
+  review_after_days: 30
+  weight: 5
+  ease: 2
+  why_deferred: "Ba lần npm test thoát mã 1 trong phiên 2026-08-24/25, cả ba đều
+    khi chạy BÊN TRONG ganas gate hoặc ganas commit; chạy trực tiếp ngay sau đó
+    luôn xanh. Hậu quả thật: ganas commit TỪ CHỐI một T-037 thực sự xanh, phải
+    chạy lại lệnh mới qua. Manh mối ở lần thứ ba (sau commit 17752a7): bản đỏ
+    báo 735 test thay vì 739, hụt đúng 4 — bằng số test T-047 vừa thêm vào
+    test/boundary.test.ts, tức có tệp test không chạy hết chứ không phải một
+    assert sai. CHƯA tái hiện được: 5 lần chạy riêng test/boundary.test.ts đều
+    xanh, 3 lần npm test trực tiếp đều xanh, và ép chạy song song với việc ghi
+    vào src/boundary.ts cũng không gãy. Nên nguyên nhân vẫn là câu hỏi mở, KHÔNG
+    kết luận. Hướng đào tiếp: xem ganas gate/commit chạy npm test với cwd hay
+    env nào khác lúc chạy tay, và xem tệp test mới có đụng chung tài nguyên với
+    tiến trình ganas đang chạy không."
+  anchors:
+    - commit:17752a7
+    - test/boundary.test.ts:1
+  scope: P-cli
   status: open
