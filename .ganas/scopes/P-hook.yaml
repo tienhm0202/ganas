@@ -14,4 +14,4 @@ entry: M-hook-io
 acceptance:
   - id: V-hook-e2e
     kind: probe
-    run: "npm test"
+    run: "npx tsx --test 'test/e2e-hook.test.ts'"
