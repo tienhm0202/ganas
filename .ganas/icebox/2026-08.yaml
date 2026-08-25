@@ -335,3 +335,30 @@
   status: promoted
   promoted_to: T-058
   closed_at: 2026-08-25T10:29:10.608Z
+- id: ICE-015
+  title: claim.ts tái xuất withFileLock — đúng khuôn PR-014 vừa tốn ba task để dọn
+  found_at: 2026-08-25T10:50:04.469Z
+  review_after_days: 30
+  weight: 3
+  ease: 4
+  why_deferred: "T-059 dời withFileLock sang khối nền M-lock (src/util/lock.ts)
+    nhưng buộc phải để src/graph/claim.ts:8 tái xuất nó, vì
+    commands/proposal.ts:6 và commands/icebox.ts:6 thuộc M-commands phạm vi
+    P-cli vẫn nhập qua graph/claim.js, mà hai file đó ngoài phạm vi T-059. Đây
+    đúng khuôn PR-014 vừa tốn ba task T-044/T-045/T-046 để dọn: một khối tái
+    xuất cái nó không định nghĩa, làm bản đồ giữ một cạnh không còn lý do. Dấu
+    hiệu lộ ra ngay trong lúc làm: bằng chứng cạnh V-claim-to-commands phải grep
+    vào src/util/lock.ts, tức bằng chứng cho phát biểu M-claim cấp withFileLock
+    lại đi soi một file M-claim không sở hữu. Hệ quả: cạnh M-claim đến
+    M-commands còn sống nhờ một cái tên đã đi nơi khác, và contract.outputs của
+    M-claim vẫn khai withFileLock dù nó không định nghĩa hàm đó. Cách dọn giống
+    hệt PR-014: đổi hai dòng import ở commands/proposal.ts và commands/icebox.ts
+    cho trỏ thẳng util/lock.js, rồi bỏ dòng tái xuất ở claim.ts, rồi sửa lại
+    contract của M-claim. Việc nằm ở P-cli và P-hook nên nhiều khả năng phải chẻ
+    hai task, đúng như PR-014 đã phải làm."
+  anchors:
+    - src/graph/claim.ts:8
+    - src/commands/icebox.ts:6
+    - src/commands/proposal.ts:6
+  scope: P-cli
+  status: open
