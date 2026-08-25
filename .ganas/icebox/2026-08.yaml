@@ -247,11 +247,17 @@
     kết luận. Hướng đào tiếp: xem ganas gate/commit chạy npm test với cwd hay
     env nào khác lúc chạy tay, và xem tệp test mới có đụng chung tài nguyên với
     tiến trình ganas đang chạy không."
+  # Lúc ghi đặt scope P-cli theo chỗ TRIỆU CHỨNG hiện ra (gate/commit). Sửa
+  # sang P-graph-core khi tìm được chỗ HỎNG: judge() ở src/util/exec.ts, khối
+  # M-exec — nó chỉ đính stderr, mà npm test báo lỗi ra stdout.
   anchors:
     - commit:17752a7
     - test/boundary.test.ts:1
-  scope: P-cli
-  status: open
+    - src/util/exec.ts:104
+  scope: P-graph-core
+  status: promoted
+  promoted_to: T-054
+  closed_at: 2026-08-25T09:41:09.427Z
 - id: ICE-012
   title: Không task đơn lẻ nào tạo được cạnh xuyên phạm vi kèm bằng chứng của nó
   found_at: 2026-08-25T08:38:08.779Z
