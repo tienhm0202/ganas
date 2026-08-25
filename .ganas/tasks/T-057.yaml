@@ -1,10 +1,11 @@
 id: T-057
-title: "Probe nghiệm thu luồng ghép của P-graph-core phải kiểm luồng thật, không phải npm test"
+title: "Probe nghiệm thu luồng ghép của P-graph-core phải kiểm luồng thật, không
+  phải npm test"
 serves:
   - G-001
 implements: D-007
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: small
 model: verifier
 
@@ -35,9 +36,9 @@ exit_contract:
 
 notes: >-
   CHẶN v1.0.0, và lý do KHÔNG phải thiếu độ phủ. Phạm vi P-graph-core khai
-  `V-graph-core-e2e` là "nghiệm thu luồng ghép", nhưng `run` của nó là `npm test` —
-  một lệnh chung chung. Chạy ngày 2026-08-25: đạt, nhưng ganas tự gắn nhãn
-  "chưa chứng minh được là có thể fail". Đúng thứ D-007 gọi là
+  `V-graph-core-e2e` là "nghiệm thu luồng ghép", nhưng `run` của nó là `npm
+  test` — một lệnh chung chung. Chạy ngày 2026-08-25: đạt, nhưng ganas tự gắn
+  nhãn "chưa chứng minh được là có thể fail". Đúng thứ D-007 gọi là
   `verify/probe-unrelated` và chính ganas sẽ réo nếu đó là probe của KHỐI.
 
   740 test trong 51 file đã phủ luồng thật rồi, nên đây không phải lỗ hổng kiểm
@@ -45,17 +46,18 @@ notes: >-
   không ghi" mà phát hành 1.0 với ba tiêu chí nghiệm thu là lệnh chung chung thì
   tự mâu thuẫn với chính mình. Đó mới là thứ phải sửa.
 
-  Việc: viết `test/e2e-graph-core.test.ts` chạy luồng THẬT của phạm vi này đầu-cuối
-  trong thư mục tạm, rồi đổi `run` của `V-graph-core-e2e` thành
-  `npx tsx --test 'test/e2e-graph-core.test.ts'`. Lệnh nhắc đúng tên tệp nên
+  Việc: viết `test/e2e-graph-core.test.ts` chạy luồng THẬT của phạm vi này
+  đầu-cuối trong thư mục tạm, rồi đổi `run` của `V-graph-core-e2e` thành `npx
+  tsx --test 'test/e2e-graph-core.test.ts'`. Lệnh nhắc đúng tên tệp nên
   `lintProbe` không còn coi là chung chung nữa.
 
-  Dùng `test/flow.test.ts` và `test/helpers.ts` làm khuôn — đã có sẵn cách
-  dựng project tạm và gọi CLI thật, đừng phát minh lại.
+  Dùng `test/flow.test.ts` và `test/helpers.ts` làm khuôn — đã có sẵn cách dựng
+  project tạm và gọi CLI thật, đừng phát minh lại.
 
   ĐỪNG chỉ đổi `run` cho hết cảnh báo mà không viết test thật. Làm vậy là thay
   một bản ghi nói quá bằng một bản ghi nói dối, tệ hơn hẳn.
 
-  Chỉ sửa `.ganas/scopes/P-graph-core.yaml` và `test/e2e-graph-core.test.ts`. Hai phạm vi
-  còn lại có task riêng — `ownsGanasFile` chỉ cho mỗi task sở hữu đúng một file
-  scope, nên gộp là không commit nổi.
+  Chỉ sửa `.ganas/scopes/P-graph-core.yaml` và `test/e2e-graph-core.test.ts`.
+  Hai phạm vi còn lại có task riêng — `ownsGanasFile` chỉ cho mỗi task sở hữu
+  đúng một file scope, nên gộp là không commit nổi.
+done_at: 2026-08-25T09:58:42.536Z
