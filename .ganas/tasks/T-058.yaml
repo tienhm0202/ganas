@@ -1,0 +1,78 @@
+id: T-058
+title: "Dựng khối nền M-lock và cho appendEntry ghi sổ cái dưới khoá"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: todo
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: ".ganas/icebox/2026-08.yaml"
+      why: "ICE-014 ghi cuộc đua đã đo và vì sao nó nghiêm trọng"
+    - path: "src/graph/claim.ts"
+      why: "withFileLock hiện nằm ở đây — nguồn để dời, ĐỌC thôi, đừng sửa"
+    - path: ".claude/rules/architecture.md"
+      why: "Ranh giới tra-trạng-thái với chạm-I/O — lý do không nới vai M-fsprobe"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-verify
+  - M-util
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/ledger-chain.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: artifact
+    path: "src/util/lock.ts"
+    must_contain: "withFileLock"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+  - kind: verification
+    target: "M-util/V-util-glob"
+
+notes: >-
+  CHẶN v1.0.0, người đã quyết hướng chữa ngày 2026-08-25.
+
+  Vấn đề (ICE-014): `appendEntry` (`src/verify/ledger.ts:152`) ĐỌC toàn bộ sổ
+  cái để tính `prev_hash` và `seq` rồi mới `appendFile`, KHÔNG khoá. Hai tiến
+  trình `ganas verify` chạy chồng có thể đọc cùng trạng thái rồi cùng ghi, sinh
+  `seq` trùng và `prev_hash` sai — đứt chính chuỗi hash mà ganas dùng để chứng
+  minh sổ cái không bị sửa tay. Nghiêm trọng vì ganas CHỦ ĐỘNG khuyên chạy
+  sub-agent song song.
+
+  Vì sao dựng khối MỚI thay vì dùng thẳng `withFileLock` của M-claim: hàm đó
+  nằm ở `src/graph/claim.ts` thuộc M-claim, phạm vi P-hook. Cho lõi đồ thị phụ
+  thuộc một khối phạm vi hook chỉ để lấy một tiện ích chung là đặt sai chỗ. Vì
+  sao KHÔNG nới vai `M-fsprobe`: docstring của nó tự khai là "chỗ DUY NHẤT TRA
+  TRẠNG THÁI filesystem", mà khoá thì TẠO và XOÁ file (`open(...,"wx")`, `rm`)
+  — đúng ranh giới mà `.claude/rules/architecture.md` phân biệt giữa công cụ
+  tra trạng thái và chỗ chạm I/O thật.
+
+  Việc, theo thứ tự:
+  (1) Tạo `src/util/lock.ts` chứa `withFileLock` (và hằng poll đi kèm), CHÉP
+  từ `src/graph/claim.ts` — giữ nguyên hành vi, giữ nguyên comment giải nghĩa
+  TTL tính bằng mili giây. ĐỪNG xoá bản ở `claim.ts`: file đó thuộc P-hook,
+  ngoài phạm vi task này. Trùng lặp tạm thời là có chủ ý, T-059 dọn.
+  (2) Khai khối mới `.ganas/modules/M-lock.yaml`: `scope: P-graph-core`,
+  `paths: ["src/util/lock.ts"]`, `nature: io` (nó ghi và xoá file thật), kèm
+  một bằng chứng probe cho chính nó.
+  (3) Cho `appendEntry` bọc phần ĐỌC-TÍNH-GHI trong `withFileLock`. Tên file
+  khoá đặt cạnh sổ cái, theo khuôn `iceboxLockFile` ở `src/commands/icebox.ts`.
+  TTL tính bằng mili giây, ngắn — chỉ sống trong một lượt đọc-sửa-ghi.
+  (4) Khai cạnh `M-lock → M-verify`: `depends_on` và `contract.inputs` ở
+  M-verify, `contract.outputs` và bằng chứng `kind: contract` ở M-lock. Cả hai
+  đầu đều trong P-graph-core nên khép kín được ngay, khác T-051.
+
+  Thêm test ép hai lượt append chạy chồng rồi khẳng định `ledger --check` vẫn
+  xanh và không có `seq` trùng — không có test đó thì bản vá chỉ là niềm tin.
+
+  ĐỪNG đụng `src/graph/claim.ts` hay `.ganas/modules/M-claim.yaml` — P-hook,
+  là việc của T-059.

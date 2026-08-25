@@ -1,0 +1,53 @@
+id: T-060
+title: "Khai bằng chứng contract cho cạnh M-lock → M-claim ở đầu nguồn"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: todo
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: ".ganas/tasks/T-059.yaml"
+      why: "Nửa đầu — cạnh và cổng khai ở đầu đích tại đó"
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "Khuôn khai bằng chứng kind: contract đã chạy được"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-verify
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+
+notes: >-
+  Chỉ chạy SAU T-059. Mảnh cuối, đúng khuôn T-052 đã đi qua.
+
+  Cạnh `M-lock → M-claim` xuyên phạm vi (nguồn P-graph-core, đích P-hook). Bằng
+  chứng `kind: contract` bắt buộc nằm ở khối NGUỒN vì `contractEdges()`
+  (`src/graph/trace.ts:44`) lấy `from` chính là khối chứa nó — `M-claim` không
+  khai hộ được. Mà task không được chạm hai phạm vi (`validate` chặn cứng bằng
+  `scope/task-touches-outside-scope`), nên phải tách ra đây. Xem ICE-012.
+
+  Việc: thêm một mục `verify` với `kind: contract`, `to: M-claim` vào
+  `.ganas/modules/M-lock.yaml`, cho cổng `withFileLock` mà M-claim đã khai ở
+  `contract.inputs` (T-059).
+
+  `run` đi qua `lintProbe`, lint đối chiếu lệnh với TÊN CỔNG — lệnh chung chung
+  sẽ bị `verify/probe-unrelated`. Dùng `grep -qF` chứ không `grep -q`: chữ ký
+  thật đầy ký tự regex, mỗi bản grep thoát một kiểu.
+
+  Xong thì `ganas trace` phải về 0 nợ kiểm chứng.
+
+  LƯU Ý `touches`: task này sửa `.ganas/modules/M-lock.yaml`, nhưng `M-lock` là
+  khối T-058 mới dựng nên lúc viết task này nó chưa tồn tại trong graph. Khai
+  `M-verify` cho qua validate; khi làm thật, nếu `ownsGanasFile` không cho stage
+  `M-lock.yaml` thì DỪNG và báo — đừng `git add` tay để lách.

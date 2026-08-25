@@ -1,0 +1,56 @@
+id: T-059
+title: "M-claim thôi giữ bản riêng của withFileLock, nhập từ khối nền M-lock"
+serves:
+  - G-001
+implements: D-007
+scope: P-hook
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/tasks/T-058.yaml"
+      why: "Nửa đầu — khối M-lock và bản chép của withFileLock dựng ở đó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-claim
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/claim.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: artifact
+    path: "src/graph/claim.ts"
+    must_contain: "withFileLock"
+  - kind: verification
+    target: "M-claim/V-claim-smoke"
+
+notes: >-
+  Chỉ chạy SAU khi T-058 xong, nếu không là gãy build.
+
+  T-058 chép `withFileLock` sang `src/util/lock.ts` (khối nền `M-lock`,
+  P-graph-core) và CỐ Ý để lại bản cũ ở `src/graph/claim.ts` — vì file đó thuộc
+  P-hook, ngoài phạm vi T-058. Trùng lặp tạm thời có chủ ý; task này dọn.
+
+  Việc: `src/graph/claim.ts` xoá phần cài đặt riêng và nhập `withFileLock` từ
+  `../util/lock.js`. Đối chiếu hai bản trước khi xoá — nếu T-058 chép lệch một
+  chi tiết nào (TTL, hằng poll, thông điệp lỗi, comment giải nghĩa) thì DỪNG và
+  báo, đừng lặng lẽ nhận bản nào.
+
+  Khai cạnh `M-lock → M-claim` ở đầu ĐÍCH: `depends_on` và `contract.inputs`
+  trên `.ganas/modules/M-claim.yaml`.
+
+  Bằng chứng `kind: contract` của cạnh này KHÔNG khai được ở đây: `contractEdges()`
+  (`src/graph/trace.ts:44`) lấy `from` chính là khối mà bằng chứng nằm trên, nên
+  nó phải ở `M-lock` — thuộc P-graph-core, ngoài phạm vi. Đó là T-060. Xem
+  ICE-012: hai luật cộng lại làm cạnh xuyên phạm vi luôn tốn hai task. Giữa
+  T-059 và T-060, `ganas trace` có đúng 1 mục `uncovered-edge` — đã lường trước,
+  exit_contract không đòi trace sạch.
+
+  ĐỪNG đụng `src/util/lock.ts` hay `.ganas/modules/M-lock.yaml` — P-graph-core.

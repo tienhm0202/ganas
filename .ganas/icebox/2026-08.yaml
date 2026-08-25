@@ -332,4 +332,6 @@
     - src/verify/ledger.ts:152
     - src/graph/claim.ts:1
   scope: P-graph-core
-  status: open
+  status: promoted
+  promoted_to: T-058
+  closed_at: 2026-08-25T10:29:10.608Z
