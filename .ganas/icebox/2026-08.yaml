@@ -276,3 +276,27 @@
     - .ganas/tasks/T-052.yaml:1
   scope: P-graph-core
   status: open
+- id: ICE-013
+  title: ganas prune archive task done mà proposal đang trỏ tới, làm graph 7 lỗi
+  found_at: 2026-08-25T08:51:08.741Z
+  review_after_days: 30
+  weight: 5
+  ease: 3
+  why_deferred: "Tầng archive của prune (src/prune.ts:138) chỉ gom
+    blocked_by/promoted_to từ TASK, bỏ qua PROPOSAL. Chạy prune --older-than 1
+    --yes ngày 2026-08-25 dời 24 task done sang tasks/done/, trong đó có T-024,
+    T-028, T-029, T-030, T-035, T-041, T-042 — đúng bảy task mà
+    PR-006/007/008/009/011/012/013 khai promoted_to. Loader không đọc
+    tasks/done/ nên bảy tham chiếu thành treo: ganas validate đi từ 0 lỗi lên 7
+    lỗi spine/proposal-missing-target, số task tụt từ 50 xuống 26. Đã hoàn lại
+    bằng git checkout .ganas/tasks/ rồi xoá thư mục done thừa; validate về lại 0
+    lỗi. Hai điều đáng lưu ý: prune báo Đã dọn xong mà không hề kiểm graph sau
+    khi dời, và dry-run cũng không cảnh báo gì. Hướng chữa: gom cả promoted_to
+    của proposal vào tập tham chiếu trước khi chọn task để archive, hoặc cho
+    loader đọc luôn tasks/done/, hoặc bắt prune chạy validate sau khi dời và tự
+    hoàn lại nếu sinh lỗi mới."
+  anchors:
+    - src/prune.ts:138
+    - .ganas/proposals/PR-006.yaml:1
+  scope: P-cli
+  status: open
