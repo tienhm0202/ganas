@@ -1,10 +1,11 @@
 id: T-054
-title: "Lệnh trượt phải in được thân xác — truy npm test đỏ chập chờn trong tiến trình con"
+title: "Lệnh trượt phải in được thân xác — truy npm test đỏ chập chờn trong tiến
+  trình con"
 serves:
   - G-001
 implements: D-007
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: medium
 model: main
 
@@ -16,7 +17,34 @@ context_contract:
       why: "judge() — hai nhánh trả lỗi, một nhánh nuốt mất thân xác lệnh"
   facts: []
   open_questions:
-    - "Vì sao npm test chỉ đỏ khi chạy trong tiến trình con của ganas, không đỏ khi chạy tay?"
+    - >-
+      TÁI HIỆN ĐƯỢC ngày 2026-08-25 — không còn là bí ẩn, nhưng cũng CHƯA phải
+      bằng chứng cho đúng ba lần của ICE-011 (output ba lần đó không ai giữ lại,
+      đúng chỗ hỏng mà phần (1) của T-054 vừa vá). CƠ CHẾ đo được: chạy npm test
+      khi máy đang tải nặng thì 3/24 lượt đỏ với cùng một lỗi, và lỗi đó KHÔNG
+      phải của dự án — "Error: Unable to deserialize cloned data due to invalid
+      or unsupported version." ném ra từ node:internal/test_runner/runner
+      (#processRawBuffer → FileTest.parseMessage), tức luồng kết quả từ tiến
+      trình con của node --test về tiến trình cha bị hỏng khung. Hậu quả đúng
+      bằng chữ ký ICE-011: kết quả của tệp đang truyền dở MẤT, tổng số ca lệch
+      (đo được 749 và 751 so với 753, tức hụt 4 và hụt 2; một lượt khác lại
+      thành 754 vì tệp đỏ được đếm thành một ca), và exit 1. Tệp nạn nhân đổi
+      theo lượt (test/note.test.ts hai lần, test/claim.test.ts một lần) — nên
+      suy luận cũ trong ICE-011 rằng "hụt đúng 4 = 4 ca T-047 vừa thêm vào
+      test/boundary.test.ts" là TRÙNG HỢP, không phải chỉ dấu. Vì sao chỉ đỏ
+      trong tiến trình con của ganas: không phải do tiến trình con, mà do
+      gate/commit chạy đúng lúc máy còn đang gánh phiên chính và các sub-agent
+      song song; chạy tay ngay sau đó thì máy đã rảnh. LOẠI được bằng đo, đừng
+      thử lại: (a) env con lệch env cha ĐÚNG một biến GANAS_PROBE=1
+      (src/util/exec.ts:34) và không chỗ nào đọc nó, cwd con = cwd cha = gốc
+      repo (src/gate.ts:104); (b) stdout của npm test 70–86 KB so với maxBuffer
+      4 MB (src/util/exec.ts:15) — không có chuyện cắt buffer; (c) hạn 120 s
+      (src/util/exec.ts:13) còn rất xa: cả bộ test 3,15 s lúc rảnh, ca chậm nhất
+      23,7 s khi ép 12 lượt npm test song song trên 20 lõi. CÒN MỞ: đây là lỗi
+      của node:test (node v24.16.0), chưa truy tới báo cáo thượng nguồn và chưa
+      biết cách chữa dứt điểm. Hai hướng chưa thử: cho npm test chạy tuần tự
+      hoặc giảm --test-concurrency khi máy tải nặng, và chấm lại lượt đỏ bằng
+      cách chạy lại đúng một lần trước khi kết luận task trượt.
 
 touches:
   - M-exec
@@ -31,16 +59,23 @@ exit_contract:
   - kind: artifact
     path: "src/util/exec.ts"
     must_contain: "judge"
+  # Test của judge() vốn nằm ở glob.test.ts, không phải verify-run.test.ts.
+  # Không lệnh nào trong exit_contract nhắc tên nó nên `taskBoundary` không phủ
+  # và `ganas commit` sẽ bỏ sót — đúng ICE-008. Chính cảnh báo ranh giới mà
+  # T-047 sửa đã chỉ ra file này.
+  - kind: artifact
+    path: "test/glob.test.ts"
+    must_contain: "judge"
   - kind: verification
     target: "M-exec/V-exec-run"
 
 notes: >-
   CHẶN v1.0.0. Đây là mục duy nhất trong icebox đánh thẳng vào lời hứa cốt lõi:
   ganas bảo "chấm bằng lệnh, không bằng lời", nên phép chấm phải tất định. Ba
-  lần trong phiên 2026-08-24/25 `npm test` thoát mã 1 khi chạy BÊN TRONG
-  `ganas gate`/`ganas commit`, chạy tay ngay sau đó luôn xanh — và một lần làm
-  `ganas commit` TỪ CHỐI NHẦM một task thật sự xanh. Người dùng gặp cảnh đó sẽ
-  kết luận công cụ hỏng.
+  lần trong phiên 2026-08-24/25 `npm test` thoát mã 1 khi chạy BÊN TRONG `ganas
+  gate`/`ganas commit`, chạy tay ngay sau đó luôn xanh — và một lần làm `ganas
+  commit` TỪ CHỐI NHẦM một task thật sự xanh. Người dùng gặp cảnh đó sẽ kết luận
+  công cụ hỏng.
 
   Việc chia làm hai phần, và phần (1) phải làm bất kể có truy ra nguyên nhân hay
   không:
@@ -67,3 +102,4 @@ notes: >-
 
   Không truy ra được thì nói thẳng, ghi vào `open_questions`, và giao phần (1)
   đã đủ để hạ mức nguy hiểm — nhưng ĐỪNG đóng ICE-011 khi chưa có nguyên nhân.
+done_at: 2026-08-25T09:58:18.364Z

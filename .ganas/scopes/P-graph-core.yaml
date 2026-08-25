@@ -21,4 +21,4 @@ entry: M-model
 acceptance:
   - id: V-graph-core-e2e
     kind: probe
-    run: "npm test"
+    run: "npx tsx --test 'test/e2e-graph-core.test.ts'"

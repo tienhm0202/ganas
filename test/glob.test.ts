@@ -78,3 +78,71 @@ test("stdout_matches sai cú pháp regex bị báo là trượt, không ném l�
   assert.equal(j.pass, false);
   assert.match(j.reason!, /regex/);
 });
+
+/* --- Lệnh trượt phải in được thân xác (ICE-011) --------------------------- */
+
+/** Đuôi thật của `npm test` khi có ca đỏ: mọi thứ ra stdout, stderr rỗng. */
+const NODE_TEST_TAIL = [
+  "ℹ tests 739",
+  "ℹ pass 735",
+  "ℹ fail 4",
+  "ℹ duration_ms 20000",
+  "",
+  "✖ failing tests:",
+  "",
+  "test at test/boundary.test.ts:2:873",
+  "✖ ranh giới chặn ghi ngoài phạm vi (1.2ms)",
+  "  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+  "      at TestContext.<anonymous> (test/boundary.test.ts:9:3)",
+  "      at Test.run (node:internal/test_runner/test:1306:25)",
+].join("\n");
+
+test("lệnh trượt có stderr: lấy stderr, không đụng tới stdout", () => {
+  const j = judge(
+    result({ code: 1, stderr: "tsc: error TS2345: sai kiểu", stdout: "đang biên dịch…" }),
+    "exit_zero",
+  );
+  assert.equal(j.pass, false);
+  assert.match(j.reason!, /TS2345/);
+  assert.doesNotMatch(j.reason!, /đang biên dịch/);
+});
+
+test("⭐ stderr rỗng nhưng stdout có: lấy ĐUÔI stdout, không phải một dòng rỗng ruột", () => {
+  const j = judge(result({ code: 1, stdout: NODE_TEST_TAIL }), "exit_zero");
+  assert.equal(j.pass, false);
+  // Chỗ hỏng thật phải gọi được tên: tệp nào, ca nào.
+  assert.match(j.reason!, /boundary\.test\.ts/);
+  assert.match(j.reason!, /fail 4/);
+});
+
+test("nhánh cuối (expect dạng object) cũng in thân xác, không chỉ mã thoát", () => {
+  const j = judge(result({ code: 1, stdout: NODE_TEST_TAIL }), { stdout_contains: "tests 739" });
+  assert.equal(j.pass, false);
+  assert.match(j.reason!, /mã 1/);
+  assert.match(j.reason!, /boundary\.test\.ts/);
+});
+
+test("khung ngăn xếp bị bỏ — hạn mức dòng dành cho thứ đọc được", () => {
+  const j = judge(result({ code: 1, stdout: NODE_TEST_TAIL }), "exit_zero");
+  assert.doesNotMatch(j.reason!, /node:internal/);
+});
+
+test("log dài không bị đổ nguyên vào lý do", () => {
+  const flood = Array.from({ length: 500 }, (_, i) => `dòng ${i}`).join("\n");
+  const j = judge(result({ code: 1, stdout: flood }), "exit_zero");
+  assert.equal(j.pass, false);
+  assert.equal(j.reason!.split(" / ").length <= 12, true, j.reason);
+  assert.match(j.reason!, /dòng 499/); // đuôi, không phải đầu
+  assert.doesNotMatch(j.reason!, /dòng 0\b/);
+});
+
+test("một dòng khổng lồ bị cắt, không nuốt cả brief", () => {
+  const j = judge(result({ code: 1, stdout: "x".repeat(50_000) }), "exit_zero");
+  assert.equal(j.reason!.length < 400, true, String(j.reason!.length));
+});
+
+test("lệnh trượt câm hoàn toàn vẫn cho lý do đọc được", () => {
+  const j = judge(result({ code: 7 }), "exit_zero");
+  assert.equal(j.pass, false);
+  assert.equal(j.reason, "thoát với mã 7");
+});

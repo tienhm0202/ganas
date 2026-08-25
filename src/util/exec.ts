@@ -69,10 +69,7 @@ export function judge(result: ExecResult, expect: Expect): Judgement {
 
   if (expect === "exit_zero") {
     if (result.code === 0) return { pass: true };
-    return {
-      pass: false,
-      reason: `thoát với mã ${result.code}${result.stderr.trim() ? ` — ${firstLines(result.stderr)}` : ""}`,
-    };
+    return { pass: false, reason: exitReason(result) };
   }
 
   if (expect.exit_code !== undefined && result.code !== expect.exit_code) {
@@ -101,12 +98,65 @@ export function judge(result: ExecResult, expect: Expect): Judgement {
 
   // Không khai exit_code ⇒ vẫn đòi thoát sạch.
   if (expect.exit_code === undefined && result.code !== 0) {
-    return { pass: false, reason: `thoát với mã ${result.code}` };
+    return { pass: false, reason: exitReason(result) };
   }
 
   return { pass: true };
 }
 
-function firstLines(text: string, n = 3): string {
-  return text.trim().split("\n").slice(0, n).join(" / ");
+/** Số dòng lấy từ ĐẦU stderr — lỗi thật của một lệnh thường nằm ngay dòng đầu. */
+const STDERR_LINES = 3;
+/**
+ * Số dòng lấy từ ĐUÔI stdout. Rộng hơn stderr vì tóm tắt của test runner xen
+ * lẫn khung ngăn xếp: cắt sát quá thì chỉ còn lại phần đuôi của một dump lỗi.
+ */
+const STDOUT_TAIL_LINES = 12;
+/** Cắt dòng quá dài — một dòng log vài chục KB không được phép nuốt cả brief. */
+const MAX_LINE_CHARS = 200;
+
+/**
+ * Lý do trượt vì mã thoát, KÈM thân xác của lệnh.
+ *
+ * stderr là chỗ nhìn đầu tiên, nhưng nhiều runner (node:test, vitest, jest) báo
+ * lỗi ra STDOUT và để stderr rỗng — khi đó `thoát với mã 1` là một câu rỗng
+ * ruột, đúng thứ đã làm ba phiên liền mù (ICE-011). Không có stderr thì lấy
+ * phần ĐUÔI stdout: tóm tắt lỗi của runner nằm ở cuối, không phải ở đầu.
+ */
+function exitReason(result: ExecResult): string {
+  const body = failureBody(result);
+  return `thoát với mã ${result.code}${body ? ` — ${body}` : ""}`;
+}
+
+function failureBody(result: ExecResult): string {
+  if (result.stderr.trim()) return firstLines(result.stderr, STDERR_LINES);
+  if (result.stdout.trim()) return lastLines(result.stdout, STDOUT_TAIL_LINES);
+  return "";
+}
+
+function firstLines(text: string, n = STDERR_LINES): string {
+  return joinLines(usefulLines(text).slice(0, n));
+}
+
+function lastLines(text: string, n = STDOUT_TAIL_LINES): string {
+  return joinLines(usefulLines(text).slice(-n));
+}
+
+/**
+ * Bỏ dòng trống và khung ngăn xếp (`    at ...`) — quy ước chung của mọi runner
+ * chạy trên V8. Giữ lại chúng thì hạn mức dòng bị khung ngăn xếp ăn hết, và cái
+ * duy nhất người đọc cần — tên ca đỏ, câu assert — bị đẩy ra ngoài.
+ */
+function usefulLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== "" && !/^\s*at\s/.test(line));
+}
+
+function joinLines(lines: string[]): string {
+  return lines.map((line) => truncate(line.trim())).join(" / ");
+}
+
+function truncate(line: string): string {
+  return line.length > MAX_LINE_CHARS ? `${line.slice(0, MAX_LINE_CHARS)}…` : line;
 }
