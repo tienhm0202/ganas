@@ -159,10 +159,31 @@
     tiếp (ce78bc6, 7bd3c88, 0e6408c) trên ba task khác nhau: đây là hành vi
     hệ thống chứ không phải sơ suất từng lần. Điểm chung của cả ba: file
     test/ chứa tập đóng mà task PHẢI sửa, nhưng không exit_contract nào nhắc
-    tên nó. Hướng chữa đáng cân nhắc — stage cả file đã đổi mà git thấy trong
-    paths của khối thuộc scope task, hoặc bắt ganas commit CẢNH BÁO khi cây
-    còn file đã đổi ngoài phạm vi (hiện chỉ báo cho .ganas/, không báo cho
-    test/ và scripts/)."
+    tên nó.
+
+    CHẨN ĐOÁN LẠI sau khi đọc code — bản ghi trước đề xuất “bắt ganas commit
+    CẢNH BÁO khi cây còn file đã đổi ngoài phạm vi”, nhưng cảnh báo đó ĐÃ TỒN
+    TẠI: outsideBoundary() ở src/boundary.ts:145, gọi từ commands/gate.ts:25 và
+    commands/commit.ts:175. Nó im vì hỏi NHẦM NGUỒN: commit.ts:170 lấy danh
+    sách file đã sửa từ touchedPathsFor() — tức sổ phiên .ganas/state.json —
+    chứ không phải git. Hai đường rò: (1) gọi CLI không kèm --session thì
+    sessionId là “cli”, không khớp bản ghi nào, touched rỗng nên
+    outsideBoundary trả rỗng; (2) ngay cả đúng session cũng mất, vì bindSession
+    thay cả bản ghi khi task đổi (src/state.ts:63) — đo được: phiên e96d9596
+    ghi 0 touched_paths dù vừa sửa cả chục file. Nghịch lý đáng chú ý:
+    commit.ts:87 ĐÃ dùng `git status --porcelain -z -uall` để dựng danh sách
+    foreign, nhưng chỉ soi trong .ganas/ — nên file kho tri thức lạc chỗ thì bị
+    bắt (M-graph-base.yaml ở T-036), file code lạc chỗ thì lọt.
+
+    HAI MỨC CHỮA. Mức ngay, không sửa code — khai `kind: artifact` cho file đó
+    trong exit_contract: contractPathRefs() đưa c.path thẳng vào taskBoundary,
+    schema đã có (src/model/task.ts:53), T-001/T-013 dùng sẵn. ĐÃ LÀM cho
+    T-037 và có kết quả: commit bfc6ee5 stage đủ test/module-deps.test.ts,
+    lần đầu trong bốn task ganas commit không bỏ sót gì, và HEAD tự chạy test
+    xanh. Mức gốc, chưa làm — đổi nguồn sự thật của outsideBoundary từ sổ phiên
+    sang git status, đúng cái commit.ts:87 đã làm cho .ganas/: chỉ cần nới
+    pathspec ra toàn cây. Git luôn biết file nào đổi bất kể session id, bất kể
+    hook ghi kịp không, bất kể sub-agent hay phiên chính sửa."
   anchors:
     - src/boundary.ts:1
     - commit:ce78bc6
