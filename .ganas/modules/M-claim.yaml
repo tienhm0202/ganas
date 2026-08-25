@@ -31,6 +31,11 @@ contract:
       shape: "(graph: Graph, opts?: SelectOptions) => Candidate[]"
     - name: SelectOptions
       shape: "{ preferScope?: string | undefined }"
+    # từ M-lock (src/util/lock.ts) — T-059 dọn bản chép riêng trong claim.ts,
+    # nhập withFileLock từ đây. Bằng chứng kind: contract của cạnh này khai ở
+    # ĐẦU NGUỒN (M-lock, thuộc P-graph-core) — T-060.
+    - name: withFileLock
+      shape: "<T>(lockFile: string, ttlMs: number, fn: () => Promise<T>) => Promise<T>"
   outputs:
     - name: baselineFor
       shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<Record<string, boolean> | undefined>"
@@ -83,6 +88,7 @@ contract:
 depends_on:
   - M-graph-base
   - M-graph-read
+  - M-lock
 
 status: surveyed
 verify:
@@ -118,7 +124,7 @@ verify:
       grep -qF "export async function taskForSession(" src/state.ts &&
       grep -qF "export async function touchedPathsFor(" src/state.ts &&
       grep -qF "export async function updateState(" src/state.ts &&
-      grep -qF "export async function withFileLock<T>(" src/graph/claim.ts
+      grep -qF "export async function withFileLock<T>(" src/util/lock.ts
   - id: V-claim-to-workflow
     kind: contract
     to: M-workflow

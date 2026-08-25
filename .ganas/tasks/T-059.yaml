@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-hook
-status: todo
+status: done
 estimated_context: small
 model: verifier
 
@@ -46,11 +46,12 @@ notes: >-
   Khai cạnh `M-lock → M-claim` ở đầu ĐÍCH: `depends_on` và `contract.inputs`
   trên `.ganas/modules/M-claim.yaml`.
 
-  Bằng chứng `kind: contract` của cạnh này KHÔNG khai được ở đây: `contractEdges()`
-  (`src/graph/trace.ts:44`) lấy `from` chính là khối mà bằng chứng nằm trên, nên
-  nó phải ở `M-lock` — thuộc P-graph-core, ngoài phạm vi. Đó là T-060. Xem
-  ICE-012: hai luật cộng lại làm cạnh xuyên phạm vi luôn tốn hai task. Giữa
-  T-059 và T-060, `ganas trace` có đúng 1 mục `uncovered-edge` — đã lường trước,
-  exit_contract không đòi trace sạch.
+  Bằng chứng `kind: contract` của cạnh này KHÔNG khai được ở đây:
+  `contractEdges()` (`src/graph/trace.ts:44`) lấy `from` chính là khối mà bằng
+  chứng nằm trên, nên nó phải ở `M-lock` — thuộc P-graph-core, ngoài phạm vi. Đó
+  là T-060. Xem ICE-012: hai luật cộng lại làm cạnh xuyên phạm vi luôn tốn hai
+  task. Giữa T-059 và T-060, `ganas trace` có đúng 1 mục `uncovered-edge` — đã
+  lường trước, exit_contract không đòi trace sạch.
 
   ĐỪNG đụng `src/util/lock.ts` hay `.ganas/modules/M-lock.yaml` — P-graph-core.
+done_at: 2026-08-25T10:46:52.653Z
