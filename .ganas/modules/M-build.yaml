@@ -7,6 +7,18 @@ paths:
   - "scripts/build.mjs"
   - "package.json"
   - "plugin/.claude-plugin/plugin.json"
+
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code.
+# Nếu gen-ports sinh thiếu cổng thì GIỮ cổng cũ và ghi comment giải thích tại chỗ.
+contract:
+  inputs:
+    # từ M-exec (src/util/exec.ts)
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv; }) => Promise<ExecResult>"
+
+depends_on:
+  - M-exec
+
 status: surveyed
 verify:
   - id: V-build-version-sync

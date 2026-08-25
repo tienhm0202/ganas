@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-release
-status: todo
+status: done
 estimated_context: small
 model: scribe
 
@@ -44,8 +44,9 @@ notes: >-
   khớp, đừng để lại lời giải thích về một chênh lệch không còn.
 
   `M-build` khai `nature: io` và `paths` gồm `release/**`, `scripts/build.mjs`,
-  `package.json`, `plugin/.claude-plugin/plugin.json`. Khai `depends_on: [M-exec]`
-  cộng `contract.inputs` cho cổng nó thật sự nhập từ `src/util/exec.ts`.
+  `package.json`, `plugin/.claude-plugin/plugin.json`. Khai `depends_on:
+  [M-exec]` cộng `contract.inputs` cho cổng nó thật sự nhập từ
+  `src/util/exec.ts`.
 
   Đầu NGUỒN (`contract.outputs` của M-exec) thuộc P-graph-core — T-048 lo. Nếu
   T-048 chưa xong thì cạnh này còn `uncovered-port`; đó là chấp nhận được,
@@ -54,3 +55,4 @@ notes: >-
   `M-build` khai `status: surveyed` — mới khảo sát, chưa ai nghiệm thu. Nếu đọc
   code thấy `paths` hoặc `nature` không còn khớp thực tế thì NÊU RA, đừng lặng
   lẽ sửa: đó là thay đổi bản đồ, phải do người quyết.
+done_at: 2026-08-25T08:36:42.225Z

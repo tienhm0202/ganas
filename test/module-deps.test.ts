@@ -141,10 +141,8 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
    * M-mcp, M-render, M-templates, M-workflow). Hầu hết XUYÊN PHẠM VI như T-038,
    * nên chỉ đầu ĐÍCH khai được và `ganas trace` vẫn chưa sạch — có chủ đích.
    *
-   * Còn đúng MỘT dòng, và nó KHÔNG rỗng như đoạn D-007 từng hình dung:
-   * `M-exec → M-build` có đích ở phạm vi P-release, không thuộc PR-014. Khai nó
-   * là việc của phạm vi đó, không phải của T-037 — dòng này ở lại cho tới khi
-   * P-release tự dọn.
+   * Mảng ĐÓNG, không còn dòng nào. `M-exec → M-build` từng là dòng cuối, thuộc
+   * P-release không PR-014. T-051 khai nó xong, và mảng giờ rỗng.
    *
    * Ba cổng của M-workflow và một cổng của M-cli phải khai TAY: chúng đi qua
    * dynamic import (`await import("./x.js")` trong flow.ts, `cli.ts`) hoặc qua
@@ -156,7 +154,7 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
    * `depends_on` thì đỏ; khai xong một cạnh mà quên xoá dòng cũng đỏ. Danh
    * sách chỉ đi một chiều — ngắn dần.
    */
-  const MISSING_EDGES = ["M-exec → M-build"].sort();
+  const MISSING_EDGES = [];
 
   const declared = await declaredEdges();
   const missing = [...(await realEdges())].filter((e) => !declared.has(e)).sort();
