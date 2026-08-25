@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: verifier
 
@@ -65,5 +65,6 @@ notes: >-
   cổng đó. T-037 bắt được và khai lại tay. So tập tên cổng trước/sau, không cổng
   nào được biến mất.
 
-  Chỉ sửa YAML của bảy khối trong `touches`. Không đụng khối phạm vi khác —
-  đó là T-048/T-050.
+  Chỉ sửa YAML của bảy khối trong `touches`. Không đụng khối phạm vi khác — đó
+  là T-048/T-050.
+done_at: 2026-08-25T04:18:33.173Z

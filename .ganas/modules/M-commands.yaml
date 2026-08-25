@@ -265,14 +265,26 @@ contract:
       shape: "interface"
     - name: generateHandoff
       shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined; }) => Promise<HandoffResult>"
+    # `gitChangedPaths`/`gitTouchedPaths`/`parsePorcelainZ`/`PorcelainEntry`
+    # (src/commit.ts) — T-049, mới lộ ra khi khai `contract.outputs` của
+    # M-workflow; `commands/commit.ts` cũng TÁI XUẤT `parsePorcelainZ`/
+    # `PorcelainEntry` nhưng không tệp nào trong khối này nhập lại qua đó.
+    - name: gitChangedPaths
+      shape: "(root: string, pathspec: string[]) => Promise<PorcelainEntry[]>"
+    - name: gitTouchedPaths
+      shape: "(root: string) => Promise<string[]>"
     - name: isAutoCriterion
       shape: "(c: ExitCriterion) => boolean"
     - name: nextStep
       shape: "(c: FlowContext) => FlowStep | null"
     - name: notePath
       shape: "(root: string, sessionId: string) => string"
+    - name: parsePorcelainZ
+      shape: "(stdout: string) => PorcelainEntry[]"
     - name: planPrune
       shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
+    - name: PorcelainEntry
+      shape: "{ x: string; y: string; path: string }"
     - name: PrunePlan
       shape: "interface"
     - name: STAGES

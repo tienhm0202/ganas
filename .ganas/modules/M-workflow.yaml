@@ -108,14 +108,25 @@ contract:
       shape: "interface"
     - name: generateHandoff
       shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined; }) => Promise<HandoffResult>"
+    # `gitChangedPaths`/`gitTouchedPaths`/`parsePorcelainZ`/`PorcelainEntry`
+    # (src/commit.ts) — T-049, chưa có ở lần MÁY sinh của T-037; `commands/commit.ts`
+    # tái xuất `parsePorcelainZ`/`PorcelainEntry` nhưng không ai nhập lại qua đó.
+    - name: gitChangedPaths
+      shape: "(root: string, pathspec: string[]) => Promise<PorcelainEntry[]>"
+    - name: gitTouchedPaths
+      shape: "(root: string) => Promise<string[]>"
     - name: isAutoCriterion
       shape: "(c: ExitCriterion) => boolean"
     - name: nextStep
       shape: "(c: FlowContext) => FlowStep | null"
     - name: notePath
       shape: "(root: string, sessionId: string) => string"
+    - name: parsePorcelainZ
+      shape: "(stdout: string) => PorcelainEntry[]"
     - name: planPrune
       shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
+    - name: PorcelainEntry
+      shape: "{ x: string; y: string; path: string }"
     - name: PrunePlan
       shape: "interface"
     - name: STAGES
@@ -141,7 +152,7 @@ verify:
   # Cạnh vỏ workflow → lệnh: gate.ts/prune.ts/handoff.ts/commit.ts/flow.ts cấp
   # gần hết logic cho commands/gate.ts, prune.ts, handoff.ts, commit.ts,
   # flow.ts, next.ts, note.ts. Kiểm một lát cắt đại diện qua các file, không
-  # phải cả 17 cổng — `portIssues`/`computeDebt` đã đối chiếu đủ ở tầng khai.
+  # phải cả 21 cổng — `portIssues`/`computeDebt` đã đối chiếu đủ ở tầng khai.
   - id: V-workflow-to-commands
     kind: contract
     to: M-commands
@@ -155,3 +166,12 @@ verify:
   # cạnh PHÁN ĐOÁN (depends_on có từ trước khi search.ts tách khỏi khối này),
   # nên `run` chỉ khẳng định hai chữ ký thật còn nguyên văn, không khẳng định
   # brief.ts đang gọi chúng.
+  # Cạnh vỏ workflow → hook (T-049, nửa sau của T-037): `hooks/io/handlers.ts`
+  # gọi thẳng `evaluateGate` và `generateHandoff` — cạnh XUYÊN PHẠM VI (đích ở
+  # P-hook), M-hook-io đã khai `depends_on: M-workflow` từ T-038.
+  - id: V-workflow-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export async function evaluateGate(" src/gate.ts &&
+      grep -qF "export async function generateHandoff(" src/handoff.ts

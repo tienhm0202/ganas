@@ -85,3 +85,11 @@ verify:
       grep -q "export function renderBrief(input: BriefInput): string {" src/render/brief.ts &&
       grep -q "export function renderGroupedByScope<T>(" src/render/group.ts &&
       grep -q "renderBrief({ graph, task: picked.task, freshness" src/commands/next.ts
+  # Cạnh dựng chữ → hook (T-049, nửa sau của T-037): `hooks/io/handlers.ts` gọi
+  # thẳng `renderBrief` để chèn brief vào phản hồi hook — cạnh XUYÊN PHẠM VI
+  # (đích ở P-hook), M-hook-io đã khai `depends_on: M-render` từ T-038.
+  - id: V-render-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export function renderBrief(" src/render/brief.ts

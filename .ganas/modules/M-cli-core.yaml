@@ -117,3 +117,35 @@ verify:
     run: >-
       grep -q "export function searchFacts(" src/search.ts &&
       grep -q "export function taskQuery(" src/search.ts
+  # Ba cạnh dưới đây (T-049, nửa sau của T-037): `cli.ts`, mọi module lệnh, và
+  # `mcp/server.ts` đều nhập tĩnh `Argv`/`parseArgs` từ `util/args.ts`.
+  - id: V-cli-core-to-cli
+    kind: contract
+    to: M-cli
+    run: >-
+      grep -qF "export interface Argv {" src/util/args.ts &&
+      grep -qF "export function parseArgs(" src/util/args.ts
+  - id: V-cli-core-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export interface Argv {" src/util/args.ts &&
+      grep -qF "export function contractPathRefs(" src/boundary.ts &&
+      grep -qF "export function enabled(" src/util/args.ts &&
+      grep -qF "export function flag(" src/util/args.ts &&
+      grep -qF "export function formatBoundaryWarning(" src/boundary.ts &&
+      grep -qF "export function formatDispatchWarning(" src/boundary.ts &&
+      grep -qF "export function multiOption(" src/util/args.ts &&
+      grep -qF "export function option(" src/util/args.ts &&
+      grep -qF "export function outsideBoundary(" src/boundary.ts &&
+      grep -qF "export function ownsGanasFile(" src/boundary.ts &&
+      grep -qF "export function searchFacts(" src/search.ts &&
+      grep -qF "export interface SearchHit {" src/search.ts &&
+      grep -qF "export function taskBoundary(" src/boundary.ts &&
+      grep -qF "export function taskQuery(" src/search.ts
+  - id: V-cli-core-to-mcp
+    kind: contract
+    to: M-mcp
+    run: >-
+      grep -qF "export interface Argv {" src/util/args.ts &&
+      grep -qF "export function parseArgs(" src/util/args.ts
