@@ -1,0 +1,69 @@
+id: T-049
+title: "Khai contract.outputs đầu nguồn cho các khối của P-cli"
+serves:
+  - G-001
+implements: D-007
+scope: P-cli
+status: todo
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "Khuôn khai cổng và cạnh contract đã chạy được"
+    - path: ".ganas/tasks/T-037.yaml"
+      why: "Nửa đầu của chính việc này — đầu ĐÍCH đã khai ở đó, kèm cạm bẫy gen-ports"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli
+  - M-cli-core
+  - M-commands
+  - M-templates
+  - M-render
+  - M-workflow
+  - M-mcp
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-cli/V-cli-smoke"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-templates/V-templates-init"
+  - kind: verification
+    target: "M-render/V-render-brief"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-mcp/V-mcp-selfcontained"
+
+notes: >-
+  Nửa sau của T-037: khai `contract.outputs` cho bảy khối P-cli, phủ những cổng
+  mà khối ở phạm vi khác nhập vào. `M-commands` là khối nặng nhất — riêng nó
+  đang gánh 41 trong 76 mục `uncovered-port` mà `ganas trace` đếm được, dù phần
+  thuộc task này còn tuỳ khối nguồn nào thật sự export (chỉ gen-ports phân giải
+  được).
+
+  Dùng `node scripts/gen-ports.mjs --scope P-cli` — nó sinh cả `outputs`.
+
+  Cạm bẫy ĐÃ SUÝT GÂY MẤT DỮ LIỆU ở T-037, đọc kỹ: gen-ports chỉ đọc import
+  TĨNH, ĐỊNH DANH; nó mù `import()` động và `import * as X`. Ở đúng phạm vi này
+  có ba chỗ: `cli.ts` nạp động `./commands/x.js` rồi gọi `mod.run(argv)`;
+  `commands/init.ts` nạp `import * as T from "../templates/project.js"` (14 cổng
+  M-templates vô hình); `mcp/server.ts` nạp `import * as flow from
+  "../commands/flow.js"`. Vì cả hai bên tiêu thụ `run` đều vô hình, gen-ports
+  KHÔNG sinh `outputs.run` cho M-commands — dán nguyên bản máy sinh sẽ XOÁ MẤT
+  cổng đó. T-037 bắt được và khai lại tay. So tập tên cổng trước/sau, không cổng
+  nào được biến mất.
+
+  Chỉ sửa YAML của bảy khối trong `touches`. Không đụng khối phạm vi khác —
+  đó là T-048/T-050.

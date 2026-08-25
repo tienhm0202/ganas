@@ -1,0 +1,56 @@
+id: T-051
+title: "Khai cạnh M-exec → M-build — dòng cuối của MISSING_EDGES"
+serves:
+  - G-001
+implements: D-007
+scope: P-release
+status: todo
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: "test/module-deps.test.ts"
+      why: "Tập đóng MISSING_EDGES — sau task này còn đúng 0 dòng"
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "Khuôn khai cổng và cạnh contract đã chạy được"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-build
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: artifact
+    path: "test/module-deps.test.ts"
+    must_contain: "MISSING_EDGES"
+  - kind: verification
+    target: "M-build/V-build-version-sync"
+
+notes: >-
+  Dòng cuối cùng còn lại của `MISSING_EDGES`, và là dòng duy nhất PR-014 không
+  đụng tới: `M-exec → M-build`. Đích `M-build` thuộc P-release, ngoài ba phạm vi
+  mà chuỗi T-036/T-037/T-038 chẻ ra, nên không task nào trong chuỗi đó nhận nó.
+
+  Docblock của `test/module-deps.test.ts` nói "sau cả chuỗi tập này phải rỗng".
+  Câu đó chỉ đúng SAU task này. T-037 đã ghi rõ chênh lệch vào docblock thay vì
+  sửa con số cho đẹp — khi xoá nốt dòng này thì sửa luôn đoạn ghi chú đó cho
+  khớp, đừng để lại lời giải thích về một chênh lệch không còn.
+
+  `M-build` khai `nature: io` và `paths` gồm `release/**`, `scripts/build.mjs`,
+  `package.json`, `plugin/.claude-plugin/plugin.json`. Khai `depends_on: [M-exec]`
+  cộng `contract.inputs` cho cổng nó thật sự nhập từ `src/util/exec.ts`.
+
+  Đầu NGUỒN (`contract.outputs` của M-exec) thuộc P-graph-core — T-048 lo. Nếu
+  T-048 chưa xong thì cạnh này còn `uncovered-port`; đó là chấp nhận được,
+  exit_contract không đòi `ganas trace` sạch.
+
+  `M-build` khai `status: surveyed` — mới khảo sát, chưa ai nghiệm thu. Nếu đọc
+  code thấy `paths` hoặc `nature` không còn khớp thực tế thì NÊU RA, đừng lặng
+  lẽ sửa: đó là thay đổi bản đồ, phải do người quyết.

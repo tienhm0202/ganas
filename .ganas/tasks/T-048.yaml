@@ -1,0 +1,81 @@
+id: T-048
+title: "Khai contract.outputs đầu nguồn cho các khối của P-graph-core"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: todo
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "Khuôn khai cổng và cạnh contract đã chạy được"
+    - path: ".ganas/tasks/T-036.yaml"
+      why: "Nửa đầu của chính việc này — đầu ĐÍCH đã khai ở đó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-load
+  - M-validate
+  - M-graph-base
+  - M-graph-read
+  - M-freshness
+  - M-verify
+  - M-util
+  - M-exec
+  - M-fsprobe
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-load/V-load-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+  - kind: verification
+    target: "M-graph-base/V-graph-base-shape"
+  - kind: verification
+    target: "M-graph-read/V-graph-read-trace"
+  - kind: verification
+    target: "M-freshness/V-freshness-staleness"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+  - kind: verification
+    target: "M-util/V-util-glob"
+  - kind: verification
+    target: "M-exec/V-exec-run"
+  - kind: verification
+    target: "M-fsprobe/V-fsprobe-probe"
+
+notes: >-
+  Nửa sau của T-036. Ở đó các khối P-graph-core đã khai `depends_on` và
+  `contract.inputs` — tức đầu ĐÍCH. Còn thiếu đầu NGUỒN: `contract.outputs`
+  của chính các khối này, phủ những cổng mà khối ở P-cli và P-hook nhập vào.
+  Không khai thì `portIssues()` báo `uncovered-port` và cạnh đứng mãi ở trạng
+  thái nửa vời — đúng thứ notes T-036/T-038 nói là "chờ task cuối", nhưng task
+  đó (T-039) chưa bao giờ được tạo.
+
+  `ganas trace` hiện đếm 76 `uncovered-port` trên toàn dự án. Phần thuộc task
+  này CHƯA đo chính xác được: một cổng thiếu ở khối đích có thể do bất kỳ khối
+  nào trong `depends_on` của nó khai, và chỉ `gen-ports.mjs` mới phân giải
+  được khối nào thật sự export. Đừng tin con số ước lượng nào chưa chạy lệnh.
+
+  Dùng `node scripts/gen-ports.mjs --scope P-graph-core` — nó sinh cả `outputs`,
+  không riêng `inputs`. ĐỪNG chép tay: `shape` so khớp từng ký tự.
+
+  Cạm bẫy đã trả giá ở T-037, phải biết trước: gen-ports chỉ đọc import TĨNH,
+  ĐỊNH DANH. Nó mù `import()` động và `import * as X`. Vì cả hai bên tiêu thụ
+  đều vô hình, nó KHÔNG sinh outputs cho những cổng đó — dán nguyên bản máy
+  sinh sẽ XOÁ MẤT cổng đã có. Trước khi ghi đè, so tập tên cổng trước/sau và
+  chắc chắn không cổng nào biến mất.
+
+  Chỉ sửa YAML của mười khối trong `touches`. Không đụng khối P-cli/P-hook —
+  đó là T-049/T-050.

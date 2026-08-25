@@ -1,0 +1,53 @@
+id: T-050
+title: "Khai contract.outputs đầu nguồn cho các khối của P-hook"
+serves:
+  - G-001
+implements: D-007
+scope: P-hook
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/modules/M-hook-policy.yaml"
+      why: "Khuôn khai cổng và cạnh contract đã chạy được — chính khối này"
+    - path: ".ganas/tasks/T-038.yaml"
+      why: "Nửa đầu của chính việc này — đầu ĐÍCH đã khai ở đó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-hook-policy
+  - M-hook-io
+  - M-claim
+
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: verification
+    target: "M-hook-policy/V-hook-policy-pure"
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+  - kind: verification
+    target: "M-claim/V-claim-smoke"
+
+notes: >-
+  Nửa sau của T-038: khai `contract.outputs` cho ba khối P-hook, phủ những cổng
+  mà khối phạm vi khác nhập vào. Nhỏ nhất trong chuỗi — `M-hook-io` và `M-claim`
+  gánh 14 trong 76 mục `uncovered-port` mà `ganas trace` đếm.
+
+  Dùng `node scripts/gen-ports.mjs --scope P-hook` — nó sinh cả `outputs`.
+  T-038 đã chạy lệnh này mà không phải sửa script.
+
+  Cạm bẫy chung của gen-ports, xem notes T-049 cho ví dụ cụ thể: nó mù import
+  động và `import * as X`, nên có thể KHÔNG sinh outputs cho cổng đang tồn tại.
+  So tập tên cổng trước/sau, không cổng nào được biến mất.
+
+  T-038 giữ nguyên id hai bằng chứng contract sẵn có (`V-hook-policy-to-io`,
+  `V-claim-to-hook-io`) thay vì đổi sang tên máy đề xuất, để không mồ côi sổ
+  cái. Giữ tiếp quy ước đó.
+
+  Chỉ sửa YAML của ba khối trong `touches`.
