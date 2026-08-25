@@ -110,6 +110,36 @@ contract:
       shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
     - name: generateHandoff
       shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined; }) => Promise<HandoffResult>"
+  outputs:
+    - name: ALLOW
+      shape: "HookOutput"
+    - name: degraded
+      shape: "(message: string) => HookOutput"
+    - name: HookInput
+      shape: "interface"
+    - name: HookOutput
+      shape: "interface"
+    - name: readHookInput
+      shape: "() => Promise<HookInput>"
+    - name: writeHookOutput
+      shape: "(output: HookOutput) => void"
+    # `node scripts/gen-ports.mjs --scope P-hook` MÙ trước sáu cổng dưới: nó
+    # chỉ đọc import TĨNH/ĐỊNH DANH, còn src/commands/hook.ts (M-commands,
+    # P-cli) nhập handlers.ts bằng `import * as handlers`, nên máy không thấy
+    # các export này bị dùng. Giữ tay theo đúng cảnh báo cạm bẫy T-037/T-038 —
+    # dán nguyên bản máy sinh sẽ XOÁ MẤT sáu cổng thật đang được P-cli dùng.
+    - name: sessionStart
+      shape: "(input: HookInput) => Promise<HookOutput>"
+    - name: preToolUse
+      shape: "(input: HookInput) => Promise<HookOutput>"
+    - name: postToolUse
+      shape: "(input: HookInput) => Promise<HookOutput>"
+    - name: stop
+      shape: "(input: HookInput) => Promise<HookOutput>"
+    - name: preCompact
+      shape: "(input: HookInput) => Promise<HookOutput>"
+    - name: sessionEnd
+      shape: "(input: HookInput) => Promise<HookOutput>"
 
 # Chỉ hai cạnh đầu (M-claim, M-hook-policy) nằm TRỌN trong P-hook. Mười cạnh
 # còn lại XUYÊN PHẠM VI — nguồn ở P-graph-core và P-cli — nên `contract.outputs`
@@ -134,3 +164,24 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/hooks.test.ts'"
     expect: exit_zero
+  # Cạnh XUYÊN PHẠM VI theo chiều NGƯỢC lại (nguồn ở đây, đích ở P-cli) — theo
+  # đúng quy ước "mỗi cạnh chịu trách nhiệm cho cổng CHÍNH NÓ cấp", khối này
+  # khai cả outputs lẫn verify. Sáu dòng grep cuối kiểm sáu cổng máy sinh bỏ
+  # sót (xem chú thích ở outputs) vì src/commands/hook.ts nhập bằng
+  # `import * as handlers`.
+  - id: V-hook-io-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export const ALLOW: HookOutput = {};" src/hooks/policy/types.ts &&
+      grep -qF "export function degraded(" src/hooks/policy/types.ts &&
+      grep -qF "export interface HookInput {" src/hooks/policy/types.ts &&
+      grep -qF "export interface HookOutput {" src/hooks/policy/types.ts &&
+      grep -qF "export async function readHookInput(" src/hooks/io/io.ts &&
+      grep -qF "export function writeHookOutput(" src/hooks/io/io.ts &&
+      grep -qF "export async function sessionStart(input: HookInput): Promise<HookOutput>" src/hooks/io/handlers.ts &&
+      grep -qF "export async function preToolUse(input: HookInput): Promise<HookOutput>" src/hooks/io/handlers.ts &&
+      grep -qF "export async function postToolUse(input: HookInput): Promise<HookOutput>" src/hooks/io/handlers.ts &&
+      grep -qF "export async function stop(input: HookInput): Promise<HookOutput>" src/hooks/io/handlers.ts &&
+      grep -qF "export async function preCompact(input: HookInput): Promise<HookOutput>" src/hooks/io/handlers.ts &&
+      grep -qF "export async function sessionEnd(input: HookInput): Promise<HookOutput>" src/hooks/io/handlers.ts

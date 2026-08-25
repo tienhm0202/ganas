@@ -32,28 +32,50 @@ contract:
     - name: SelectOptions
       shape: "{ preferScope?: string | undefined }"
   outputs:
+    - name: baselineFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<Record<string, boolean> | undefined>"
+    - name: bindSession
+      shape: "(root: string, sessionId: string, taskId: string) => Promise<void>"
     - name: claimNextTask
       shape: "(graph: Graph, root: string, sessionId: string, opts?: SelectOptions) => Promise<Candidate | null>"
     - name: claimTask
       shape: "(root: string, taskId: string, sessionId: string, ttlMinutes: number) => Promise<boolean>"
-    - name: releaseClaimsForSession
-      shape: "(root: string, sessionId: string) => Promise<void>"
-    - name: bindSession
-      shape: "(root: string, sessionId: string, taskId: string) => Promise<void>"
-    - name: releaseSession
-      shape: "(root: string, sessionId: string) => Promise<void>"
-    - name: taskForSession
-      shape: "(root: string, sessionId?: string) => Promise<string | null>"
-    - name: sessionRecord
-      shape: "(root: string, sessionId: string) => Promise<SessionRecord | null>"
-    - name: markTouched
-      shape: "(root: string, sessionId: string, relPath?: string, fromSubagent?: boolean) => Promise<void>"
     - name: clearTouched
       shape: "(root: string, sessionId: string) => Promise<void>"
     - name: dispatchNudgedFor
       shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<boolean>"
     - name: markDispatchNudged
       shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: markTouched
+      shape: "(root: string, sessionId: string, relPath?: string, fromSubagent?: boolean) => Promise<void>"
+    - name: readState
+      shape: "(root: string) => Promise<State>"
+    - name: releaseClaimsForSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: releaseSession
+      shape: "(root: string, sessionId: string) => Promise<void>"
+    - name: reserveId
+      shape: "(root: string, id: string, sessionId: string, ttlMinutes: number) => Promise<boolean>"
+    - name: sessionRecord
+      shape: "(root: string, sessionId: string) => Promise<SessionRecord | null>"
+    - name: setBaseline
+      shape: "(root: string, sessionId: string, baseline: Record<string, boolean>) => Promise<void>"
+    - name: State
+      shape: "{ version: 1; current_task: string | null; sessions: Record<string, SessionRecord> }"
+    - name: subagentTouchedFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<boolean>"
+    - name: taskForSession
+      shape: "(root: string, sessionId?: string) => Promise<string | null>"
+    - name: TOUCHED_PATHS_CAP
+      shape: "200"
+    - name: touchedPathsFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<string[]>"
+    - name: updateState
+      shape: "(root: string, mutate: (state: State) => void) => Promise<State>"
+    - name: withFileLock
+      shape: "<T>(lockFile: string, ttlMs: number, fn: () => Promise<T>) => Promise<T>"
+    - name: writeState
+      shape: "(root: string, state: State) => Promise<void>"
 
 # Hai cạnh này XUYÊN PHẠM VI: nguồn nằm trong P-graph-core, nên đầu kia
 # (`contract.outputs` của M-graph-base / M-graph-read, cộng bằng chứng
@@ -74,3 +96,33 @@ verify:
     run: >-
       grep -q "export async function claimTask(" src/graph/claim.ts &&
       grep -q "export async function markTouched(" src/state.ts
+  # Ba cạnh dưới XUYÊN PHẠM VI theo chiều NGƯỢC lại (nguồn ở đây, đích ở
+  # P-cli) — nên chính khối này khai cả outputs lẫn verify, theo đúng quy ước
+  # "mỗi cạnh chịu trách nhiệm cho cổng CHÍNH NÓ cấp". T-050 sinh bằng
+  # `node scripts/gen-ports.mjs --scope P-hook`.
+  - id: V-claim-to-cli-core
+    kind: contract
+    to: M-cli-core
+    run: >-
+      grep -qF "export const TOUCHED_PATHS_CAP = 200;" src/state.ts
+  - id: V-claim-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export async function baselineFor(" src/state.ts &&
+      grep -qF "export async function bindSession(" src/state.ts &&
+      grep -qF "export async function claimNextTask(" src/graph/claim.ts &&
+      grep -qF "export async function reserveId(" src/graph/claim.ts &&
+      grep -qF "export async function setBaseline(" src/state.ts &&
+      grep -qF "export async function subagentTouchedFor(" src/state.ts &&
+      grep -qF "export async function taskForSession(" src/state.ts &&
+      grep -qF "export async function touchedPathsFor(" src/state.ts &&
+      grep -qF "export async function updateState(" src/state.ts &&
+      grep -qF "export async function withFileLock<T>(" src/graph/claim.ts
+  - id: V-claim-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export async function readState(" src/state.ts &&
+      grep -qF "export interface State {" src/state.ts &&
+      grep -qF "export async function writeState(" src/state.ts

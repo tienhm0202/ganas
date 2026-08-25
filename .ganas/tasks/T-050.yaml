@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-hook
-status: todo
+status: done
 estimated_context: small
 model: verifier
 
@@ -39,8 +39,8 @@ notes: >-
   mà khối phạm vi khác nhập vào. Nhỏ nhất trong chuỗi — `M-hook-io` và `M-claim`
   gánh 14 trong 76 mục `uncovered-port` mà `ganas trace` đếm.
 
-  Dùng `node scripts/gen-ports.mjs --scope P-hook` — nó sinh cả `outputs`.
-  T-038 đã chạy lệnh này mà không phải sửa script.
+  Dùng `node scripts/gen-ports.mjs --scope P-hook` — nó sinh cả `outputs`. T-038
+  đã chạy lệnh này mà không phải sửa script.
 
   Cạm bẫy chung của gen-ports, xem notes T-049 cho ví dụ cụ thể: nó mù import
   động và `import * as X`, nên có thể KHÔNG sinh outputs cho cổng đang tồn tại.
@@ -51,3 +51,4 @@ notes: >-
   cái. Giữ tiếp quy ước đó.
 
   Chỉ sửa YAML của ba khối trong `touches`.
+done_at: 2026-08-25T04:18:38.909Z
