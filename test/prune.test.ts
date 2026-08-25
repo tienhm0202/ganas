@@ -268,6 +268,48 @@ test("cùng task đó, khi không còn mục icebox nào trỏ tới → archive
   }
 });
 
+/* --- Tầng 2: task done trỏ tới bởi proposal.promoted_to ------------------------ */
+
+function proposalYaml(opts: { id: string; promotedTo: string }): string {
+  return `id: ${opts.id}
+title: "đề xuất thử"
+scope: P-thu
+problem: "vấn đề thử"
+proposed_change: "sửa thử"
+anchors:
+  - "src/a.ts:1"
+weight: 3
+ease: 3
+found_at: "2026-01-01T00:00:00Z"
+status: approved
+decided_by: "@nguoi-duyet"
+decided_at: "2026-01-02T00:00:00Z"
+promoted_to: ${opts.promotedTo}
+`;
+}
+
+test("task done đủ tuổi mà là promoted_to của một đề xuất approved → KHÔNG archive", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
+    ".ganas/proposals/PR-001.yaml": proposalYaml({ id: "PR-001", promotedTo: "T-001" }),
+  });
+  try {
+    const graph = await loadGraph(root);
+    const plan = await planPrune(root, graph, { olderThanDays: 7, now: NOW });
+    assert.deepEqual(
+      plan.doneTasks,
+      [],
+      "archive T-001 sẽ làm promoted_to của PR-001 trỏ vào chỗ trống (spine/proposal-missing-target)",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
 /* --- Tầng 2: file icebox theo tháng đã đóng hết -------------------------------- */
 
 test("file icebox: mọi bản ghi closed/promoted, closed_at mới nhất đủ tuổi → vào kế hoạch archive", async () => {

@@ -4,6 +4,7 @@ import { basename, dirname, join, relative } from "node:path";
 import { DIRS, ganasPath } from "./graph/paths.js";
 import type { Graph, Sourced } from "./graph/types.js";
 import type { Icebox } from "./model/icebox.js";
+import { ID_PATTERNS } from "./model/index.js";
 import { readState, type State, writeState } from "./state.js";
 import { runShell } from "./util/exec.js";
 import { exists, listDir, mtimeMs } from "./util/fsprobe.js";
@@ -94,13 +95,18 @@ export interface PlanPruneOptions {
  * chiếu nào còn sống: task còn bị `blocked_by` chặn tới thì giữ lại (archive
  * xong `blocked_by` trỏ vào chỗ không còn tồn tại, `openBlockers` sẽ coi là
  * CHẶN VĨNH VIỄN — tệ hơn nhiều so với việc chưa dọn). Cùng lý lẽ đó áp cho
- * `promoted_to`: task nào đang là đích của một bản ghi icebox `status:
- * "promoted"` thì cũng giữ lại — archive nó đi, `promoted_to` trỏ vào hư
- * không, và luật validate `icebox/promoted-missing-task` sẽ réo mãi mà người
- * đọc không hiểu vì sao. Rò rỉ này KHÔNG vĩnh viễn: một khi file icebox chứa
- * bản ghi đó tự rời graph (tầng dưới, file tháng đã đóng hết và đủ tuổi), lượt
- * `planPrune` kế tiếp không còn ai giữ tham chiếu và task được archive bình
- * thường — chỉ là chậm hơn một vòng prune.
+ * `promoted_to` — TỪ CẢ HAI nguồn có thể khai trường này: bản ghi icebox
+ * `status: "promoted"`, và bản ghi proposal `status: "approved"` (xem
+ * `zPromotedTarget` ở `src/model/proposal.ts` — nhận cả `D-`/`T-`/`ICE-`, nên
+ * lọc lấy riêng id dạng task bằng `ID_PATTERNS.task`). Task nào đang là đích
+ * của MỘT TRONG HAI thì giữ lại — archive nó đi, `promoted_to` trỏ vào hư
+ * không, và luật validate (`icebox/promoted-missing-task` hoặc
+ * `spine/proposal-missing-target`) sẽ réo mãi mà người đọc không hiểu vì sao.
+ * Rò rỉ này KHÔNG vĩnh viễn: một khi file icebox/proposal chứa bản ghi đó tự
+ * rời graph (tầng dưới, file tháng đã đóng hết và đủ tuổi — proposal thì hiện
+ * chưa có tầng archive, xem ghi chú ở docstring module), lượt `planPrune` kế
+ * tiếp không còn ai giữ tham chiếu và task được archive bình thường — chỉ là
+ * chậm hơn một vòng prune.
  *
  * Phạm vi công việc KHÔNG bao giờ được archive, kể cả khi đã `delivered`: khối
  * vẫn khai `scope:` trỏ vào nó và fact vẫn còn hiệu lực trong nó. Phạm vi là
@@ -146,6 +152,15 @@ export async function planPrune(
   const promotedTargets = new Set<string>();
   for (const rec of graph.icebox.values()) {
     if (rec.value.promoted_to) promotedTargets.add(rec.value.promoted_to);
+  }
+
+  // Cùng lý lẽ đó cho proposal `status: "approved"` — `promoted_to` của nó
+  // nhận cả D-/T-/ICE- (`zPromotedTarget`), nên lọc lấy riêng id dạng task:
+  // nhét cả D-/ICE- vào tập này vô hại (chúng không khớp `t.value.id` nào ở
+  // vòng lặp doneTasks bên dưới) nhưng làm ý đồ khó đọc.
+  for (const rec of graph.proposals.values()) {
+    const target = rec.value.promoted_to;
+    if (target && ID_PATTERNS.task.test(target)) promotedTargets.add(target);
   }
 
   const doneTasks: ArchivableRecord[] = [];

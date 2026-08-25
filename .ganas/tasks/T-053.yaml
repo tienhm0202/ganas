@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
 model: verifier
 
@@ -61,3 +61,4 @@ notes: >-
   khuôn đó.
 
   Đừng đụng `src/graph/load.ts` (P-graph-core, ngoài phạm vi task này).
+done_at: 2026-08-25T08:58:14.236Z
