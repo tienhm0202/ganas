@@ -252,3 +252,27 @@
     - test/boundary.test.ts:1
   scope: P-cli
   status: open
+- id: ICE-012
+  title: Không task đơn lẻ nào tạo được cạnh xuyên phạm vi kèm bằng chứng của nó
+  found_at: 2026-08-25T08:38:08.779Z
+  review_after_days: 30
+  weight: 5
+  ease: 3
+  why_deferred: "contractEdges() lấy from của cạnh chính là khối mà bằng chứng
+    kind contract được khai TRÊN nó (src/graph/trace.ts:44), nên bằng chứng cho
+    cạnh A đến B bắt buộc nằm ở file YAML của A. Nhưng validate chặn cứng
+    scope/task-touches-outside-scope: một task chạm hai phạm vi thì không ai
+    nghiệm thu được nó. Hai luật đó cộng lại thành một chỗ không đi qua được khi
+    A và B khác phạm vi. Đo được ở T-051: nó tạo cạnh M-exec đến M-build, khai
+    được đầu đích trong P-release nhưng không khai nổi bằng chứng ở M-exec thuộc
+    P-graph-core; phải chẻ ra T-052 chỉ để thêm một khối verify. Chuỗi T-036 đến
+    T-050 không vấp vì cạnh đã tồn tại sẵn rồi mới bù bằng chứng theo từng phạm
+    vi. Ai tạo cạnh xuyên phạm vi MỚI đều sẽ đâm vào. Hướng cân nhắc: cho phép
+    khối ĐÍCH khai bằng chứng với from tường minh, hoặc nới scope-touches cho
+    riêng thay đổi kiểu chỉ thêm verify, hoặc chấp nhận và ghi vào tài liệu rằng
+    cạnh xuyên phạm vi luôn tốn hai task."
+  anchors:
+    - src/graph/trace.ts:44
+    - .ganas/tasks/T-052.yaml:1
+  scope: P-graph-core
+  status: open
