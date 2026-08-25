@@ -18,4 +18,4 @@ entry: M-cli
 acceptance:
   - id: V-cli-e2e
     kind: probe
-    run: "npm test"
+    run: "npx tsx --test 'test/e2e-cli.test.ts'"
