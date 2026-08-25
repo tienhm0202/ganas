@@ -34,6 +34,11 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/verify-run.test.ts'"
     expect: exit_zero
+  - id: V-exec-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export function runShell(" src/util/exec.ts
   - id: V-exec-to-graph-read
     kind: contract
     to: M-graph-read
@@ -48,6 +53,12 @@ verify:
   - id: V-exec-to-verify
     kind: contract
     to: M-verify
+    run: >-
+      grep -qF "export function judge(" src/util/exec.ts &&
+      grep -qF "export function runShell(" src/util/exec.ts
+  - id: V-exec-to-workflow
+    kind: contract
+    to: M-workflow
     run: >-
       grep -qF "export function judge(" src/util/exec.ts &&
       grep -qF "export function runShell(" src/util/exec.ts

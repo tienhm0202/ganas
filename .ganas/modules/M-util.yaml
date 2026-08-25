@@ -38,6 +38,8 @@ contract:
       shape: "class"
     - name: stripOperators
       shape: "(token: string) => string"
+    - name: tokenizeShell
+      shape: "(command: string) => string[]"
     - name: TokenSpan
       shape: "{ text: string; start: number }"
     - name: tokenSpans
@@ -52,6 +54,25 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/glob.test.ts'"
     expect: exit_zero
+  - id: V-util-to-cli
+    kind: contract
+    to: M-cli
+    run: >-
+      grep -qF "export class GanasError extends Error {" src/util/errors.ts
+  - id: V-util-to-cli-core
+    kind: contract
+    to: M-cli-core
+    run: >-
+      grep -qF "export function looksLikePath(" src/util/shell.ts &&
+      grep -qF "export function matchesAny(" src/util/glob.ts &&
+      grep -qF "export function stripOperators(" src/util/shell.ts &&
+      grep -qF "export function tokenizeShell(" src/util/shell.ts
+  - id: V-util-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export class GanasError extends Error {" src/util/errors.ts &&
+      grep -qF "export function matchesAny(" src/util/glob.ts
   - id: V-util-to-freshness
     kind: contract
     to: M-freshness
@@ -69,6 +90,11 @@ verify:
     run: >-
       grep -qF "export class GanasError extends Error {" src/util/errors.ts &&
       grep -qF "export function matchesAny(" src/util/glob.ts
+  - id: V-util-to-mcp
+    kind: contract
+    to: M-mcp
+    run: >-
+      grep -qF "export class GanasError extends Error {" src/util/errors.ts
   - id: V-util-to-validate
     kind: contract
     to: M-validate

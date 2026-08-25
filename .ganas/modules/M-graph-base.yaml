@@ -55,10 +55,14 @@ contract:
       shape: "{ specifier: string; typeOnly: boolean }"
     - name: CONFIG_FILE
       shape: '"config.yaml"'
+    - name: countBySeverity
+      shape: "(diags: readonly Diagnostic[]) => Record<Severity, number>"
     - name: Diagnostic
       shape: "interface"
     - name: DIRS
       shape: "object"
+    - name: findGanasRoot
+      shape: "(from?: string) => string | null"
     - name: GANAS_DIR
       shape: '".ganas"'
     - name: ganasPath
@@ -75,10 +79,14 @@ contract:
       shape: "interface"
     - name: LOCAL_ONLY
       shape: "readonly string[]"
+    - name: requireGanasRoot
+      shape: "(from?: string) => string"
     - name: Severity
       shape: '"error" | "warning" | "info"'
     - name: Sourced
       shape: "{ value: T; file: string; index?: number }"
+    - name: STATE_FILE
+      shape: '"state.json"'
 
 depends_on:
   - M-fsprobe
@@ -144,4 +152,74 @@ verify:
       grep -qF "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts &&
       grep -qF "export interface LedgerEntry {" src/graph/types.ts &&
       grep -qF "export type LedgerResult = (typeof LEDGER_RESULT)[number];" src/graph/types.ts &&
+      grep -qF "export interface Sourced<T> {" src/graph/types.ts
+  - id: V-graph-base-to-claim
+    kind: contract
+    to: M-claim
+    run: >-
+      grep -qF "export const DIRS = {" src/graph/paths.ts &&
+      grep -qF "export function ganasPath(" src/graph/paths.ts &&
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export const STATE_FILE = \"state.json\";" src/graph/paths.ts
+  - id: V-graph-base-to-cli-core
+    kind: contract
+    to: M-cli-core
+    run: >-
+      grep -qF "export const DIRS = {" src/graph/paths.ts &&
+      grep -qF "export const GANAS_DIR = \".ganas\";" src/graph/paths.ts &&
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts
+  - id: V-graph-base-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export const CONFIG_FILE = \"config.yaml\";" src/graph/paths.ts &&
+      grep -qF "export function countBySeverity(" src/graph/types.ts &&
+      grep -qF "export interface Diagnostic {" src/graph/types.ts &&
+      grep -qF "export const DIRS = {" src/graph/paths.ts &&
+      grep -qF "export function findGanasRoot(" src/graph/paths.ts &&
+      grep -qF "export const GANAS_DIR = \".ganas\";" src/graph/paths.ts &&
+      grep -qF "export function ganasPath(" src/graph/paths.ts &&
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export type LedgerResult = (typeof LEDGER_RESULT)[number];" src/graph/types.ts &&
+      grep -qF "export function requireGanasRoot(" src/graph/paths.ts &&
+      grep -qF "export type Severity = \"error\" | \"warning\" | \"info\";" src/graph/types.ts &&
+      grep -qF "export interface Sourced<T> {" src/graph/types.ts &&
+      grep -qF "export const STATE_FILE = \"state.json\";" src/graph/paths.ts
+  - id: V-graph-base-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export const CONFIG_FILE = \"config.yaml\";" src/graph/paths.ts &&
+      grep -qF "export function findGanasRoot(" src/graph/paths.ts &&
+      grep -qF "export const GANAS_DIR = \".ganas\";" src/graph/paths.ts &&
+      grep -qF "export function ganasPath(" src/graph/paths.ts
+  - id: V-graph-base-to-hook-policy
+    kind: contract
+    to: M-hook-policy
+    run: >-
+      grep -qF "export const CONFIG_FILE = \"config.yaml\";" src/graph/paths.ts &&
+      grep -qF "export interface Diagnostic {" src/graph/types.ts &&
+      grep -qF "export const DIRS = {" src/graph/paths.ts &&
+      grep -qF "export const GANAS_DIR = \".ganas\";" src/graph/paths.ts &&
+      grep -qF "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts
+  - id: V-graph-base-to-render
+    kind: contract
+    to: M-render
+    run: >-
+      grep -qF "export interface Graph {" src/graph/types.ts &&
+      grep -qF "export interface Sourced<T> {" src/graph/types.ts
+  - id: V-graph-base-to-templates
+    kind: contract
+    to: M-templates
+    run: >-
+      grep -qF "export const LOCAL_ONLY: readonly string[] = [\`\${DIRS.runs}/\`, \`\${DIRS.locks}/\`, STATE_FILE];" src/graph/paths.ts
+  - id: V-graph-base-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export const DIRS = {" src/graph/paths.ts &&
+      grep -qF "export function findGanasRoot(" src/graph/paths.ts &&
+      grep -qF "export function ganasPath(" src/graph/paths.ts &&
+      grep -qF "export interface Graph {" src/graph/types.ts &&
       grep -qF "export interface Sourced<T> {" src/graph/types.ts

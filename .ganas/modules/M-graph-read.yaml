@@ -51,10 +51,34 @@ contract:
     - name: sha256
       shape: "(input: string) => string"
   outputs:
+    - name: blockedTasks
+      shape: "(graph: Graph) => Candidate[]"
+    - name: Candidate
+      shape: "{ task: Sourced<Task>; blockers: string[] }"
+    - name: checkAllEdges
+      shape: "(graph: Graph, root: string) => Promise<EdgeCheck[]>"
+    - name: computeDebt
+      shape: "(graph: Graph, checks: readonly EdgeCheck[]) => DebtItem[]"
     - name: DebtItem
       shape: "interface"
     - name: DebtKind
       shape: '"uncovered-edge" | "uncovered-port" | "broken-contract" | "unverified-module"'
+    - name: EdgeCheck
+      shape: "interface"
+    - name: openBlockers
+      shape: "(graph: Graph, task: Task) => string[]"
+    - name: parallelCandidates
+      shape: "(graph: Graph, task: Task) => Sourced<Task>[]"
+    - name: rankedCandidates
+      shape: "(graph: Graph, opts?: SelectOptions) => Candidate[]"
+    - name: recordEdgeChecks
+      shape: "(graph: Graph, checks: readonly EdgeCheck[], opts: { root: string; by: string; }) => Promise<void>"
+    - name: renderDiagram
+      shape: "(graph: Graph, opts?: DiagramOptions) => string"
+    - name: selectNextTask
+      shape: "(graph: Graph, opts?: SelectOptions) => Candidate | null"
+    - name: SelectOptions
+      shape: "{ preferScope?: string | undefined }"
 
 depends_on:
   - M-exec
@@ -67,9 +91,45 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/trace.test.ts'"
     expect: exit_zero
+  - id: V-graph-read-to-claim
+    kind: contract
+    to: M-claim
+    run: >-
+      grep -qF "export interface Candidate {" src/graph/select.ts &&
+      grep -qF "export function rankedCandidates(" src/graph/select.ts &&
+      grep -qF "export interface SelectOptions {" src/graph/select.ts
+  - id: V-graph-read-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export function blockedTasks(" src/graph/select.ts &&
+      grep -qF "export async function checkAllEdges(" src/graph/trace.ts &&
+      grep -qF "export function computeDebt(" src/graph/trace.ts &&
+      grep -qF "export interface EdgeCheck {" src/graph/trace.ts &&
+      grep -qF "export function rankedCandidates(" src/graph/select.ts &&
+      grep -qF "export async function recordEdgeChecks(" src/graph/trace.ts &&
+      grep -qF "export function renderDiagram(" src/graph/trace.ts
+  - id: V-graph-read-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export interface Candidate {" src/graph/select.ts &&
+      grep -qF "export function rankedCandidates(" src/graph/select.ts &&
+      grep -qF "export function selectNextTask(" src/graph/select.ts
+  - id: V-graph-read-to-render
+    kind: contract
+    to: M-render
+    run: >-
+      grep -qF "export function openBlockers(" src/graph/select.ts &&
+      grep -qF "export function parallelCandidates(" src/graph/select.ts
   - id: V-graph-read-to-validate
     kind: contract
     to: M-validate
     run: >-
       grep -qF "export interface DebtItem {" src/graph/trace.ts &&
       grep -qF "export type DebtKind =" src/graph/trace.ts
+  - id: V-graph-read-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export function selectNextTask(" src/graph/select.ts

@@ -77,6 +77,8 @@ contract:
   outputs:
     - name: lineOfPath
       shape: "(loaded: LoadedYaml, path: readonly (string | number)[]) => number | undefined"
+    - name: loadGraph
+      shape: "(root: string) => Promise<Graph>"
 
 depends_on:
   - M-graph-base
@@ -89,8 +91,23 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/knowledge.test.ts'"
     expect: exit_zero
+  - id: V-load-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export async function loadGraph(" src/graph/load.ts
+  - id: V-load-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export async function loadGraph(" src/graph/load.ts
   - id: V-load-to-validate
     kind: contract
     to: M-validate
     run: >-
       grep -qF "export function lineOfPath(" src/util/yaml.ts
+  - id: V-load-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export async function loadGraph(" src/graph/load.ts

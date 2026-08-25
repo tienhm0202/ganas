@@ -15,9 +15,6 @@ paths:
 # `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
 # không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
 # tin cạnh đỏ nữa.
-#
-# Khối CUỐI nguồn của phạm vi: không khối nào trong sơ đồ nhập từ nó, nên
-# chỉ có `inputs`.
 contract:
   inputs:
     # từ M-fsprobe (src/util/fsprobe.ts)
@@ -53,6 +50,15 @@ contract:
       shape: "(index: Map<string, LedgerEntry[]>, target: string) => LedgerEntry | undefined"
     - name: Target
       shape: "interface"
+  outputs:
+    - name: computeFreshness
+      shape: "(graph: Graph, opts?: { now?: number; }) => Promise<Map<string, VerificationState>>"
+    - name: FactFreshness
+      shape: "VerificationState"
+    - name: freshnessMark
+      shape: "(state: VerificationState | undefined) => string"
+    - name: VerificationState
+      shape: "interface"
 
 depends_on:
   - M-fsprobe
@@ -66,3 +72,27 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/staleness.test.ts'"
     expect: exit_zero
+  - id: V-freshness-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export async function computeFreshness(" src/graph/freshness.ts &&
+      grep -qF "export type FactFreshness = VerificationState;" src/graph/freshness.ts &&
+      grep -qF "export function freshnessMark(" src/graph/freshness.ts &&
+      grep -qF "export interface VerificationState {" src/graph/freshness.ts
+  - id: V-freshness-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export async function computeFreshness(" src/graph/freshness.ts
+  - id: V-freshness-to-render
+    kind: contract
+    to: M-render
+    run: >-
+      grep -qF "export type FactFreshness = VerificationState;" src/graph/freshness.ts &&
+      grep -qF "export function freshnessMark(" src/graph/freshness.ts
+  - id: V-freshness-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export interface VerificationState {" src/graph/freshness.ts

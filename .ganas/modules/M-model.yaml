@@ -19,8 +19,12 @@ paths:
 # Khối LÁ ở đầu nguồn: không nhập gì từ khối khác, nên chỉ có `outputs`.
 contract:
   outputs:
+    - name: agentModelAlias
+      shape: "(modelId: string) => string | undefined"
     - name: AnchorObject
       shape: "z.infer<typeof zAnchorObject>"
+    - name: canDispatchSubagent
+      shape: "(harness: Harness) => boolean"
     - name: Claim
       shape: "z.infer<typeof zClaim>"
     - name: Config
@@ -31,6 +35,12 @@ contract:
       shape: "z.infer<typeof zDecision>"
     - name: Design
       shape: "z.infer<typeof zDesign>"
+    - name: Enforcement
+      shape: "(typeof ENFORCEMENT)[number]"
+    - name: enforcementFor
+      shape: "(config: Config, rule: EnforcementRule) => Enforcement"
+    - name: EnforcementRule
+      shape: "(typeof ENFORCEMENT_RULES)[number]"
     - name: evalWeakness
       shape: "(v: EvalVerification) => EvalWeakness | null"
     - name: ExitCriterion
@@ -49,8 +59,14 @@ contract:
       shape: "z.infer<typeof zGoal>"
     - name: guideFileName
       shape: "(harness: Harness) => string"
+    - name: Harness
+      shape: "(typeof HARNESS)[number]"
+    - name: HARNESS
+      shape: 'readonly ["claude-code", "codex", "cursor", "zed", "windsurf", "gemini", "other"]'
     - name: Icebox
       shape: "z.infer<typeof zIcebox>"
+    - name: ID_PATTERNS
+      shape: "object"
     - name: LATEST_SCHEMA_VERSION
       shape: "1"
     - name: Module
@@ -59,6 +75,8 @@ contract:
       shape: "(paths: readonly string[]) => string | undefined"
     - name: modulePathsOverlap
       shape: "(a: readonly string[], b: readonly string[]) => boolean"
+    - name: pointerFileName
+      shape: "(harness: Harness) => string | undefined"
     - name: Proposal
       shape: "z.infer<typeof zProposal>"
     - name: Scope
@@ -98,6 +116,27 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/icebox-model.test.ts'"
     expect: exit_zero
+  - id: V-model-to-cli-core
+    kind: contract
+    to: M-cli-core
+    run: >-
+      grep -qF "export type Fact = z.infer<typeof zFact>;" src/model/knowledge.ts &&
+      grep -qF "export type Task = z.infer<typeof zTask>;" src/model/task.ts
+  - id: V-model-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export function formatAnchor(" src/model/anchor.ts &&
+      grep -qF "export function guideFileName(" src/model/config.ts &&
+      grep -qF "export type Harness = (typeof HARNESS)[number];" src/model/config.ts &&
+      grep -qF "export const HARNESS = [" src/model/config.ts &&
+      grep -qF "export type Icebox = z.infer<typeof zIcebox>;" src/model/icebox.ts &&
+      grep -qF "export const ID_PATTERNS = {" src/model/common.ts &&
+      grep -qF "export function moduleGuideDir(" src/model/module.ts &&
+      grep -qF "export function pointerFileName(" src/model/config.ts &&
+      grep -qF "export type Proposal = z.infer<typeof zProposal>;" src/model/proposal.ts &&
+      grep -qF "export type ScoreValue = z.infer<typeof zScoreValue>;" src/model/common.ts &&
+      grep -qF "export type Task = z.infer<typeof zTask>;" src/model/task.ts
   - id: V-model-to-exec
     kind: contract
     to: M-exec
@@ -131,6 +170,17 @@ verify:
       grep -qF "export type ContractVerification = z.infer<typeof zContractVerification>;" src/model/verification.ts &&
       grep -qF "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
       grep -qF "export type Task = z.infer<typeof zTask>;" src/model/task.ts
+  - id: V-model-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export function enforcementFor(" src/model/config.ts
+  - id: V-model-to-hook-policy
+    kind: contract
+    to: M-hook-policy
+    run: >-
+      grep -qF "export type Enforcement = (typeof ENFORCEMENT)[number];" src/model/config.ts &&
+      grep -qF "export type EnforcementRule = (typeof ENFORCEMENT_RULES)[number];" src/model/config.ts
   - id: V-model-to-load
     kind: contract
     to: M-load
@@ -148,6 +198,22 @@ verify:
       grep -qF "export const zProposal = z" src/model/proposal.ts &&
       grep -qF "export const zScope = z" src/model/scope.ts &&
       grep -qF "export const zTask = z" src/model/task.ts
+  - id: V-model-to-render
+    kind: contract
+    to: M-render
+    run: >-
+      grep -qF "export function agentModelAlias(" src/model/config.ts &&
+      grep -qF "export function canDispatchSubagent(" src/model/config.ts &&
+      grep -qF "export type Claim = z.infer<typeof zClaim>;" src/model/knowledge.ts &&
+      grep -qF "export function enforcementFor(" src/model/config.ts &&
+      grep -qF "export function formatAnchor(" src/model/anchor.ts &&
+      grep -qF "export type Task = z.infer<typeof zTask>;" src/model/task.ts
+  - id: V-model-to-templates
+    kind: contract
+    to: M-templates
+    run: >-
+      grep -qF "export function guideFileName(" src/model/config.ts &&
+      grep -qF "export type Harness = (typeof HARNESS)[number];" src/model/config.ts
   - id: V-model-to-validate
     kind: contract
     to: M-validate
@@ -172,3 +238,10 @@ verify:
       grep -qF "export type Module = z.infer<typeof zModule>;" src/model/module.ts &&
       grep -qF "export type Scope = z.infer<typeof zScope>;" src/model/scope.ts &&
       grep -qF "export type Verification = z.infer<typeof zVerification>;" src/model/verification.ts
+  - id: V-model-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export type ExitCriterion = z.infer<typeof zExitCriterion>;" src/model/task.ts &&
+      grep -qF "export type Icebox = z.infer<typeof zIcebox>;" src/model/icebox.ts &&
+      grep -qF "export type Task = z.infer<typeof zTask>;" src/model/task.ts

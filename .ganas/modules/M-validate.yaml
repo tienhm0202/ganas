@@ -16,9 +16,6 @@ paths:
 # `ZodTypeAny`) thay vì chép nguyên thân: chép nguyên thì mỗi lần thêm một field
 # không liên quan cũng làm cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn
 # tin cạnh đỏ nữa.
-#
-# Khối CUỐI nguồn của phạm vi: không khối nào trong sơ đồ nhập từ nó, nên
-# chỉ có `inputs`.
 contract:
   inputs:
     # từ M-fsprobe (src/util/fsprobe.ts)
@@ -84,6 +81,15 @@ contract:
       shape: "(input: LintInput) => LintFinding[]"
     - name: verifyChain
       shape: "(entries: readonly LedgerEntry[]) => ChainVerdict"
+  outputs:
+    - name: DebtRow
+      shape: "interface"
+    - name: debtRows
+      shape: "(diagnostics: readonly Diagnostic[], items: readonly DebtItem[], graph: Graph) => DebtRow[]"
+    - name: rowsInScope
+      shape: "(rows: readonly DebtRow[], scopeId: string | undefined) => DebtRow[]"
+    - name: validateGraph
+      shape: "(graph: Graph, opts?: { now?: number; }) => Diagnostic[]"
 
 depends_on:
   - M-fsprobe
@@ -99,3 +105,21 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/icebox-validate.test.ts'"
     expect: exit_zero
+  - id: V-validate-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export interface DebtRow {" src/debt.ts &&
+      grep -qF "export function debtRows(" src/debt.ts &&
+      grep -qF "export function rowsInScope(" src/debt.ts &&
+      grep -qF "export function validateGraph(" src/graph/validate.ts
+  - id: V-validate-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export function validateGraph(" src/graph/validate.ts
+  - id: V-validate-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export function validateGraph(" src/graph/validate.ts

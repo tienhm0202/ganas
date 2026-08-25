@@ -85,12 +85,20 @@ contract:
       shape: "(index: Map<string, LedgerEntry[]>, target: string) => LedgerEntry | undefined"
     - name: ledgerCorruption
       shape: "(root: string) => number"
+    - name: ledgerPath
+      shape: "(root: string) => string"
     - name: lintProbe
       shape: "(input: LintInput) => LintFinding[]"
     - name: readLedger
       shape: "(root: string) => Promise<LedgerEntry[]>"
     - name: runContext
       shape: '(root: string, by: string) => Promise<Pick<LedgerEntry, "by" | "git" | "host">>'
+    - name: RunOutcome
+      shape: "interface"
+    - name: runTarget
+      shape: "(target: Target, opts: RunOptions) => Promise<RunOutcome>"
+    - name: scopeOfTarget
+      shape: "(target: Target, graph: Graph) => string | undefined"
     - name: sha256
       shape: "(input: string) => string"
     - name: Target
@@ -110,6 +118,19 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/verify-run.test.ts'"
     expect: exit_zero
+  - id: V-verify-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export function allTargets(" src/verify/run.ts &&
+      grep -qF "export function lastFor(" src/verify/ledger.ts &&
+      grep -qF "export function ledgerCorruption(" src/verify/ledger.ts &&
+      grep -qF "export async function readLedger(" src/verify/ledger.ts &&
+      grep -qF "export interface RunOutcome {" src/verify/run.ts &&
+      grep -qF "export async function runTarget(" src/verify/run.ts &&
+      grep -qF "export function scopeOfTarget(" src/verify/run.ts &&
+      grep -qF "export interface Target {" src/verify/run.ts &&
+      grep -qF "export function verifyChain(" src/verify/ledger.ts
   - id: V-verify-to-freshness
     kind: contract
     to: M-freshness
@@ -131,6 +152,11 @@ verify:
       grep -qF "export function lintProbe(" src/verify/lint.ts &&
       grep -qF "export async function runContext(" src/verify/ledger.ts &&
       grep -qF "export function sha256(" src/verify/ledger.ts
+  - id: V-verify-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export function ledgerPath(" src/verify/ledger.ts
   - id: V-verify-to-load
     kind: contract
     to: M-load

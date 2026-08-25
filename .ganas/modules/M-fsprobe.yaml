@@ -21,6 +21,8 @@ contract:
   outputs:
     - name: exists
       shape: "(path: string) => boolean"
+    - name: existsAsync
+      shape: "(path: string) => Promise<boolean>"
     - name: listDir
       shape: "(dir: string) => Promise<DirEntry[]>"
     - name: mtimeMs
@@ -32,6 +34,13 @@ verify:
     kind: probe
     run: "npx tsx --test 'test/fsprobe.test.ts'"
     expect: exit_zero
+  - id: V-fsprobe-to-commands
+    kind: contract
+    to: M-commands
+    run: >-
+      grep -qF "export function exists(" src/util/fsprobe.ts &&
+      grep -qF "export async function existsAsync(" src/util/fsprobe.ts &&
+      grep -qF "export async function listDir(" src/util/fsprobe.ts
   - id: V-fsprobe-to-freshness
     kind: contract
     to: M-freshness
@@ -40,6 +49,16 @@ verify:
   - id: V-fsprobe-to-graph-base
     kind: contract
     to: M-graph-base
+    run: >-
+      grep -qF "export function exists(" src/util/fsprobe.ts
+  - id: V-fsprobe-to-hook-io
+    kind: contract
+    to: M-hook-io
+    run: >-
+      grep -qF "export async function existsAsync(" src/util/fsprobe.ts
+  - id: V-fsprobe-to-render
+    kind: contract
+    to: M-render
     run: >-
       grep -qF "export function exists(" src/util/fsprobe.ts
   - id: V-fsprobe-to-util
@@ -57,3 +76,10 @@ verify:
     to: M-verify
     run: >-
       grep -qF "export function exists(" src/util/fsprobe.ts
+  - id: V-fsprobe-to-workflow
+    kind: contract
+    to: M-workflow
+    run: >-
+      grep -qF "export function exists(" src/util/fsprobe.ts &&
+      grep -qF "export async function listDir(" src/util/fsprobe.ts &&
+      grep -qF "export async function mtimeMs(" src/util/fsprobe.ts
