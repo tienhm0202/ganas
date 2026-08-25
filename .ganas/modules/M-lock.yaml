@@ -1,0 +1,31 @@
+id: M-lock
+scope: P-graph-core
+title: "Chỗ DUY NHẤT khoá mutex quanh một lượt đọc-sửa-ghi file dùng chung"
+nature: io
+paths:
+  - "src/util/lock.ts"
+
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-036):
+#
+#     node scripts/gen-ports.mjs --scope P-graph-core --print M-lock
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+#
+# Khối LÁ: chỉ dùng `node:fs/promises` + `node:path`, không nhập gì từ khối khác.
+contract:
+  outputs:
+    - name: withFileLock
+      shape: "<T>(lockFile: string, ttlMs: number, fn: () => Promise<T>) => Promise<T>"
+
+status: implemented
+verify:
+  - id: V-lock-probe
+    kind: probe
+    run: "npx tsx --test 'test/lock.test.ts'"
+    expect: exit_zero
+  - id: V-lock-to-verify
+    kind: contract
+    to: M-verify
+    run: >-
+      grep -qF "export async function withFileLock<T>(" src/util/lock.ts

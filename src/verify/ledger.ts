@@ -3,10 +3,11 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { dirname } from "node:path";
 
-import { ganasPath, LEDGER_FILE } from "../graph/paths.js";
+import { DIRS, ganasPath, LEDGER_FILE } from "../graph/paths.js";
 import type { LedgerEntry } from "../graph/types.js";
 import { runShell } from "../util/exec.js";
 import { exists } from "../util/fsprobe.js";
+import { withFileLock } from "../util/lock.js";
 
 /**
  * Sổ cái xác minh — append-only, **commit vào git**.
@@ -137,19 +138,50 @@ function runningHashOf(entries: readonly LedgerEntry[]): string {
   return running;
 }
 
+/**
+ * TTL của khoá sổ cái — MILI GIÂY, không phải phút: khoá chỉ sống trong đúng
+ * một lượt đọc-tính-ghi của `appendEntry`. Xem `withFileLock` (`util/lock.ts`).
+ */
+const LEDGER_LOCK_TTL_MS = 5000;
+
+/**
+ * Khoá mutex của sổ cái — đặt cạnh sổ cái, tên suy từ chính `LEDGER_FILE`,
+ * cùng khuôn `iceboxLockFile` (`commands/icebox.ts`). Nằm trong `.locks/` vì
+ * đó là `LOCAL_ONLY` (`graph/paths.ts`): file khoá là rác tạm của một máy, sổ
+ * cái mới là thứ commit vào git.
+ */
+function ledgerLockFile(root: string): string {
+  return ganasPath(root, DIRS.locks, `${LEDGER_FILE.replace(/[\\/]/g, "_")}.lock`);
+}
+
+/**
+ * Cộng một dòng vào sổ cái, DƯỚI KHOÁ.
+ *
+ * Phần đọc-tính-ghi phải nguyên tử với nhau, không chỉ phần ghi: `seq` và
+ * `prev_hash` của dòng mới đều suy từ TOÀN BỘ sổ cái đọc được ngay trước đó.
+ * Không khoá thì hai `ganas verify` chạy chồng nhau đọc cùng một trạng thái
+ * rồi cùng ghi — dòng sau nhận `seq` trùng dòng trước và `prev_hash` tính
+ * thiếu một dòng, tức ĐỨT chuỗi hash. Mà chuỗi hash chính là thứ duy nhất
+ * chứng minh sổ cái không bị sửa tay, nên đứt nó là mất luôn giá trị của cả
+ * cơ chế (ICE-014; `appendFile` bản thân nó nguyên tử ở tầng ghi, và đúng vì
+ * thế mà lỗ đua này không bao giờ lộ ra thành file rách — nó lộ ra thành một
+ * sổ cái đọc được nhưng không còn chứng minh được gì).
+ */
 export async function appendEntry(root: string, entry: LedgerEntry): Promise<void> {
   const file = ledgerPath(root);
   await mkdir(dirname(file), { recursive: true });
 
-  const existing = await readLedger(root);
-  const lastSeq = existing.length > 0 ? (existing[existing.length - 1]!.seq ?? 0) : 0;
-  const chained: LedgerEntry = {
-    ...entry,
-    seq: lastSeq + 1,
-    prev_hash: runningHashOf(existing),
-  };
+  await withFileLock(ledgerLockFile(root), LEDGER_LOCK_TTL_MS, async () => {
+    const existing = await readLedger(root);
+    const lastSeq = existing.length > 0 ? (existing[existing.length - 1]!.seq ?? 0) : 0;
+    const chained: LedgerEntry = {
+      ...entry,
+      seq: lastSeq + 1,
+      prev_hash: runningHashOf(existing),
+    };
 
-  await appendFile(file, JSON.stringify(chained) + "\n", "utf8");
+    await appendFile(file, JSON.stringify(chained) + "\n", "utf8");
+  });
 }
 
 export interface ChainVerdict {

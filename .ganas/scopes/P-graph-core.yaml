@@ -16,6 +16,7 @@ modules:
   - M-util
   - M-exec
   - M-fsprobe
+  - M-lock
 entry: M-model
 
 acceptance:

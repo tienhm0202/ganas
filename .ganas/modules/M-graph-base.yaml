@@ -147,6 +147,7 @@ verify:
     kind: contract
     to: M-verify
     run: >-
+      grep -qF "export const DIRS = {" src/graph/paths.ts &&
       grep -qF "export function ganasPath(" src/graph/paths.ts &&
       grep -qF "export interface Graph {" src/graph/types.ts &&
       grep -qF "export const LEDGER_FILE = \"verify-ledger.jsonl\";" src/graph/paths.ts &&

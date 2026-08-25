@@ -26,6 +26,8 @@ contract:
     - name: exists
       shape: "(path: string) => boolean"
     # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: DIRS
+      shape: "object"
     - name: ganasPath
       shape: "(root: string, ...parts: string[]) => string"
     - name: Graph
@@ -38,6 +40,9 @@ contract:
       shape: "(typeof LEDGER_RESULT)[number]"
     - name: Sourced
       shape: "{ value: T; file: string; index?: number }"
+    # từ M-lock (src/util/lock.ts)
+    - name: withFileLock
+      shape: "<T>(lockFile: string, ttlMs: number, fn: () => Promise<T>) => Promise<T>"
     # từ M-model (src/model/common.ts, src/model/knowledge.ts, src/model/module.ts, src/model/scope.ts, src/model/verification.ts)
     - name: Expect
       shape: "z.infer<typeof zExpect>"
@@ -110,6 +115,7 @@ depends_on:
   - M-exec
   - M-fsprobe
   - M-graph-base
+  - M-lock
   - M-model
   - M-util
 status: surveyed

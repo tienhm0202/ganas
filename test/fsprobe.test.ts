@@ -88,6 +88,11 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
     "src/graph/load.ts",
     "src/util/yaml.ts",
     "src/graph/claim.ts",
+    // M-lock: chỗ DUY NHẤT khoá mutex file. Nó dùng `stat` để đọc `mtime` của
+    // chính file khoá — không phải "tra hộ" ai, mà là một phần của phép khoá,
+    // đúng như `graph/claim.ts` ngay trên. Đi vòng qua `fsprobe` ở đây chỉ dời
+    // một nửa cơ chế ra khỏi chỗ cài nó.
+    "src/util/lock.ts",
     "src/state.ts",
     "src/hooks/io/io.ts",
     "src/mcp/server.ts",
