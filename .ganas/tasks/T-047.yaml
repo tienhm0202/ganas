@@ -1,0 +1,70 @@
+id: T-047
+title: "outsideBoundary hỏi git thay vì sổ phiên, để cảnh báo file ngoài ranh giới thôi im"
+serves:
+  - G-001
+implements: D-007
+scope: P-cli
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/icebox/2026-08.yaml"
+      why: "ICE-008 ghi chẩn đoán đầy đủ và ba lần tái phát đã đo"
+    - path: "src/boundary.ts"
+      why: "outsideBoundary và taskBoundary — chỗ phải đổi nguồn sự thật"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli-core
+  - M-workflow
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/boundary.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npm test"
+  - kind: artifact
+    path: "src/boundary.ts"
+    must_contain: "outsideBoundary"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Cảnh báo "file đã sửa nằm ngoài ranh giới code" KHÔNG thiếu — nó có sẵn ở
+  `outsideBoundary()` (`src/boundary.ts:145`), và cả `commands/gate.ts:25` lẫn
+  `commands/commit.ts:175` đều gọi. Nó im vì nguồn sai: `commit.ts:170` lấy
+  danh sách file đã sửa từ `touchedPathsFor()` — sổ phiên `.ganas/state.json` —
+  chứ không phải git.
+
+  Hai đường rò đã đo. Gọi CLI không kèm `--session` thì `sessionId` là `"cli"`,
+  không khớp bản ghi nào nên `touched` rỗng và `outsideBoundary` trả rỗng. Và
+  ngay cả đúng session cũng mất, vì `bindSession` thay cả bản ghi khi task đổi
+  (`src/state.ts:63`): phiên e96d9596 ghi 0 `touched_paths` dù vừa sửa cả chục
+  file.
+
+  Khuôn đã có sẵn trong chính file cần sửa: `commands/commit.ts:87` chạy
+  `git status --porcelain -z -uall -- <spec>` để dựng danh sách `foreign`, chỉ
+  khác là spec bó trong `.ganas/`. Nới spec ra toàn cây rồi lấy kết quả đó làm
+  đầu vào cho `outsideBoundary` là đủ — không phải viết cơ chế mới. Đó cũng là
+  lý do file kho tri thức lạc chỗ thì bị bắt (M-graph-base.yaml ở T-036) mà
+  file code lạc chỗ thì lọt.
+
+  Giữ nguyên ba quy ước đã ghi trong docstring của `outsideBoundary`, đừng nới
+  tay: `.ganas/` vẫn coi là trong (`ownsGanasFile` xử riêng, báo ở đây là in
+  trùng); ranh giới rỗng thì không kết luận gì; file mới tạo KHÔNG được đặc
+  cách. Và giữ đúng tính chất "chỉ cảnh báo, không bao giờ chặn, không đổi mã
+  thoát" — đổi thành chặn là việc khác, phải do người quyết.
+
+  Sổ phiên đừng bỏ: `touched_paths` còn trả lời câu khác (phiên này đụng gì)
+  và `subagent_touched` dựa vào nó. Chỉ đổi nguồn cho riêng phép đối chiếu
+  ranh giới.
