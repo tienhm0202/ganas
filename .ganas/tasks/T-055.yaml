@@ -1,0 +1,61 @@
+id: T-055
+title: "Probe nghiệm thu luồng ghép của P-cli phải kiểm luồng thật, không phải npm test"
+serves:
+  - G-001
+implements: D-007
+scope: P-cli
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/scopes/P-cli.yaml"
+      why: "Chỗ khai probe đang chạy lệnh chung chung"
+    - path: "test/flow.test.ts"
+      why: "Khuôn dựng project tạm và chạy CLI thật đầu-cuối"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/e2e-cli.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: artifact
+    path: "test/e2e-cli.test.ts"
+    must_contain: "P-cli"
+  - kind: verification
+    target: "M-cli/V-cli-smoke"
+
+notes: >-
+  CHẶN v1.0.0, và lý do KHÔNG phải thiếu độ phủ. Phạm vi P-cli khai
+  `V-cli-e2e` là "nghiệm thu luồng ghép", nhưng `run` của nó là `npm test` —
+  một lệnh chung chung. Chạy ngày 2026-08-25: đạt, nhưng ganas tự gắn nhãn
+  "chưa chứng minh được là có thể fail". Đúng thứ D-007 gọi là
+  `verify/probe-unrelated` và chính ganas sẽ réo nếu đó là probe của KHỐI.
+
+  740 test trong 51 file đã phủ luồng thật rồi, nên đây không phải lỗ hổng kiểm
+  thử — đây là BẢN GHI NÓI QUÁ. Một công cụ bán kỷ luật "không có bằng chứng thì
+  không ghi" mà phát hành 1.0 với ba tiêu chí nghiệm thu là lệnh chung chung thì
+  tự mâu thuẫn với chính mình. Đó mới là thứ phải sửa.
+
+  Việc: viết `test/e2e-cli.test.ts` chạy luồng THẬT của phạm vi này đầu-cuối
+  trong thư mục tạm, rồi đổi `run` của `V-cli-e2e` thành
+  `npx tsx --test 'test/e2e-cli.test.ts'`. Lệnh nhắc đúng tên tệp nên
+  `lintProbe` không còn coi là chung chung nữa.
+
+  Dùng `test/flow.test.ts` và `test/helpers.ts` làm khuôn — đã có sẵn cách
+  dựng project tạm và gọi CLI thật, đừng phát minh lại.
+
+  ĐỪNG chỉ đổi `run` cho hết cảnh báo mà không viết test thật. Làm vậy là thay
+  một bản ghi nói quá bằng một bản ghi nói dối, tệ hơn hẳn.
+
+  Chỉ sửa `.ganas/scopes/P-cli.yaml` và `test/e2e-cli.test.ts`. Hai phạm vi
+  còn lại có task riêng — `ownsGanasFile` chỉ cho mỗi task sở hữu đúng một file
+  scope, nên gộp là không commit nổi.

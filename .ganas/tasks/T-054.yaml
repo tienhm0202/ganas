@@ -1,0 +1,69 @@
+id: T-054
+title: "Lệnh trượt phải in được thân xác — truy npm test đỏ chập chờn trong tiến trình con"
+serves:
+  - G-001
+implements: D-007
+scope: P-graph-core
+status: todo
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: ".ganas/icebox/2026-08.yaml"
+      why: "ICE-011 ghi ba lần tái phát và mọi phép thử đã làm mà không tái hiện được"
+    - path: "src/util/exec.ts"
+      why: "judge() — hai nhánh trả lỗi, một nhánh nuốt mất thân xác lệnh"
+  facts: []
+  open_questions:
+    - "Vì sao npm test chỉ đỏ khi chạy trong tiến trình con của ganas, không đỏ khi chạy tay?"
+
+touches:
+  - M-exec
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/verify-run.test.ts'"
+  - kind: command
+    run: "npm run typecheck"
+  - kind: command
+    run: "npm test"
+  - kind: artifact
+    path: "src/util/exec.ts"
+    must_contain: "judge"
+  - kind: verification
+    target: "M-exec/V-exec-run"
+
+notes: >-
+  CHẶN v1.0.0. Đây là mục duy nhất trong icebox đánh thẳng vào lời hứa cốt lõi:
+  ganas bảo "chấm bằng lệnh, không bằng lời", nên phép chấm phải tất định. Ba
+  lần trong phiên 2026-08-24/25 `npm test` thoát mã 1 khi chạy BÊN TRONG
+  `ganas gate`/`ganas commit`, chạy tay ngay sau đó luôn xanh — và một lần làm
+  `ganas commit` TỪ CHỐI NHẦM một task thật sự xanh. Người dùng gặp cảnh đó sẽ
+  kết luận công cụ hỏng.
+
+  Việc chia làm hai phần, và phần (1) phải làm bất kể có truy ra nguyên nhân hay
+  không:
+
+  (1) LÀM CHO NÓ THÔI IM LẶNG. `judge()` ở `src/util/exec.ts` có hai nhánh trả
+  lỗi: nhánh `expect === "exit_zero"` (dòng ~74) đính kèm `firstLines(stderr)`,
+  nhánh cuối (dòng ~104) chỉ trả `thoát với mã ${code}`. Mà `npm test` báo lỗi
+  ra STDOUT chứ không phải stderr — nên cả hai nhánh đều cho ra một dòng trống
+  rỗng. Đó chính là lý do phiên này mù suốt ba lần: gate chỉ nói `thoát với mã
+  1`, không một chữ nào về việc test nào đỏ. Sửa: khi lệnh trượt mà stderr rỗng
+  thì lấy phần đuôi STDOUT. Giữ `firstLines` có giới hạn dòng — đừng đổ nguyên
+  log vào brief.
+
+  (2) TRUY NGUYÊN NHÂN. Manh mối đã có, đừng bỏ: lần thứ ba bản đỏ báo 735 test
+  thay vì 739 — HỤT ĐÚNG 4, bằng số test T-047 vừa thêm vào
+  `test/boundary.test.ts`. Tức có TỆP không chạy hết, không phải một assert sai.
+  Giả thuyết đáng thử trước: tiến trình con của ganas chạy `npm test` với cwd
+  hoặc env khác lúc chạy tay, hoặc tệp test mới đụng chung tài nguyên với chính
+  tiến trình ganas đang chạy (`.ganas/.locks/`, sổ cái, cây git).
+
+  Phép thử đã làm mà KHÔNG tái hiện được, đừng lặp lại vô ích: 5 lần chạy riêng
+  `test/boundary.test.ts`, 3 lần `npm test` trực tiếp, 1 lần ép chạy song song
+  với việc ghi vào `src/boundary.ts`.
+
+  Không truy ra được thì nói thẳng, ghi vào `open_questions`, và giao phần (1)
+  đã đủ để hạ mức nguy hiểm — nhưng ĐỪNG đóng ICE-011 khi chưa có nguyên nhân.
