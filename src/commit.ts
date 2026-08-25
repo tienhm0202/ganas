@@ -209,6 +209,95 @@ export async function checkStagedTree(
   }
 }
 
+/* ------------------------------------------------------------------------- *
+ * File đã sửa theo GIT — nguồn sự thật cho outsideBoundary()
+ * ------------------------------------------------------------------------- */
+
+export interface PorcelainEntry {
+  /** Cột index (đã stage). `?` = chưa track. */
+  x: string;
+  /** Cột working tree. Khác `" "` ⇒ trên đĩa còn khác với index. */
+  y: string;
+  path: string;
+}
+
+/**
+ * Parse `git status --porcelain -z`.
+ *
+ * Dùng `-z` chứ không phải bản có xuống dòng: với `core.quotepath` bật (mặc
+ * định), tên file có dấu bị escape thành `\303\251...` và mọi so khớp sau đó
+ * đều trượt. `-z` không escape gì.
+ *
+ * Mục đổi tên/copy chiếm HAI trường (đường dẫn mới và cũ) — lấy cả hai, vì cả
+ * hai đều là thứ cần vào commit.
+ */
+export function parsePorcelainZ(stdout: string): PorcelainEntry[] {
+  const fields = stdout.split("\0");
+  const entries: PorcelainEntry[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (!field || field.length < 4) continue;
+    const x = field[0]!;
+    const y = field[1]!;
+    entries.push({ x, y, path: field.slice(3) });
+    if (x === "R" || x === "C" || y === "R" || y === "C") {
+      const other = fields[++i];
+      if (other) entries.push({ x, y, path: other });
+    }
+  }
+  return entries;
+}
+
+/**
+ * `git status --porcelain -z -uall` giới hạn theo `pathspec`. `-uall`: mặc
+ * định git gộp cả thư mục chưa track thành MỘT dòng `?? dir/`, gộp như thế
+ * thì không phân loại được file nào thuộc phần nào — mà đó chính là việc cần
+ * làm ở cả `commands/commit.ts` (lọc file `.ganas/` của task) lẫn
+ * `gitTouchedPaths` dưới đây (đối chiếu ranh giới code).
+ *
+ * `pathspec` rỗng trả `[]` ngay — không gọi git cho một truy vấn vô nghĩa.
+ */
+export async function gitChangedPaths(
+  root: string,
+  pathspec: string[],
+): Promise<PorcelainEntry[]> {
+  if (pathspec.length === 0) return [];
+  const spec = pathspec.map(shellQuote).join(" ");
+  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
+    cwd: root,
+    timeoutMs: 15_000,
+  });
+  if (res.code !== 0) return [];
+  return parsePorcelainZ(res.stdout);
+}
+
+/**
+ * Mọi đường dẫn ĐÃ SỬA trong working tree, theo `git status` — KHÔNG phải sổ
+ * phiên `.ganas/state.json`.
+ *
+ * ICE-008 (mức chữa gốc, xem `.ganas/icebox/2026-08.yaml`): `outsideBoundary()`
+ * từng nhận `touched` từ `touchedPathsFor()` (sổ phiên), và sổ đó gần như luôn
+ * RỖNG — gọi CLI không kèm `--session` thì không khớp bản ghi nào, và ngay cả
+ * đúng session cũng mất vì `bindSession` thay cả bản ghi khi task đổi. Cảnh
+ * báo "file ngoài ranh giới" vì vậy im suốt dù cơ chế đã tồn tại.
+ *
+ * Git luôn biết file nào đổi bất kể session id, bất kể hook ghi kịp hay
+ * không, bất kể sub-agent hay phiên chính sửa — cùng nguồn mà
+ * `commands/commit.ts` đã dùng cho riêng `.ganas/` (dựng `owned`/`foreign`),
+ * ở đây chỉ nới pathspec ra toàn cây (`.`).
+ *
+ * Không lọc `.ganas/` ở đây — `outsideBoundary()` tự loại đường dẫn đó (xem
+ * docstring của nó), lọc hai lần thì một bên đổi mà bên kia quên là chỗ lệch.
+ *
+ * Không phải repo git hoặc `git status` lỗi ⇒ `[]`. Đó là "không biết", không
+ * phải "không có gì ngoài ranh giới" — `outsideBoundary()` còn vế
+ * `boundary.length === 0` để không kết luận ẩu từ một danh sách rỗng đáng ngờ.
+ */
+export async function gitTouchedPaths(root: string): Promise<string[]> {
+  const entries = await gitChangedPaths(root, ["."]);
+  return [...new Set(entries.map((e) => e.path))];
+}
+
 /** In kết quả chấm lại thành chữ. Trả `""` khi xanh — không có gì để nói thì đừng nói. */
 export function formatStagedTreeCheck(taskId: string, check: StagedTreeCheck): string {
   if (check.status === "ok") return "";

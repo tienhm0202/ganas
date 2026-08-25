@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { formatBoundaryWarning, matchPatterns, outsideBoundary, taskBoundary } from "../src/boundary.js";
+import { gitTouchedPaths } from "../src/commit.js";
 import { loadGraph } from "../src/graph/load.js";
 import { zTask } from "../src/model/index.js";
 import { TOUCHED_PATHS_CAP } from "../src/state.js";
@@ -231,6 +232,75 @@ test("⭐ matchPatterns khớp đúng ngữ nghĩa pathspec của git", async ()
         `pathspec ${JSON.stringify(spec)}: ganas và git phải kết luận giống nhau`,
       );
     }
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- gitTouchedPaths: nguồn thật của `touched` (ICE-008) ------------------- */
+
+/**
+ * ICE-008: `outsideBoundary()` từng nhận `touched` từ sổ phiên
+ * (`touchedPathsFor`) — sổ đó gần như luôn rỗng nên cảnh báo không bao giờ
+ * kêu. Bộ test này ghép `gitTouchedPaths` với `outsideBoundary` y hệt cách
+ * `commands/commit.ts` và `commands/gate.ts` gọi thật, KHÔNG đụng gì tới
+ * `.ganas/state.json` — đúng cái đường rò cũ.
+ */
+test("⭐ gitTouchedPaths + outsideBoundary: bắt được file NGOÀI ranh giới mà không cần --session", async () => {
+  const { root, task, graph } = await fixture();
+  try {
+    await runShell("git init -q .", { cwd: root });
+    await mkdir(join(root, "src/a"), { recursive: true });
+    await writeFile(join(root, "src/a/x.ts"), "trong ranh gioi\n", "utf8");
+    await mkdir(join(root, "scripts"), { recursive: true });
+    await writeFile(join(root, "scripts/deploy.sh"), "ngoai ranh gioi\n", "utf8");
+
+    const touched = await gitTouchedPaths(root);
+    assert.ok(touched.includes("src/a/x.ts"));
+    assert.ok(touched.includes("scripts/deploy.sh"));
+
+    assert.deepEqual(outsideBoundary(task, graph, touched), ["scripts/deploy.sh"]);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("gitTouchedPaths: file MỚI TẠO (chưa track) vẫn vào danh sách — không đặc cách", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    await runShell("git init -q .", { cwd: root });
+    await mkdir(join(root, "src/moi"), { recursive: true });
+    await writeFile(join(root, "src/moi/agent-tu-de.ts"), "chua track\n", "utf8");
+
+    const touched = await gitTouchedPaths(root);
+    assert.ok(
+      touched.includes("src/moi/agent-tu-de.ts"),
+      `phải thấy file mới tạo, có: ${JSON.stringify(touched)}`,
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("gitTouchedPaths: không phải repo git → rỗng, không ném lỗi", async () => {
+  const root = await makeProject({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    assert.deepEqual(await gitTouchedPaths(root), []);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("gitTouchedPaths: không có gì thay đổi trong cây git sạch → rỗng", async () => {
+  const { root } = await fixture();
+  try {
+    await runShell("git init -q .", { cwd: root });
+    await runShell("git add -A", { cwd: root });
+    await runShell(
+      `git -c user.email=t@t -c user.name=t commit -q -m x --no-gpg-sign`,
+      { cwd: root },
+    );
+    assert.deepEqual(await gitTouchedPaths(root), []);
   } finally {
     await cleanup(root);
   }

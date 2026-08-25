@@ -446,7 +446,11 @@ test("⭐ --dry-run cảnh báo file phiên đã sửa nằm NGOÀI ranh giới 
 
     // Bind phiên s1 vào T-001 (ranh giới: src/a/** + tests/e2e/domain.test.ts).
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
-    // Phiên ghi một file lạc ngoài ranh giới đó.
+    // Phiên ghi một file lạc ngoài ranh giới đó — nguồn sự thật giờ là GIT
+    // (ICE-008), nên file phải thật sự nằm trên đĩa, không chỉ ghi vào sổ
+    // phiên qua hook.
+    await mkdir(join(root, "scripts"), { recursive: true });
+    await writeFile(join(root, "scripts", "lac.sh"), "#!/bin/sh\n", "utf8");
     await handlers.postToolUse({
       cwd: root,
       session_id: "s1",

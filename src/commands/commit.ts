@@ -11,12 +11,20 @@ import {
   ownsGanasFile,
   taskBoundary,
 } from "../boundary.js";
-import { buildCommitMessage, checkStagedTree, formatStagedTreeCheck } from "../commit.js";
+import {
+  buildCommitMessage,
+  checkStagedTree,
+  formatStagedTreeCheck,
+  gitChangedPaths,
+  gitTouchedPaths,
+  parsePorcelainZ,
+  type PorcelainEntry,
+} from "../commit.js";
 import { alreadyGreen, evaluateGate, formatGate, type GateResult } from "../gate.js";
 import { GANAS_DIR } from "../graph/paths.js";
 import type { Sourced } from "../graph/types.js";
 import type { Task } from "../model/index.js";
-import { baselineFor, taskForSession, touchedPathsFor } from "../state.js";
+import { baselineFor, taskForSession } from "../state.js";
 import { type Argv, enabled, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
@@ -30,40 +38,11 @@ function quote(p: string): string {
   return `'${p.replace(/'/g, `'\\''`)}'`;
 }
 
-export interface PorcelainEntry {
-  /** Cột index (đã stage). `?` = chưa track. */
-  x: string;
-  /** Cột working tree. Khác `" "` ⇒ trên đĩa còn khác với index. */
-  y: string;
-  path: string;
-}
-
-/**
- * Parse `git status --porcelain -z`.
- *
- * Dùng `-z` chứ không phải bản có xuống dòng: với `core.quotepath` bật (mặc
- * định), tên file có dấu bị escape thành `\303\251...` và mọi so khớp sau đó
- * đều trượt. `-z` không escape gì.
- *
- * Mục đổi tên/copy chiếm HAI trường (đường dẫn mới và cũ) — lấy cả hai, vì cả
- * hai đều là thứ cần vào commit.
- */
-export function parsePorcelainZ(stdout: string): PorcelainEntry[] {
-  const fields = stdout.split("\0");
-  const entries: PorcelainEntry[] = [];
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i];
-    if (!field || field.length < 4) continue;
-    const x = field[0]!;
-    const y = field[1]!;
-    entries.push({ x, y, path: field.slice(3) });
-    if (x === "R" || x === "C" || y === "R" || y === "C") {
-      const other = fields[++i];
-      if (other) entries.push({ x, y, path: other });
-    }
-  }
-  return entries;
-}
+// Re-export: chỗ khác trong repo (kể cả test) từng nhập hai cái này từ đây.
+// Định nghĩa thật đã dời sang `../commit.js` để `gitTouchedPaths` — dùng cho
+// outsideBoundary() ở cả commit.ts lẫn gate.ts — có chung một bộ parse, không
+// phải mỗi nơi tự chép lại (xem ICE-008).
+export { parsePorcelainZ, type PorcelainEntry };
 
 /** File chưa vào git hẳn: chưa track, hoặc trên đĩa còn khác với index. */
 function notFullyStaged(e: PorcelainEntry): boolean {
@@ -76,20 +55,6 @@ function ownedPaths(task: Task, entries: readonly PorcelainEntry[]): string[] {
 
 function foreignPaths(task: Task, entries: readonly PorcelainEntry[]): string[] {
   return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
-}
-
-async function changedUnder(root: string, pathspec: string[]): Promise<PorcelainEntry[]> {
-  if (pathspec.length === 0) return [];
-  const spec = pathspec.map(quote).join(" ");
-  // `-uall`: mặc định git gộp cả thư mục chưa track thành MỘT dòng `?? .ganas/`.
-  // Gộp như thế thì không phân loại được file nào thuộc task nào — mà đó chính
-  // là việc ở đây.
-  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
-    cwd: root,
-    timeoutMs: 15_000,
-  });
-  if (res.code !== 0) return [];
-  return parsePorcelainZ(res.stdout);
 }
 
 /**
@@ -167,7 +132,8 @@ export async function run(argv: Argv): Promise<number> {
 
   // Cảnh báo đối chiếu ĐÚNG cái ranh giới sắp đem đi `git add` — dùng lại
   // `codePaths` chứ không tính lại, để không có đường nào cho hai thứ lệch nhau.
-  const touched = await touchedPathsFor(root, sessionId, taskId);
+  // Nguồn `touched` là GIT (gitTouchedPaths), không phải sổ phiên — xem ICE-008.
+  const touched = await gitTouchedPaths(root);
   const outsideWarning = formatBoundaryWarning(
     taskId,
     codePaths,
@@ -181,7 +147,7 @@ export async function run(argv: Argv): Promise<number> {
     enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
 
   if (flag(argv, "dry-run")) {
-    const ganasChanged = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+    const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
     const owned = ownedPaths(task, ganasChanged);
     const foreign = foreignPaths(task, ganasChanged);
     const message = buildCommitMessage(graph, task, gateResult);
@@ -205,7 +171,7 @@ export async function run(argv: Argv): Promise<number> {
   if (willClose) originalTaskFile = await closeTaskFile(root, sourced);
 
   // Liệt kê SAU khi đóng task, nếu không file task vừa sửa sẽ không có trong danh sách.
-  const ganasChanged = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+  const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
   const owned = ownedPaths(task, ganasChanged);
   const foreign = foreignPaths(task, ganasChanged);
 
@@ -308,7 +274,7 @@ export async function run(argv: Argv): Promise<number> {
 async function unstagedContractPaths(root: string, task: Task): Promise<string[]> {
   const existing = contractPathRefs(task).filter((r) => exists(join(root, r.path)));
   if (existing.length === 0) return [];
-  const changed = await changedUnder(
+  const changed = await gitChangedPaths(
     root,
     existing.map((r) => r.path),
   );

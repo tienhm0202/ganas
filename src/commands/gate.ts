@@ -1,6 +1,7 @@
 import { formatBoundaryWarning, formatDispatchWarning, outsideBoundary, taskBoundary } from "../boundary.js";
+import { gitTouchedPaths } from "../commit.js";
 import { alreadyGreen, evaluateGate, formatGate } from "../gate.js";
-import { baselineFor, subagentTouchedFor, taskForSession, touchedPathsFor } from "../state.js";
+import { baselineFor, subagentTouchedFor, taskForSession } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { openProject } from "./_common.js";
@@ -20,7 +21,9 @@ export async function run(argv: Argv): Promise<number> {
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
   const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
 
-  const touched = await touchedPathsFor(root, sessionId, taskId);
+  // Nguồn `touched` là GIT (gitTouchedPaths), không phải sổ phiên — sổ phiên
+  // gần như luôn rỗng nên cảnh báo boundary từng im suốt (ICE-008).
+  const touched = await gitTouchedPaths(root);
   const boundary = taskBoundary(task.value, graph);
   const outside = outsideBoundary(task.value, graph, touched);
 

@@ -9,6 +9,7 @@ import { loadGraph } from "../src/graph/load.js";
 import * as handlers from "../src/hooks/io/handlers.js";
 import { renderBrief } from "../src/render/brief.js";
 import { bindSession, markTouched, readState, TOUCHED_PATHS_CAP, touchedPathsFor } from "../src/state.js";
+import { runShell } from "../src/util/exec.js";
 import { moduleTargets, runTarget } from "../src/verify/run.js";
 import { cleanup, design, goal, makeProject, moduleYaml, scope, task } from "./helpers.js";
 
@@ -25,6 +26,19 @@ async function project(over: Record<string, string> = {}, config?: string): Prom
     ...over,
   });
   if (config) await writeFile(join(root, ".ganas", "config.yaml"), config, "utf8");
+  return root;
+}
+
+/**
+ * Như `project`, cộng `git init` — cần cho mọi test đối chiếu ranh giới code,
+ * vì nguồn `touched` của `outsideBoundary()` giờ là `git status`, không phải
+ * sổ phiên (xem ICE-008 trong `.ganas/icebox/`).
+ */
+async function gitProject(over: Record<string, string> = {}, config?: string): Promise<string> {
+  const root = await project(over, config);
+  await runShell("git init -q", { cwd: root });
+  await runShell('git config user.email "test@ganas.local"', { cwd: root });
+  await runShell('git config user.name "ganas test"', { cwd: root });
   return root;
 }
 
@@ -982,9 +996,13 @@ exit_contract:
 `;
 
 test("⭐ gate cảnh báo file NGOÀI ranh giới code nhưng không đổi mã thoát", async () => {
-  const root = await project({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
+  const root = await gitProject({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
   try {
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    // File lạc phải thật sự nằm trên đĩa — nguồn `touched` giờ là `git status`,
+    // không phải sổ phiên do hook ghi (ICE-008).
+    await mkdir(join(root, "scripts"), { recursive: true });
+    await writeFile(join(root, "scripts", "lac.sh"), "#!/bin/sh\n", "utf8");
     await handlers.postToolUse({
       cwd: root,
       session_id: "s1",
@@ -1021,9 +1039,11 @@ test("⭐ gate cảnh báo file NGOÀI ranh giới code nhưng không đổi mã
 });
 
 test("gate im lặng khi file đã sửa nằm TRONG ranh giới code", async () => {
-  const root = await project({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
+  const root = await gitProject({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
   try {
     await handlers.sessionStart({ cwd: root, session_id: "s1" });
+    await mkdir(join(root, "src", "a"), { recursive: true });
+    await writeFile(join(root, "src", "a", "x.ts"), "// trong ranh gioi\n", "utf8");
     await handlers.postToolUse({
       cwd: root,
       session_id: "s1",
@@ -1055,16 +1075,16 @@ test("gate im lặng khi file đã sửa nằm TRONG ranh giới code", async ()
   }
 });
 
-test("gate không có phiên thì không đoán bừa về ranh giới", async () => {
-  const root = await project({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
+test("⭐ gate cảnh báo ranh giới KHÔNG cần --session — nguồn là git, không phải sổ phiên", async () => {
+  // ICE-008: bản cũ lấy `touched` từ `touchedPathsFor()`, nên gọi không kèm
+  // `--session` là touched rỗng và cảnh báo im hẳn. Sau khi đổi nguồn sang
+  // `git status` (gitTouchedPaths), việc này không còn phụ thuộc session nữa
+  // — git luôn biết file nào đổi, bất kể sub-agent hay phiên chính, bất kể
+  // hook có ghi kịp hay không.
+  const root = await gitProject({ ".ganas/tasks/T-001.yaml": TASK_WITH_BOUNDARY });
   try {
-    await handlers.sessionStart({ cwd: root, session_id: "s1" });
-    await handlers.postToolUse({
-      cwd: root,
-      session_id: "s1",
-      tool_name: "Write",
-      tool_input: { file_path: "scripts/lac.sh" },
-    });
+    await mkdir(join(root, "scripts"), { recursive: true });
+    await writeFile(join(root, "scripts", "lac.sh"), "#!/bin/sh\n", "utf8");
 
     const out: string[] = [];
     const write = process.stdout.write.bind(process.stdout);
@@ -1074,13 +1094,15 @@ test("gate không có phiên thì không đoán bừa về ranh giới", async (
     });
     try {
       const gate = await import("../src/commands/gate.js");
-      // Không truyền `session` ⇒ touchedPathsFor trả [] ⇒ không có gì để đối chiếu.
+      // Cố tình KHÔNG truyền `session`.
       await gate.run({ positional: ["T-001"], options: { root }, flags: {}, passthrough: [] });
     } finally {
       process.stdout.write = write;
     }
 
-    assert.doesNotMatch(out.join(""), /NGOÀI ranh giới code/);
+    const text = out.join("");
+    assert.match(text, /NGOÀI ranh giới code/, `phải cảnh báo dù không có session. Đã in:\n${text}`);
+    assert.match(text, /scripts\/lac\.sh/);
   } finally {
     await cleanup(root);
   }
