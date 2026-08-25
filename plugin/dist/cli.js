@@ -179,13 +179,46 @@ var init_errors = __esm({
   }
 });
 
-// src/graph/paths.ts
+// src/util/fsprobe.ts
 import { existsSync } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
+function exists(path) {
+  return existsSync(path);
+}
+async function existsAsync(path) {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function listDir(dir) {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+async function mtimeMs(path) {
+  try {
+    return (await stat(path)).mtimeMs;
+  } catch {
+    return void 0;
+  }
+}
+var init_fsprobe = __esm({
+  "src/util/fsprobe.ts"() {
+    "use strict";
+  }
+});
+
+// src/graph/paths.ts
 import { dirname, join, resolve } from "node:path";
 function findGanasRoot(from = process.cwd()) {
   let dir = resolve(from);
   for (; ; ) {
-    if (existsSync(join(dir, GANAS_DIR, CONFIG_FILE))) return dir;
+    if (exists(join(dir, GANAS_DIR, CONFIG_FILE))) return dir;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -199,11 +232,12 @@ function requireGanasRoot(from = process.cwd()) {
 function ganasPath(root, ...parts) {
   return join(root, GANAS_DIR, ...parts);
 }
-var GANAS_DIR, DIRS, CONFIG_FILE, STATE_FILE, LOCAL_ONLY;
+var GANAS_DIR, DIRS, CONFIG_FILE, STATE_FILE, LEDGER_FILE, LOCAL_ONLY;
 var init_paths = __esm({
   "src/graph/paths.ts"() {
     "use strict";
     init_errors();
+    init_fsprobe();
     GANAS_DIR = ".ganas";
     DIRS = {
       goals: "goals",
@@ -230,6 +264,7 @@ var init_paths = __esm({
     };
     CONFIG_FILE = "config.yaml";
     STATE_FILE = "state.json";
+    LEDGER_FILE = "verify-ledger.jsonl";
     LOCAL_ONLY = [`${DIRS.runs}/`, `${DIRS.locks}/`, STATE_FILE];
   }
 });
@@ -276,10 +311,7 @@ function judge(result, expect) {
   }
   if (expect === "exit_zero") {
     if (result.code === 0) return { pass: true };
-    return {
-      pass: false,
-      reason: `tho\xE1t v\u1EDBi m\xE3 ${result.code}${result.stderr.trim() ? ` \u2014 ${firstLines(result.stderr)}` : ""}`
-    };
+    return { pass: false, reason: exitReason(result) };
   }
   if (expect.exit_code !== void 0 && result.code !== expect.exit_code) {
     return { pass: false, reason: `mong \u0111\u1EE3i m\xE3 tho\xE1t ${expect.exit_code}, nh\u1EADn ${result.code}` };
@@ -305,24 +337,47 @@ function judge(result, expect) {
     return { pass: false, reason: `stderr kh\xF4ng ch\u1EE9a "${expect.stderr_contains}"` };
   }
   if (expect.exit_code === void 0 && result.code !== 0) {
-    return { pass: false, reason: `tho\xE1t v\u1EDBi m\xE3 ${result.code}` };
+    return { pass: false, reason: exitReason(result) };
   }
   return { pass: true };
 }
-function firstLines(text, n = 3) {
-  return text.trim().split("\n").slice(0, n).join(" / ");
+function exitReason(result) {
+  const body = failureBody(result);
+  return `tho\xE1t v\u1EDBi m\xE3 ${result.code}${body ? ` \u2014 ${body}` : ""}`;
 }
-var DEFAULT_TIMEOUT_MS, MAX_BUFFER;
+function failureBody(result) {
+  if (result.stderr.trim()) return firstLines(result.stderr, STDERR_LINES);
+  if (result.stdout.trim()) return lastLines(result.stdout, STDOUT_TAIL_LINES);
+  return "";
+}
+function firstLines(text, n = STDERR_LINES) {
+  return joinLines(usefulLines(text).slice(0, n));
+}
+function lastLines(text, n = STDOUT_TAIL_LINES) {
+  return joinLines(usefulLines(text).slice(-n));
+}
+function usefulLines(text) {
+  return text.split("\n").map((line) => line.trimEnd()).filter((line) => line.trim() !== "" && !/^\s*at\s/.test(line));
+}
+function joinLines(lines) {
+  return lines.map((line) => truncate(line.trim())).join(" / ");
+}
+function truncate(line) {
+  return line.length > MAX_LINE_CHARS ? `${line.slice(0, MAX_LINE_CHARS)}\u2026` : line;
+}
+var DEFAULT_TIMEOUT_MS, MAX_BUFFER, STDERR_LINES, STDOUT_TAIL_LINES, MAX_LINE_CHARS;
 var init_exec = __esm({
   "src/util/exec.ts"() {
     "use strict";
     DEFAULT_TIMEOUT_MS = 12e4;
     MAX_BUFFER = 4 * 1024 * 1024;
+    STDERR_LINES = 3;
+    STDOUT_TAIL_LINES = 12;
+    MAX_LINE_CHARS = 200;
   }
 });
 
 // src/gate.ts
-import { existsSync as existsSync2 } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join as join2 } from "node:path";
 function criterionKey(c) {
@@ -372,7 +427,7 @@ async function checkCriterion(criterion, ctx) {
     }
     case "artifact": {
       const file = join2(ctx.root, criterion.path);
-      if (!existsSync2(file)) {
+      if (!exists(file)) {
         return { criterion, label, status: "fail", reason: `file ch\u01B0a t\u1ED3n t\u1EA1i` };
       }
       if (criterion.must_contain) {
@@ -399,7 +454,7 @@ async function checkCriterion(criterion, ctx) {
         };
       }
       const file = ganasPath(ctx.root, DIRS.runs, `${ctx.sessionId}.md`);
-      return existsSync2(file) ? { criterion, label, status: "pass" } : {
+      return exists(file) ? { criterion, label, status: "pass" } : {
         criterion,
         label,
         status: "fail",
@@ -439,11 +494,17 @@ function formatGate(result) {
   }
   return lines.join("\n");
 }
+async function evaluateTreeCriteria(root, criteria) {
+  const measurable = criteria.filter((c) => c.kind === "command" || c.kind === "artifact");
+  const freshness = /* @__PURE__ */ new Map();
+  return Promise.all(measurable.map((c) => checkCriterion(c, { root, freshness })));
+}
 var init_gate = __esm({
   "src/gate.ts"() {
     "use strict";
     init_paths();
     init_exec();
+    init_fsprobe();
   }
 });
 
@@ -458,8 +519,8 @@ function candidates(graph) {
   return [...graph.tasks.values()].filter((t) => t.value.status !== "done").map((task) => ({ task, blockers: openBlockers(graph, task.value) }));
 }
 function rankedCandidates(graph, opts = {}) {
-  const open2 = candidates(graph).filter((c) => c.blockers.length === 0);
-  if (open2.length === 0) return [];
+  const open3 = candidates(graph).filter((c) => c.blockers.length === 0);
+  if (open3.length === 0) return [];
   const rank = (c) => {
     const t = c.task.value;
     const scope = graph.scopes.get(t.scope)?.value;
@@ -471,7 +532,7 @@ function rankedCandidates(graph, opts = {}) {
     if (t.estimated_context === "small") score -= 1;
     return score;
   };
-  return open2.sort((a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id));
+  return open3.sort((a, b) => rank(a) - rank(b) || a.task.value.id.localeCompare(b.task.value.id));
 }
 function selectNextTask(graph, opts = {}) {
   return rankedCandidates(graph, opts)[0] ?? null;
@@ -4622,7 +4683,7 @@ var init_zod = __esm({
 });
 
 // src/model/common.ts
-var ID_PATTERNS, zGoalId, zDesignId, zTaskId, zFactId, zClaimId, zLegacyClaimId, zDecisionId, zModuleId, zScopeId, zIceboxId, zIsoDate, zHandle, zNonEmpty, zGlob, zExpect, zProbe, zScoreValue;
+var ID_PATTERNS, zGoalId, zDesignId, zTaskId, zFactId, zClaimId, zLegacyClaimId, zDecisionId, zModuleId, zScopeId, zIceboxId, zProposalId, zIsoDate, zHandle, zNonEmpty, zGlob, zExpect, zProbe, zScoreValue;
 var init_common = __esm({
   "src/model/common.ts"() {
     "use strict";
@@ -4643,7 +4704,9 @@ var init_common = __esm({
       /** Phạm vi công việc = đơn vị bàn giao có ranh giới code và người nghiệm thu. */
       scope: /^P-[a-z0-9][a-z0-9-]*$/,
       /** Icebox = việc đã quyết CHƯA làm. Xem docstring đầu `src/model/icebox.ts`. */
-      icebox: /^ICE-\d{3,}$/
+      icebox: /^ICE-\d{3,}$/,
+      /** Đề xuất chờ người duyệt. Xem docstring đầu `src/model/proposal.ts`. */
+      proposal: /^PR-\d{3,}$/
     };
     zGoalId = external_exports.string().regex(ID_PATTERNS.goal, "ID goal ph\u1EA3i d\u1EA1ng G-001");
     zDesignId = external_exports.string().regex(ID_PATTERNS.design, "ID design ph\u1EA3i d\u1EA1ng D-001");
@@ -4655,6 +4718,7 @@ var init_common = __esm({
     zModuleId = external_exports.string().regex(ID_PATTERNS.module, "ID kh\u1ED1i ph\u1EA3i d\u1EA1ng M-intent");
     zScopeId = external_exports.string().regex(ID_PATTERNS.scope, "ID ph\u1EA1m vi ph\u1EA3i d\u1EA1ng P-chat-core");
     zIceboxId = external_exports.string().regex(ID_PATTERNS.icebox, "ID icebox ph\u1EA3i d\u1EA1ng ICE-001");
+    zProposalId = external_exports.string().regex(ID_PATTERNS.proposal, "ID \u0111\u1EC1 xu\u1EA5t ph\u1EA3i d\u1EA1ng PR-001");
     zIsoDate = external_exports.string().min(1).refine((s) => !Number.isNaN(Date.parse(s)), "ph\u1EA3i l\xE0 ng\xE0y ISO 8601 h\u1EE3p l\u1EC7");
     zHandle = external_exports.string().regex(/^@[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'handle ph\u1EA3i d\u1EA1ng "@ten-nguoi"');
     zNonEmpty = external_exports.string().trim().min(1, "kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng");
@@ -4711,6 +4775,10 @@ function parseAnchorString(raw) {
   if (!s.includes(" ")) return { kind: "file", path: s };
   return null;
 }
+function preview(quote3) {
+  const flat = quote3.trim().replace(/\s+/g, " ");
+  return flat.length <= QUOTE_PREVIEW ? flat : `${flat.slice(0, QUOTE_PREVIEW).trimEnd()}\u2026`;
+}
 function formatAnchor(a) {
   switch (a.kind) {
     case "file":
@@ -4719,12 +4787,12 @@ function formatAnchor(a) {
     case "commit":
       return `commit:${a.sha.slice(0, 8)}`;
     case "url":
-      return `${a.url} (l\u1EA5y ${a.fetched_at.slice(0, 10)})`;
+      return a.quote ? `${a.url} (l\u1EA5y ${a.fetched_at.slice(0, 10)}) \u2014 "${preview(a.quote)}"` : `${a.url} (l\u1EA5y ${a.fetched_at.slice(0, 10)})`;
     case "human":
       return `${a.by} ${a.at.slice(0, 10)}${a.link ? ` \u2014 ${a.link}` : ""}`;
   }
 }
-var zFileAnchor, zCommitAnchor, zUrlAnchor, zHumanAnchor, zAnchorObject, FILE_HASH_RANGE, FILE_COLON, COMMIT, zAnchor, NEED_ANCHOR, zAnchors;
+var zFileAnchor, zCommitAnchor, zUrlAnchor, zHumanAnchor, zAnchorObject, FILE_HASH_RANGE, FILE_COLON, COMMIT, zAnchor, NEED_ANCHOR, zAnchors, QUOTE_PREVIEW;
 var init_anchor = __esm({
   "src/model/anchor.ts"() {
     "use strict";
@@ -4779,6 +4847,7 @@ var init_anchor = __esm({
     });
     NEED_ANCHOR = "ph\u1EA3i c\xF3 `anchors` \u2014 b\u1EB1ng ch\u1EE9ng cho ph\xE1t bi\u1EC3u n\xE0y. D\xF9ng `src/a.ts#L42`, `commit:abc1234`, ho\u1EB7c d\u1EA1ng object cho URL (k\xE8m `fetched_at`) / ng\u01B0\u1EDDi (`kind: human`). Kh\xF4ng ch\u1EC9 ra \u0111\u01B0\u1EE3c ngu\u1ED3n th\xEC \u0111\u1EEBng ghi: \u0111\u01B0a v\xE0o `open_questions` c\u1EE7a task thay v\xEC \u0111\u01B0a v\xE0o kho tri th\u1EE9c.";
     zAnchors = external_exports.array(zAnchor, { required_error: NEED_ANCHOR, invalid_type_error: NEED_ANCHOR }).min(1, NEED_ANCHOR);
+    QUOTE_PREVIEW = 60;
   }
 });
 
@@ -4813,7 +4882,9 @@ var init_config = __esm({
       /** Kết thúc phiên khi exit_contract chưa thoả. */
       "exit_contract",
       /** Tạo/đóng task không neo được vào phạm vi/goal. */
-      "task_link"
+      "task_link",
+      /** Model tự đặt status: approved/rejected cho proposal thay vì `ganas proposal approve/reject`. */
+      "proposal_decision"
     ];
     MODEL_TIER = ["main", "verifier", "scribe"];
     HARNESS = [
@@ -4869,7 +4940,22 @@ var init_config = __esm({
          * hoang và một phiên khác được phép giành lại. Xem `graph/claim.ts`.
          */
         ttl_minutes: external_exports.number().int().positive().default(240)
-      }).default({})
+      }).default({}),
+      /**
+       * Lệnh kiểm TOÀN DỰ ÁN mà `ganas commit` chạy trên cây sắp được commit
+       * (vd `npm run typecheck`) — khác hẳn các lệnh trong `exit_contract` của
+       * từng task, vốn chỉ kiểm đúng PHẦN task đó chạm tới. Một task có thể có
+       * exit_contract xanh (phần của nó đúng) trong khi cây tổng vẫn không biên
+       * dịch được vì một thay đổi bắt buộc trải sang phạm vi khác — đây là lớp
+       * chặn cho đúng khoảng hở đó, xem PR-007.
+       *
+       * TUỲ CHỌN, mặc định trống: dự án không khai thì `ganas commit` bỏ qua
+       * phép kiểm này kèm một dòng báo, không phải đỏ. Bắt buộc khai sẽ chặn
+       * đứng mọi dự án cũ ngay lần commit đầu tiên — trái luật `enforcement`
+       * mặc định `warn` (xem `.claude/rules/architecture.md`), nên field này
+       * phải mềm y như những luật khác.
+       */
+      build_check: external_exports.string().optional()
     });
   }
 });
@@ -5296,6 +5382,44 @@ var init_verification = __esm({
 });
 
 // src/model/module.ts
+function subtreeClaim(glob) {
+  const normalized = glob.split("\\").join("/").replace(/^\.\//, "");
+  const m = /^([^*?[{]+)\/\*\*(\/.*)?$/.exec(normalized);
+  const dir = m?.[1]?.replace(/\/+$/, "");
+  return dir ? dir : void 0;
+}
+function moduleGuideDir(paths) {
+  const claims = /* @__PURE__ */ new Set();
+  for (const p of paths) {
+    const dir = subtreeClaim(p);
+    if (dir !== void 0) claims.add(dir);
+  }
+  return claims.size === 1 ? [...claims][0] : void 0;
+}
+function claimsOf(paths) {
+  return paths.map((raw) => {
+    const normalized = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
+    const cut = normalized.search(/[*?[{]/);
+    if (cut === -1) return { kind: "file", value: normalized };
+    const head = normalized.slice(0, cut);
+    const slash = head.lastIndexOf("/");
+    return { kind: "subtree", value: slash === -1 ? "" : head.slice(0, slash) };
+  });
+}
+function inside(file, dir) {
+  return dir === "" || file === dir || file.startsWith(`${dir}/`);
+}
+function claimsTouch(a, b) {
+  if (a.kind === "file" && b.kind === "file") return a.value === b.value;
+  if (a.kind === "file") return inside(a.value, b.value);
+  if (b.kind === "file") return inside(b.value, a.value);
+  return inside(a.value, b.value) || inside(b.value, a.value);
+}
+function modulePathsOverlap(a, b) {
+  const ca = claimsOf(a);
+  const cb = claimsOf(b);
+  return ca.some((x) => cb.some((y) => claimsTouch(x, y)));
+}
 var MODULE_NATURE, MODULE_STATUS, zPort, zContract, zModule;
 var init_module = __esm({
   "src/model/module.ts"() {
@@ -5383,6 +5507,135 @@ var init_module = __esm({
           code: external_exports.ZodIssueCode.custom,
           path: ["paths"],
           message: `kh\u1ED1i ${m.id} \u0111\xE3 ${m.status} nh\u01B0ng ch\u01B0a khai \`paths\` \u2014 code c\u1EE7a n\xF3 n\u1EB1m \u1EDF \u0111\xE2u?`
+        });
+      }
+    });
+  }
+});
+
+// src/model/proposal.ts
+var PROPOSAL_STATUS, zPromotedTarget, zProposal;
+var init_proposal = __esm({
+  "src/model/proposal.ts"() {
+    "use strict";
+    init_zod();
+    init_anchor();
+    init_common();
+    init_knowledge();
+    PROPOSAL_STATUS = ["pending", "approved", "rejected", "superseded"];
+    zPromotedTarget = external_exports.union([zDesignId, zTaskId, zIceboxId], {
+      errorMap: () => ({
+        message: "`promoted_to` ph\u1EA3i l\xE0 ID design (D-001), task (T-001) ho\u1EB7c icebox (ICE-001)"
+      })
+    });
+    zProposal = external_exports.object({
+      id: zProposalId,
+      title: zNonEmpty,
+      /** Bắt buộc — xem docstring trên. */
+      scope: zScopeId,
+      /**
+       * Chỗ lệch là gì. Tách khỏi `proposed_change` có chủ đích: người duyệt phải
+       * đọc được vấn đề trước khi đọc giải pháp, nếu không thì mọi đề xuất đều
+       * "nghe hợp lý" — đó là cách một refactor không cần thiết được duyệt.
+       */
+      problem: zNonEmpty,
+      proposed_change: zNonEmpty,
+      /**
+       * Bằng chứng, không rỗng. Cùng luật đã áp cho fact/claim
+       * (`.claude/rules/ganas-knowledge.md`): không chỉ được nguồn thì không phải
+       * phát hiện, chỉ là ý kiến — và ý kiến thì không đáng để người bỏ thời gian
+       * duyệt.
+       */
+      anchors: zAnchors,
+      /** Quan trọng đến đâu nếu bỏ qua. Cùng thang `DebtScore.weight`. */
+      weight: zScoreValue,
+      /** Dễ sửa đến đâu. Cùng thang `DebtScore.ease`. */
+      ease: zScoreValue,
+      /** Thời điểm phát hiện. KHÔNG default `now` — lệnh `new` sẽ điền. */
+      found_at: zIsoDate,
+      status: external_exports.enum(PROPOSAL_STATUS).default("pending"),
+      /**
+       * Ai đã trả lời, và lúc nào. Người, luôn luôn: duyệt là việc của người,
+       * cùng luật đã áp cho `Decision.decided_by`. Model tự điền hai trường này
+       * là giả mạo một quyết định chưa xảy ra — hook chặn ở tầng ghi file.
+       */
+      decided_by: zHandle.optional(),
+      decided_at: zIsoDate.optional(),
+      /**
+       * Bắt buộc khi từ chối. "Không refactor" mà không nói vì sao thì phiên sau
+       * đề xuất lại đúng thứ vừa bị loại, và người duyệt phải trả lời hai lần.
+       */
+      why_rejected: zNonEmpty.optional(),
+      /** Cạnh MỘT CHIỀU tới thứ sinh ra từ đề xuất này. */
+      promoted_to: zPromotedTarget.optional(),
+      /** Đề xuất cũ mà bản này thay thế. Cùng khuôn `Design.supersedes`. */
+      supersedes: external_exports.array(zProposalId).default([]),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((p, ctx) => {
+      const decided = p.status === "approved" || p.status === "rejected";
+      if (decided && !p.decided_by) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["decided_by"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 status="${p.status}" nh\u01B0ng thi\u1EBFu decided_by \u2014 duy\u1EC7t hay t\u1EEB ch\u1ED1i \u0111\u1EC1u l\xE0 vi\u1EC7c c\u1EE7a ng\u01B0\u1EDDi, ph\u1EA3i ghi t\xEAn ng\u01B0\u1EDDi \u0111\xF3.`
+        });
+      }
+      if (decided && !p.decided_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["decided_at"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 status="${p.status}" nh\u01B0ng thi\u1EBFu decided_at`
+        });
+      }
+      if (p.status === "rejected" && !p.why_rejected) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["why_rejected"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} b\u1ECB t\u1EEB ch\u1ED1i nh\u01B0ng thi\u1EBFu why_rejected. T\u1EEB ch\u1ED1i kh\xF4ng n\xF3i l\xFD do th\xEC phi\xEAn sau \u0111\u1EC1 xu\u1EA5t l\u1EA1i \u0111\xFAng th\u1EE9 v\u1EEBa b\u1ECB lo\u1EA1i.`
+        });
+      }
+      if (p.status === "pending") {
+        for (const [field, value] of [
+          ["decided_by", p.decided_by],
+          ["decided_at", p.decided_at],
+          ["why_rejected", p.why_rejected]
+        ]) {
+          if (value !== void 0) {
+            ctx.addIssue({
+              code: external_exports.ZodIssueCode.custom,
+              path: [field],
+              message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF2n status="pending" nh\u01B0ng \u0111\xE3 c\xF3 ${field} \u2014 ch\u01B0a ai tr\u1EA3 l\u1EDDi m\xE0 \u0111\xE3 c\xF3 d\u1EA5u v\u1EBFt \u0111\xE3 tr\u1EA3 l\u1EDDi.`
+            });
+          }
+        }
+      }
+      if (p.promoted_to && p.status !== "approved") {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["promoted_to"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} ch\u1EC9 \u0111\u01B0\u1EE3c c\xF3 promoted_to khi status="approved"`
+        });
+      }
+      if (p.supersedes.includes(p.id)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["supersedes"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} kh\xF4ng th\u1EC3 thay th\u1EBF ch\xEDnh n\xF3`
+        });
+      }
+      const dup = p.supersedes.find((x, i) => p.supersedes.indexOf(x) !== i);
+      if (dup) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["supersedes"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} li\u1EC7t k\xEA ${dup} hai l\u1EA7n`
+        });
+      }
+      if (Date.parse(p.found_at) > Date.now() + CLOCK_SKEW_MS) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["found_at"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 found_at \u1EDF t\u01B0\u01A1ng lai (${p.found_at})`
         });
       }
     });
@@ -5581,9 +5834,142 @@ var init_model = __esm({
     init_icebox();
     init_knowledge();
     init_module();
+    init_proposal();
     init_scope();
     init_task();
     init_verification();
+  }
+});
+
+// src/util/glob.ts
+import { join as join3, relative, sep } from "node:path";
+function expandBraces(pattern) {
+  const open3 = pattern.indexOf("{");
+  if (open3 === -1) return [pattern];
+  let depth = 0;
+  let close = -1;
+  for (let i = open3; i < pattern.length; i++) {
+    if (pattern[i] === "{") depth++;
+    else if (pattern[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close === -1) return [pattern];
+  const prefix = pattern.slice(0, open3);
+  const suffix = pattern.slice(close + 1);
+  const body = pattern.slice(open3 + 1, close);
+  const parts = [];
+  let current = "";
+  let nest = 0;
+  for (const ch of body) {
+    if (ch === "{") nest++;
+    else if (ch === "}") nest--;
+    if (ch === "," && nest === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.flatMap((p) => expandBraces(prefix + p + suffix));
+}
+function segmentToRegex(segment) {
+  let out = "";
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === "*") {
+      out += "[^/]*";
+    } else if (ch === "?") {
+      out += "[^/]";
+    } else if (ch === "[") {
+      const close = segment.indexOf("]", i + 1);
+      if (close === -1) {
+        out += "\\[";
+      } else {
+        const body = segment.slice(i + 1, close);
+        out += `[${body.startsWith("!") ? "^" + body.slice(1) : body}]`;
+        i = close;
+      }
+    } else {
+      out += ch.replace(/[.+^${}()|\\]/g, "\\$&");
+    }
+  }
+  return out;
+}
+function patternToRegex(pattern) {
+  const segments = pattern.split("/");
+  const parts = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (seg === "**") {
+      parts.push(i === segments.length - 1 ? "(?:.*)?" : "(?:.*/)?");
+      continue;
+    }
+    parts.push(segmentToRegex(seg));
+    if (i < segments.length - 1 && segments[i + 1] !== "**") parts.push("/");
+  }
+  return new RegExp(`^${parts.join("")}$`);
+}
+function matchesAny(path, patterns) {
+  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  for (const pattern of patterns) {
+    let regexes = cache.get(pattern);
+    if (!regexes) {
+      regexes = expandBraces(pattern).map(patternToRegex);
+      cache.set(pattern, regexes);
+    }
+    if (regexes.some((re) => re.test(normalized))) return true;
+  }
+  return false;
+}
+async function listProjectFiles(root) {
+  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
+    cwd: root,
+    timeoutMs: 2e4
+  });
+  if (git.code === 0 && git.stdout.length > 0) {
+    return git.stdout.split("\0").filter(Boolean);
+  }
+  return walk(root, root, []);
+}
+async function walk(root, dir, acc) {
+  const entries = await listDir(dir);
+  for (const entry of entries) {
+    const full = join3(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      await walk(root, full, acc);
+    } else if (entry.isFile()) {
+      acc.push(relative(root, full).split(sep).join("/"));
+    }
+  }
+  return acc;
+}
+var cache, SKIP_DIRS;
+var init_glob = __esm({
+  "src/util/glob.ts"() {
+    "use strict";
+    init_exec();
+    init_fsprobe();
+    cache = /* @__PURE__ */ new Map();
+    SKIP_DIRS = /* @__PURE__ */ new Set([
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      "out",
+      "target",
+      "vendor",
+      ".next",
+      ".venv",
+      "__pycache__",
+      ".ganas"
+    ]);
   }
 });
 
@@ -12795,7 +13181,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument6(source, options = {}) {
+    function parseDocument7(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -12821,7 +13207,7 @@ var require_public_api = __commonJS({
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument6(src, options);
+      const doc = parseDocument7(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
@@ -12857,7 +13243,7 @@ var require_public_api = __commonJS({
     }
     exports.parse = parse;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument6;
+    exports.parseDocument = parseDocument7;
     exports.stringify = stringify;
   }
 });
@@ -12955,12 +13341,53 @@ var init_yaml = __esm({
   }
 });
 
+// src/util/lock.ts
+import { mkdir, open, rm, stat as stat2 } from "node:fs/promises";
+import { dirname as dirname2 } from "node:path";
+async function withFileLock(lockFile, ttlMs, fn) {
+  await mkdir(dirname2(lockFile), { recursive: true });
+  const giveUpAfterMs = ttlMs * 5;
+  const waitStartedAt = Date.now();
+  for (; ; ) {
+    try {
+      const handle = await open(lockFile, "wx");
+      await handle.close();
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+      const info = await stat2(lockFile).catch(() => null);
+      if (!info || Date.now() - info.mtimeMs > ttlMs) {
+        await rm(lockFile, { force: true });
+        continue;
+      }
+      if (Date.now() - waitStartedAt > giveUpAfterMs) {
+        throw new Error(
+          `withFileLock: kh\xF4ng gi\xE0nh \u0111\u01B0\u1EE3c kho\xE1 ${lockFile} sau ${giveUpAfterMs}ms \u2014 c\xF3 ti\u1EBFn tr\xECnh kh\xE1c \u0111ang gi\u1EEF n\xF3 l\xE2u b\u1EA5t th\u01B0\u1EDDng.`,
+          { cause: err }
+        );
+      }
+      await new Promise((resolve4) => setTimeout(resolve4, LOCK_POLL_MS));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    await rm(lockFile, { force: true });
+  }
+}
+var LOCK_POLL_MS;
+var init_lock = __esm({
+  "src/util/lock.ts"() {
+    "use strict";
+    LOCK_POLL_MS = 20;
+  }
+});
+
 // src/verify/ledger.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync3 } from "node:fs";
-import { appendFile, mkdir, readFile as readFile3 } from "node:fs/promises";
+import { appendFile, mkdir as mkdir2, readFile as readFile3 } from "node:fs/promises";
 import { hostname } from "node:os";
-import { dirname as dirname2 } from "node:path";
+import { dirname as dirname3 } from "node:path";
 function sha256(input) {
   return createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16);
 }
@@ -13011,17 +13438,22 @@ function runningHashOf(entries) {
   }
   return running;
 }
+function ledgerLockFile(root) {
+  return ganasPath(root, DIRS.locks, `${LEDGER_FILE.replace(/[\\/]/g, "_")}.lock`);
+}
 async function appendEntry(root, entry) {
   const file = ledgerPath(root);
-  await mkdir(dirname2(file), { recursive: true });
-  const existing = await readLedger(root);
-  const lastSeq = existing.length > 0 ? existing[existing.length - 1].seq ?? 0 : 0;
-  const chained = {
-    ...entry,
-    seq: lastSeq + 1,
-    prev_hash: runningHashOf(existing)
-  };
-  await appendFile(file, JSON.stringify(chained) + "\n", "utf8");
+  await mkdir2(dirname3(file), { recursive: true });
+  await withFileLock(ledgerLockFile(root), LEDGER_LOCK_TTL_MS, async () => {
+    const existing = await readLedger(root);
+    const lastSeq = existing.length > 0 ? existing[existing.length - 1].seq ?? 0 : 0;
+    const chained = {
+      ...entry,
+      seq: lastSeq + 1,
+      prev_hash: runningHashOf(existing)
+    };
+    await appendFile(file, JSON.stringify(chained) + "\n", "utf8");
+  });
 }
 function verifyChain(entries) {
   let running = CHAIN_GENESIS;
@@ -13043,7 +13475,7 @@ function ledgerCorruption(root) {
 async function readLedger(root) {
   const file = ledgerPath(root);
   corruptLines.set(root, 0);
-  if (!existsSync3(file)) return [];
+  if (!exists(file)) return [];
   const raw = await readFile3(file, "utf8");
   const out = [];
   let bad = 0;
@@ -13087,15 +13519,17 @@ async function runContext(root, by) {
     host: hostname()
   };
 }
-var LEDGER_FILE, FINGERPRINT_FIELDS, CHAIN_GENESIS, corruptLines;
+var FINGERPRINT_FIELDS, CHAIN_GENESIS, LEDGER_LOCK_TTL_MS, corruptLines;
 var init_ledger = __esm({
   "src/verify/ledger.ts"() {
     "use strict";
     init_paths();
     init_exec();
-    LEDGER_FILE = "verify-ledger.jsonl";
+    init_fsprobe();
+    init_lock();
     FINGERPRINT_FIELDS = ["model", "prompt", "dataset"];
     CHAIN_GENESIS = "0".repeat(64);
+    LEDGER_LOCK_TTL_MS = 5e3;
     corruptLines = /* @__PURE__ */ new Map();
   }
 });
@@ -13117,31 +13551,31 @@ function tokensOf(text) {
 }
 function lintProbe(input) {
   const findings = [];
-  const run20 = input.run.trim();
+  const run21 = input.run.trim();
   for (const [pattern, what] of DANGEROUS) {
-    if (pattern.test(run20)) {
+    if (pattern.test(run21)) {
       findings.push({
         code: "dangerous",
         severity: "error",
-        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run20}\``,
+        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run21}\``,
         hint: `ganas s\u1EBD KH\xD4NG ch\u1EA1y l\u1EC7nh n\xE0y. Probe ch\u1EC9 \u0111\u01B0\u1EE3c \u0111\u1ECDc v\xE0 ki\u1EC3m tra, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1ED5i tr\u1EA1ng th\xE1i h\u1EC7 th\u1ED1ng.`
       });
       return findings;
     }
   }
-  const simple = run20.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
+  const simple = run21.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
   if (ALWAYS_TRUE.some((re) => re.test(simple))) {
     findings.push({
       code: "tautological",
       severity: "error",
-      message: `probe \`${run20}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
+      message: `probe \`${run21}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
       hint: `Probe ph\u1EA3i c\xF3 kh\u1EA3 n\u0103ng FAIL khi ph\xE1t bi\u1EC3u sai. Vi\u1EBFt l\u1EC7nh th\u1EADt s\u1EF1 ch\u1EA1m v\xE0o th\u1EE9 \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh (vd \`test -f <\u0111\u01B0\u1EDDng-d\u1EABn>\`, \`grep -q '<chu\u1ED7i>' <file>\`, \`npm test -- <t\xEAn-test>\`).`
     });
     return findings;
   }
   const haystack = [input.statement ?? "", ...input.context ?? []].join(" ");
   if (haystack.trim()) {
-    const probeTokens = [...tokensOf(run20)].filter((t) => !SHELL_NOISE.has(t));
+    const probeTokens = [...tokensOf(run21)].filter((t) => !SHELL_NOISE.has(t));
     const claimTokens = tokensOf(haystack);
     const shared = probeTokens.some(
       (t) => [...claimTokens].some((c) => c === t || c.includes(t) || t.includes(c))
@@ -13150,7 +13584,7 @@ function lintProbe(input) {
       findings.push({
         code: "unrelated",
         severity: "warning",
-        message: `probe \`${run20}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
+        message: `probe \`${run21}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
         hint: `Ki\u1EC3m l\u1EA1i xem probe c\xF3 th\u1EADt s\u1EF1 ki\u1EC3m \u0111\xFAng \u0111i\u1EC1u \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh kh\xF4ng.`
       });
     }
@@ -13217,8 +13651,34 @@ var init_lint = __esm({
 });
 
 // src/graph/validate.ts
-import { existsSync as existsSync4 } from "node:fs";
-import { join as join3 } from "node:path";
+import { join as join4, posix } from "node:path";
+function edgeKey(from, to) {
+  return `${from} ${to}`;
+}
+function codeModuleEdges(graph) {
+  const owners = [...graph.modules].map(([id, m]) => ({ id, paths: m.value.paths }));
+  const cache2 = /* @__PURE__ */ new Map();
+  const ownerOf = (file) => {
+    if (cache2.has(file)) return cache2.get(file);
+    const id = owners.find((o) => matchesAny(file, o.paths))?.id;
+    cache2.set(file, id);
+    return id;
+  };
+  const edges = /* @__PURE__ */ new Map();
+  for (const [file, imports] of graph.codeImports) {
+    const from = ownerOf(file);
+    if (!from) continue;
+    for (const imp of imports) {
+      const target = posix.join(posix.dirname(file), imp.specifier.replace(/\.js$/, ".ts"));
+      const to = ownerOf(target);
+      if (!to || to === from) continue;
+      const seen = edges.get(edgeKey(from, to));
+      if (seen) seen.typeOnly = seen.typeOnly && imp.typeOnly;
+      else edges.set(edgeKey(from, to), { from, to, typeOnly: imp.typeOnly });
+    }
+  }
+  return [...edges.values()];
+}
 function at(graph, sourced, ...path) {
   const loaded = graph.sources.get(sourced.file);
   if (!loaded) return void 0;
@@ -13630,6 +14090,32 @@ function validateGraph(graph, opts = {}) {
       hint: `S\u01A1 \u0111\u1ED3 kh\u1ED1i ph\u1EA3i l\xE0 \u0111\u1ED3 th\u1ECB kh\xF4ng chu tr\xECnh, n\u1EBFu kh\xF4ng kh\xF4ng lan truy\u1EC1n \u0111\u01B0\u1EE3c \u0111\u1ED9 tin.`
     });
   }
+  const codeEdges = codeModuleEdges(graph);
+  const codeAdjacency = /* @__PURE__ */ new Map();
+  for (const edge of codeEdges) {
+    const list = codeAdjacency.get(edge.from);
+    if (list) list.push(edge.to);
+    else codeAdjacency.set(edge.from, [edge.to]);
+  }
+  const codeCycle = findCycle(codeAdjacency);
+  if (codeCycle) {
+    const head = graph.modules.get(codeCycle[0]);
+    const typeOnlyOf = new Map(codeEdges.map((e) => [edgeKey(e.from, e.to), e.typeOnly]));
+    const legs = codeCycle.slice(0, -1).map((from, i) => {
+      const to = codeCycle[i + 1];
+      return { label: `${from} \u2192 ${to}`, typeOnly: typeOnlyOf.get(edgeKey(from, to)) === true };
+    });
+    const cheap = legs.filter((leg) => leg.typeOnly).map((leg) => leg.label);
+    diags.push({
+      severity: "error",
+      code: "spine/module-cycle-code",
+      message: `v\xF2ng l\u1EB7p ph\u1EE5 thu\u1ED9c gi\u1EEFa c\xE1c kh\u1ED1i, suy t\u1EEB IMPORT TH\u1EACT trong code: ` + codeCycle.join(" \u2192 "),
+      file: head.file,
+      line: at(graph, head, "paths"),
+      hint: `C\u1EA1nh trong v\xF2ng: ` + legs.map((leg) => leg.label + (leg.typeOnly ? " (ch\u1EC9 `import type`)" : "")).join(", ") + `.
+` + (cheap.length > 0 ? `C\u1EAFt r\u1EBB nh\u1EA5t \u1EDF c\u1EA1nh ch\u1EC9 mang ki\u1EC3u (${cheap.join(", ")}): ki\u1EC3u bi\u1EBFn m\u1EA5t sau khi bi\xEAn d\u1ECBch, n\xEAn chuy\u1EC3n n\xF3 xu\u1ED1ng m\u1ED9t kh\u1ED1i l\xE1 l\xE0 xong \u2014 lu\u1ED3ng ch\u1EA1y kh\xF4ng \u0111\u1ED5i.` : `Kh\xF4ng c\u1EA1nh n\xE0o ch\u1EC9 mang ki\u1EC3u \u2014 ph\u1EA3i t\xE1ch ph\u1EA7n d\xF9ng chung ra m\u1ED9t kh\u1ED1i L\xC1, kh\xF4ng ph\u1EA3i b\u1ECF b\u1EDBt \`depends_on\`: c\u1EA1nh \u0111o t\u1EEB import th\u1EADt, khai thi\u1EBFu kh\xF4ng l\xE0m n\xF3 bi\u1EBFn m\u1EA5t.`)
+    });
+  }
   const taskEdges = /* @__PURE__ */ new Map();
   for (const [id, t] of graph.tasks) taskEdges.set(id, t.value.blocked_by);
   const taskCycle = findCycle(taskEdges);
@@ -13820,6 +14306,167 @@ function validateGraph(graph, opts = {}) {
       });
     }
   }
+  const guideFile = guideFileName(graph.config.harness);
+  const modulesWithPaths = [...graph.modules.values()].filter((m) => m.value.paths.length > 0);
+  for (const mod of modulesWithPaths) {
+    const dir = moduleGuideDir(mod.value.paths);
+    if (dir === void 0) continue;
+    if (!exists(join4(graph.root, dir, guideFile))) {
+      diags.push({
+        severity: "warning",
+        code: "scope/module-missing-guide",
+        message: `kh\u1ED1i ${mod.value.id} nh\u1EADn c\u1EA3 th\u01B0 m\u1EE5c \`${dir}\` nh\u01B0ng \u1EDF \u0111\xF3 kh\xF4ng c\xF3 \`${guideFile}\``,
+        file: mod.file,
+        line: at(graph, mod, "paths"),
+        hint: `Agent \u0111\u1ECDc file h\u01B0\u1EDBng d\u1EABn TR\u01AF\u1EDAC khi \u0111\u1ECDc code. Thi\u1EBFu n\xF3, m\u1ECDi phi\xEAn \u0111\u1EE5ng v\xE0o \`${dir}\` ph\u1EA3i t\u1EF1 suy l\u1EA1i c\u1ED5ng v\xE0o v\xE0 c\u1EA1m b\u1EABy c\u1EE7a v\xF9ng. T\u1EA1o \`${dir}/${guideFile}\` \u2014 c\u1ED5ng v\xE0o, b\u1EA5t bi\u1EBFn, c\u1EA1m b\u1EABy, l\u1EC7nh test ri\xEAng.`
+      });
+    }
+  }
+  for (let i = 0; i < modulesWithPaths.length; i++) {
+    for (let j = i + 1; j < modulesWithPaths.length; j++) {
+      const a = modulesWithPaths[i];
+      const b = modulesWithPaths[j];
+      if (!modulePathsOverlap(a.value.paths, b.value.paths)) continue;
+      diags.push({
+        severity: "warning",
+        code: "scope/module-paths-overlap",
+        message: `kh\u1ED1i ${a.value.id} v\xE0 ${b.value.id} c\xF3 th\u1EC3 c\xF9ng nh\u1EADn m\u1ED9t v\xF9ng code`,
+        file: a.file,
+        line: at(graph, a, "paths"),
+        hint: `T\xE1ch \`paths\` cho r\u1EDDi nhau, ho\u1EB7c g\u1ED9p hai kh\u1ED1i. Ch\u1ED3ng nhau th\xEC hai task song song c\xF3 th\u1EC3 c\xF9ng s\u1EEDa m\u1ED9t file m\xE0 \`parallelCandidates\` v\u1EABn coi l\xE0 an to\xE0n.`
+      });
+    }
+  }
+  const sameChange = (s) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  const rejectedChanges = /* @__PURE__ */ new Map();
+  for (const sourced of graph.proposals.values()) {
+    const p = sourced.value;
+    if (p.status === "rejected") rejectedChanges.set(sameChange(p.proposed_change), p);
+  }
+  const promotedBy = /* @__PURE__ */ new Map();
+  for (const sourced of graph.proposals.values()) {
+    const p = sourced.value;
+    if (!graph.scopes.has(p.scope)) {
+      diags.push({
+        severity: "error",
+        code: "scope/proposal-scope-not-found",
+        message: `\u0111\u1EC1 xu\u1EA5t ${p.id} thu\u1ED9c ph\u1EA1m vi ${p.scope} kh\xF4ng t\u1ED3n t\u1EA1i`,
+        file: sourced.file,
+        line: at(graph, sourced, "scope"),
+        hint: `Tr\u1ECF l\u1EA1i \u0111\xFAng ph\u1EA1m vi, ho\u1EB7c t\u1EA1o ph\u1EA1m vi b\u1EB1ng \`ganas scope new\`.`
+      });
+    }
+    if (p.promoted_to) {
+      const target = p.promoted_to;
+      const exists2 = graph.designs.has(target) || graph.tasks.has(target) || graph.icebox.has(target);
+      if (!exists2) {
+        diags.push({
+          severity: "error",
+          code: "spine/proposal-missing-target",
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} khai \u0111\xE3 th\xE0nh ${target} nh\u01B0ng th\u1EF1c th\u1EC3 \u0111\xF3 kh\xF4ng t\u1ED3n t\u1EA1i`,
+          file: sourced.file,
+          line: at(graph, sourced, "promoted_to"),
+          hint: `S\u1EEDa \`promoted_to\` tr\u1ECF \u0111\xFAng id, ho\u1EB7c g\u1EE1 n\xF3 n\u1EBFu ch\u01B0a th\u1EADt s\u1EF1 sinh ra g\xEC.`
+        });
+      }
+      const first = promotedBy.get(target);
+      if (first) {
+        diags.push({
+          severity: "warning",
+          code: "spine/proposal-duplicate-target",
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} v\xE0 ${first} c\xF9ng khai \u0111\xE3 th\xE0nh ${target}`,
+          file: sourced.file,
+          line: at(graph, sourced, "promoted_to"),
+          hint: `Ch\u1EC9 m\u1ED9t \u0111\u1EC1 xu\u1EA5t \u0111\u01B0\u1EE3c sinh ra ${target}; c\xE1i c\xF2n l\u1EA1i n\xEAn l\xE0 \`superseded\`.`
+        });
+      } else {
+        promotedBy.set(target, p.id);
+      }
+    }
+    for (const oldId of p.supersedes) {
+      if (!graph.proposals.has(oldId)) {
+        diags.push({
+          severity: "error",
+          code: "spine/proposal-missing-supersede",
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} thay th\u1EBF \u0111\u1EC1 xu\u1EA5t ${oldId} kh\xF4ng t\u1ED3n t\u1EA1i`,
+          file: sourced.file,
+          line: at(graph, sourced, "supersedes"),
+          hint: `Tr\u1ECF \u0111\xFAng id \u0111\u1EC1 xu\u1EA5t c\u0169, ho\u1EB7c b\u1ECF kh\u1ECFi \`supersedes\`.`
+        });
+      }
+    }
+    if (sameChange(p.problem) === sameChange(p.proposed_change)) {
+      diags.push({
+        severity: "warning",
+        code: "knowledge/proposal-problem-equals-change",
+        message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 \`problem\` tr\xF9ng y h\u1EC7t \`proposed_change\` \u2014 ch\u01B0a n\xEAu v\u1EA5n \u0111\u1EC1, ch\u1EC9 n\xEAu gi\u1EA3i ph\xE1p`,
+        file: sourced.file,
+        line: at(graph, sourced, "problem"),
+        hint: `Vi\u1EBFt \`problem\` l\xE0 ch\u1ED7 L\u1EC6CH quan s\xE1t \u0111\u01B0\u1EE3c (k\xE8m anchor), \`proposed_change\` l\xE0 vi\u1EC7c \u0111\u1EC1 ngh\u1ECB l\xE0m. Kh\xF4ng t\xE1ch \u0111\u01B0\u1EE3c hai c\xE2u \u0111\xF3 th\xEC nhi\u1EC1u kh\u1EA3 n\u0103ng ch\u01B0a c\xF3 v\u1EA5n \u0111\u1EC1 th\u1EADt.`
+      });
+    }
+    if (p.status === "pending") {
+      const old = rejectedChanges.get(sameChange(p.proposed_change));
+      if (old) {
+        diags.push({
+          severity: "warning",
+          code: "knowledge/proposal-repeats-rejected",
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} \u0111\u1EC1 ngh\u1ECB \u0111\xFAng thay \u0111\u1ED5i m\xE0 ${old.id} \u0111\xE3 b\u1ECB t\u1EEB ch\u1ED1i`,
+          file: sourced.file,
+          line: at(graph, sourced, "proposed_change"),
+          hint: `${old.id} b\u1ECB t\u1EEB ch\u1ED1i v\xEC: ${old.why_rejected ?? "(kh\xF4ng ghi l\xFD do)"} \u2014 n\xEAu \u0111\u01B0\u1EE3c \u0111i\u1EC1u g\xEC \u0111\xE3 kh\xE1c \u0111i th\xEC h\xE3y gi\u1EEF, kh\xF4ng th\xEC \u0111\xF3ng l\u1EA1i.`
+        });
+      }
+    }
+  }
+  const proposalCycle = findCycle(
+    new Map([...graph.proposals.values()].map((p) => [p.value.id, p.value.supersedes]))
+  );
+  if (proposalCycle) {
+    const head = graph.proposals.get(proposalCycle[0]);
+    diags.push({
+      severity: "error",
+      code: "spine/proposal-cycle",
+      message: `v\xF2ng l\u1EB7p thay th\u1EBF gi\u1EEFa c\xE1c \u0111\u1EC1 xu\u1EA5t: ${proposalCycle.join(" \u2192 ")}`,
+      file: head?.file ?? GANAS_DIR,
+      line: head ? at(graph, head, "supersedes") : void 0,
+      hint: `C\u1EAFt m\u1ED9t c\u1EA1nh \`supersedes\` \u2014 m\u1ED9t \u0111\u1EC1 xu\u1EA5t kh\xF4ng th\u1EC3 v\u1EEBa thay th\u1EBF v\u1EEBa b\u1ECB thay th\u1EBF.`
+    });
+  }
+  const anchored = [
+    ...[...graph.facts.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors
+    })),
+    ...[...graph.claims.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors
+    })),
+    ...[...graph.icebox.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors
+    })),
+    ...[...graph.proposals.values()].map((x) => ({
+      id: x.value.id,
+      file: x.file,
+      anchors: x.value.anchors
+    }))
+  ];
+  for (const rec of anchored) {
+    for (const a of rec.anchors) {
+      if (a.kind !== "url" || a.quote) continue;
+      diags.push({
+        severity: "warning",
+        code: "knowledge/url-anchor-without-quote",
+        message: `${rec.id} neo v\xE0o ${a.url} nh\u01B0ng kh\xF4ng ch\xE9p l\u1EA1i tr\xEDch d\u1EABn n\xE0o`,
+        file: rec.file,
+        hint: `Trang web \u0111\u1ED5i, v\xE0 khi n\xF3 \u0111\u1ED5i th\xEC \`fetched_at\` ch\u1EC9 c\xF2n n\xF3i \u0111\u01B0\u1EE3c "\u0111\xE3 \u0111\u1ECDc ng\xE0y n\xE0o". Th\xEAm \`quote:\` v\u1EDBi \u0111\xFAng \u0111o\u1EA1n \u0111\xE3 \u0111\u1ECDc \u2014 \u0111\xF3 l\xE0 ph\u1EA7n b\u1EB1ng ch\u1EE9ng s\u1ED1ng l\xE2u h\u01A1n c\xE1i link.`
+      });
+    }
+  }
   const corrupt = ledgerCorruption(graph.root);
   if (corrupt > 0) {
     diags.push({
@@ -13841,7 +14488,7 @@ function validateGraph(graph, opts = {}) {
       hint: `S\u1ED5 c\xE1i l\xE0 append-only; hash-chain gi\u1EEF d\u1EA5u v\u1EBFt cho M\u1ECCI d\xF2ng sau m\u1ED9t ch\u1ED7 b\u1ECB s\u1EEDa, kh\xF4ng ch\u1EC9 d\xF2ng b\u1ECB s\u1EEDa. Xem git history quanh d\xF2ng n\xE0y \u0111\u1EC3 bi\u1EBFt ai \u0111\u1ED5i g\xEC.`
     });
   }
-  if (existsSync4(join3(graph.root, ".git"))) {
+  if (exists(join4(graph.root, ".git"))) {
     const lines = new Set((graph.gitignoreRaw ?? "").split("\n").map((l) => l.trim()));
     const missing = LOCAL_ONLY.filter((p) => !lines.has(`.ganas/${p}`));
     if (missing.length > 0) {
@@ -13860,6 +14507,8 @@ var init_validate = __esm({
   "src/graph/validate.ts"() {
     "use strict";
     init_model();
+    init_fsprobe();
+    init_glob();
     init_yaml();
     init_ledger();
     init_lint();
@@ -13872,15 +14521,15 @@ var load_exports = {};
 __export(load_exports, {
   loadGraph: () => loadGraph
 });
-import { existsSync as existsSync5 } from "node:fs";
-import { readdir, readFile as readFile4 } from "node:fs/promises";
-import { join as join4, relative } from "node:path";
+import { existsSync as existsSync2 } from "node:fs";
+import { readdir as readdir2, readFile as readFile4 } from "node:fs/promises";
+import { join as join5, relative as relative2 } from "node:path";
 function issuesToDiagnostics(loaded, issues, root) {
   return issues.map((issue) => ({
     severity: "error",
     code: `schema/${issue.code}`,
     message: issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
-    file: relative(root, loaded.file) || loaded.file,
+    file: relative2(root, loaded.file) || loaded.file,
     line: lineOfPath(loaded, issue.path)
   }));
 }
@@ -13888,7 +14537,7 @@ function configKeyDiagnostics(loaded, root, configFile) {
   const raw = loaded.value;
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return [];
   const known = new Set(Object.keys(zConfig.shape));
-  const file = relative(root, configFile) || configFile;
+  const file = relative2(root, configFile) || configFile;
   const diagnostics = [];
   for (const key of Object.keys(raw)) {
     if (known.has(key)) continue;
@@ -13905,9 +14554,9 @@ function configKeyDiagnostics(loaded, root, configFile) {
   return diagnostics;
 }
 async function listYaml(dir) {
-  if (!existsSync5(dir)) return [];
-  const entries = await readdir(dir, { withFileTypes: true });
-  return entries.filter((e) => e.isFile() && (e.name.endsWith(".yaml") || e.name.endsWith(".yml"))).map((e) => join4(dir, e.name)).sort();
+  if (!existsSync2(dir)) return [];
+  const entries = await readdir2(dir, { withFileTypes: true });
+  return entries.filter((e) => e.isFile() && (e.name.endsWith(".yaml") || e.name.endsWith(".yml"))).map((e) => join5(dir, e.name)).sort();
 }
 async function collectSingle(dir, schema, root, kind) {
   const items = /* @__PURE__ */ new Map();
@@ -13922,18 +14571,18 @@ async function collectSingle(dir, schema, root, kind) {
         severity: "error",
         code: "load/yaml",
         message: err instanceof GanasError ? err.message : String(err),
-        file: relative(root, file) || file
+        file: relative2(root, file) || file
       });
       continue;
     }
-    sources.set(relative(root, file) || file, loaded);
+    sources.set(relative2(root, file) || file, loaded);
     const parsed = schema.safeParse(loaded.value);
     if (!parsed.success) {
       diagnostics.push(...issuesToDiagnostics(loaded, parsed.error.issues, root));
       continue;
     }
     const value = parsed.data;
-    const rel = relative(root, file) || file;
+    const rel = relative2(root, file) || file;
     const existing = items.get(value.id);
     if (existing) {
       diagnostics.push({
@@ -13964,18 +14613,18 @@ async function collectArray(dirs, schema, root, kind) {
           severity: "error",
           code: "load/yaml",
           message: err instanceof GanasError ? err.message : String(err),
-          file: relative(root, file) || file
+          file: relative2(root, file) || file
         });
         continue;
       }
-      sources.set(relative(root, file) || file, loaded);
+      sources.set(relative2(root, file) || file, loaded);
       if (loaded.value === null || loaded.value === void 0) continue;
       const shape = external_exports.array(external_exports.unknown()).safeParse(loaded.value);
       if (!shape.success) {
         diagnostics.push(...issuesToDiagnostics(loaded, shape.error.issues, root));
         continue;
       }
-      const rel = relative(root, file) || file;
+      const rel = relative2(root, file) || file;
       shape.data.forEach((element, index) => {
         const parsed = schema.safeParse(element);
         if (!parsed.success) {
@@ -14005,6 +14654,67 @@ async function collectArray(dirs, schema, root, kind) {
   }
   return { items, diagnostics, sources };
 }
+function clauseBefore(text, at2) {
+  let start = -1;
+  for (const kw of text.slice(0, at2).matchAll(/\b(?:import|export)\b/g)) {
+    start = kw.index + kw[0].length;
+  }
+  return start === -1 ? void 0 : text.slice(start, at2).trim();
+}
+function isTypeOnlyClause(clause) {
+  if (/^type\b/.test(clause)) return true;
+  const braced = /^\{([\s\S]*)\}$/.exec(clause);
+  if (!braced) return false;
+  const names = braced[1].split(",").map((n) => n.trim()).filter(Boolean);
+  return names.length > 0 && names.every((n) => /^type\b/.test(n));
+}
+function extractImports(text) {
+  const out = [];
+  for (const m of text.matchAll(RELATIVE_IMPORT)) {
+    const dynamic = m[0].startsWith("import");
+    const clause = dynamic ? void 0 : clauseBefore(text, m.index);
+    out.push({
+      specifier: m[1],
+      typeOnly: clause !== void 0 && isTypeOnlyClause(clause)
+    });
+  }
+  return out;
+}
+function literalPrefix(glob) {
+  const normalized = glob.split("\\").join("/").replace(/^\.\//, "");
+  const cut = normalized.search(/[*?[{]/);
+  return cut === -1 ? normalized : normalized.slice(0, cut);
+}
+function worthEntering(dir, prefixes) {
+  return prefixes.some((p) => p === "" || p.startsWith(`${dir}/`) || dir.startsWith(p));
+}
+async function collectCodeImports(root, modules) {
+  const patterns = [];
+  for (const m of modules) patterns.push(...m.value.paths);
+  const out = /* @__PURE__ */ new Map();
+  if (patterns.length === 0) return out;
+  const prefixes = patterns.map(literalPrefix);
+  const walk2 = async (dir) => {
+    let entries;
+    try {
+      entries = await readdir2(dir ? join5(root, dir) : root, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const rel = dir ? `${dir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS2.has(entry.name)) continue;
+        if (!worthEntering(rel, prefixes)) continue;
+        await walk2(rel);
+      } else if (entry.isFile() && entry.name.endsWith(".ts") && matchesAny(rel, patterns)) {
+        out.set(rel, extractImports(await readFile4(join5(root, rel), "utf8")));
+      }
+    }
+  };
+  await walk2("");
+  return out;
+}
 async function loadGraph(root) {
   const configFile = ganasPath(root, CONFIG_FILE);
   const loadedConfig = await readYamlFile(configFile);
@@ -14012,7 +14722,7 @@ async function loadGraph(root) {
   if (!parsedConfig.success) {
     const where = (path) => {
       const line = lineOfPath(loadedConfig, path);
-      return `${relative(root, configFile)}${line ? `:${line}` : ""}`;
+      return `${relative2(root, configFile)}${line ? `:${line}` : ""}`;
     };
     const declared = loadedConfig.value?.version;
     if (typeof declared === "number" && declared > LATEST_SCHEMA_VERSION) {
@@ -14029,14 +14739,15 @@ async function loadGraph(root) {
   const configDiagnostics = configKeyDiagnostics(loadedConfig, root, configFile);
   const ledgerRaw = await readLedger(root);
   const ledger = indexByTarget(ledgerRaw);
-  const gitignoreFile = join4(root, ".gitignore");
-  const gitignoreRaw = existsSync5(gitignoreFile) ? await readFile4(gitignoreFile, "utf8") : null;
-  const [goals, designs, tasks, scopes, modules, facts, claims, decisions, icebox] = await Promise.all([
+  const gitignoreFile = join5(root, ".gitignore");
+  const gitignoreRaw = existsSync2(gitignoreFile) ? await readFile4(gitignoreFile, "utf8") : null;
+  const [goals, designs, tasks, scopes, modules, proposals, facts, claims, decisions, icebox] = await Promise.all([
     collectSingle(ganasPath(root, DIRS.goals), zGoal, root, "goal"),
     collectSingle(ganasPath(root, DIRS.designs), zDesign, root, "design"),
     collectSingle(ganasPath(root, DIRS.tasks), zTask, root, "task"),
     collectSingle(ganasPath(root, DIRS.scopes), zScope, root, "ph\u1EA1m vi"),
     collectSingle(ganasPath(root, DIRS.modules), zModule, root, "kh\u1ED1i"),
+    collectSingle(ganasPath(root, DIRS.proposals), zProposal, root, "\u0111\u1EC1 xu\u1EA5t"),
     collectArray([ganasPath(root, DIRS.facts)], zFact, root, "fact"),
     collectArray(
       [ganasPath(root, DIRS.claims), ganasPath(root, DIRS.legacyImported)],
@@ -14047,6 +14758,7 @@ async function loadGraph(root) {
     collectArray([ganasPath(root, DIRS.decisions)], zDecision, root, "decision"),
     collectArray([ganasPath(root, DIRS.icebox)], zIcebox, root, "icebox")
   ]);
+  const codeImports = await collectCodeImports(root, modules.items.values());
   return {
     root,
     config: parsedConfig.data,
@@ -14055,6 +14767,7 @@ async function loadGraph(root) {
     tasks: tasks.items,
     scopes: scopes.items,
     modules: modules.items,
+    proposals: proposals.items,
     facts: facts.items,
     claims: claims.items,
     decisions: decisions.items,
@@ -14062,6 +14775,7 @@ async function loadGraph(root) {
     ledger,
     ledgerRaw,
     gitignoreRaw,
+    codeImports,
     sources: new Map([
       ...goals.sources,
       ...designs.sources,
@@ -14080,6 +14794,7 @@ async function loadGraph(root) {
       ...tasks.diagnostics,
       ...scopes.diagnostics,
       ...modules.diagnostics,
+      ...proposals.diagnostics,
       ...facts.diagnostics,
       ...claims.diagnostics,
       ...decisions.diagnostics,
@@ -14087,144 +14802,22 @@ async function loadGraph(root) {
     ]
   };
 }
-var REMOVED_CONFIG_KEYS;
+var REMOVED_CONFIG_KEYS, RELATIVE_IMPORT, SKIP_DIRS2;
 var init_load = __esm({
   "src/graph/load.ts"() {
     "use strict";
     init_zod();
     init_model();
     init_errors();
+    init_glob();
     init_yaml();
     init_ledger();
     init_paths();
     REMOVED_CONFIG_KEYS = {
       embedder: "field n\xE0y \u0111\xE3 b\u1ECF \u1EDF v0.3.x, kh\xF4ng c\xF2n t\xE1c d\u1EE5ng \u2014 xo\xE1 d\xF2ng \u0111\xF3 \u0111i cho s\u1EA1ch."
     };
-  }
-});
-
-// src/util/glob.ts
-import { readdir as readdir2 } from "node:fs/promises";
-import { join as join5, relative as relative2, sep } from "node:path";
-function expandBraces(pattern) {
-  const open2 = pattern.indexOf("{");
-  if (open2 === -1) return [pattern];
-  let depth = 0;
-  let close = -1;
-  for (let i = open2; i < pattern.length; i++) {
-    if (pattern[i] === "{") depth++;
-    else if (pattern[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        close = i;
-        break;
-      }
-    }
-  }
-  if (close === -1) return [pattern];
-  const prefix = pattern.slice(0, open2);
-  const suffix = pattern.slice(close + 1);
-  const body = pattern.slice(open2 + 1, close);
-  const parts = [];
-  let current = "";
-  let nest = 0;
-  for (const ch of body) {
-    if (ch === "{") nest++;
-    else if (ch === "}") nest--;
-    if (ch === "," && nest === 0) {
-      parts.push(current);
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  parts.push(current);
-  return parts.flatMap((p) => expandBraces(prefix + p + suffix));
-}
-function segmentToRegex(segment) {
-  let out = "";
-  for (let i = 0; i < segment.length; i++) {
-    const ch = segment[i];
-    if (ch === "*") {
-      out += "[^/]*";
-    } else if (ch === "?") {
-      out += "[^/]";
-    } else if (ch === "[") {
-      const close = segment.indexOf("]", i + 1);
-      if (close === -1) {
-        out += "\\[";
-      } else {
-        const body = segment.slice(i + 1, close);
-        out += `[${body.startsWith("!") ? "^" + body.slice(1) : body}]`;
-        i = close;
-      }
-    } else {
-      out += ch.replace(/[.+^${}()|\\]/g, "\\$&");
-    }
-  }
-  return out;
-}
-function patternToRegex(pattern) {
-  const segments = pattern.split("/");
-  const parts = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    if (seg === "**") {
-      parts.push(i === segments.length - 1 ? "(?:.*)?" : "(?:.*/)?");
-      continue;
-    }
-    parts.push(segmentToRegex(seg));
-    if (i < segments.length - 1 && segments[i + 1] !== "**") parts.push("/");
-  }
-  return new RegExp(`^${parts.join("")}$`);
-}
-function matchesAny(path, patterns) {
-  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
-  for (const pattern of patterns) {
-    let regexes = cache.get(pattern);
-    if (!regexes) {
-      regexes = expandBraces(pattern).map(patternToRegex);
-      cache.set(pattern, regexes);
-    }
-    if (regexes.some((re) => re.test(normalized))) return true;
-  }
-  return false;
-}
-async function listProjectFiles(root) {
-  const git = await runShell("git ls-files -z --cached --others --exclude-standard", {
-    cwd: root,
-    timeoutMs: 2e4
-  });
-  if (git.code === 0 && git.stdout.length > 0) {
-    return git.stdout.split("\0").filter(Boolean);
-  }
-  return walk(root, root, []);
-}
-async function walk(root, dir, acc) {
-  let entries;
-  try {
-    entries = await readdir2(dir, { withFileTypes: true });
-  } catch {
-    return acc;
-  }
-  for (const entry of entries) {
-    const full = join5(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      await walk(root, full, acc);
-    } else if (entry.isFile()) {
-      acc.push(relative2(root, full).split(sep).join("/"));
-    }
-  }
-  return acc;
-}
-var cache, SKIP_DIRS;
-var init_glob = __esm({
-  "src/util/glob.ts"() {
-    "use strict";
-    init_exec();
-    cache = /* @__PURE__ */ new Map();
-    SKIP_DIRS = /* @__PURE__ */ new Set([
+    RELATIVE_IMPORT = /(?:from|import\()\s*"(\.[^"]+)"/g;
+    SKIP_DIRS2 = /* @__PURE__ */ new Set([
       ".git",
       "node_modules",
       "dist",
@@ -14235,7 +14828,7 @@ var init_glob = __esm({
       ".next",
       ".venv",
       "__pycache__",
-      ".ganas"
+      GANAS_DIR
     ]);
   }
 });
@@ -14378,11 +14971,11 @@ var init_shell = __esm({
 });
 
 // src/verify/mutate.ts
-function runnerPathSpan(run20) {
-  const m = RUNNER.exec(run20);
+function runnerPathSpan(run21) {
+  const m = RUNNER.exec(run21);
   if (!m) return null;
   const after = m.index + m[0].length;
-  const spans = tokenSpans(run20.slice(after)).map((s) => ({ ...s, start: s.start + after }));
+  const spans = tokenSpans(run21.slice(after)).map((s) => ({ ...s, start: s.start + after }));
   let skipNext = false;
   for (const span of spans) {
     if (span.text.startsWith("-")) {
@@ -14397,53 +14990,53 @@ function runnerPathSpan(run20) {
   }
   return null;
 }
-function mutateProbe(run20) {
-  const fileTest = FILE_TEST.exec(run20);
+function mutateProbe(run21) {
+  const fileTest = FILE_TEST.exec(run21);
   if (fileTest) {
     const [full, head, flag2, quote3, path] = fileTest;
     const replaced = `${head}${flag2} ${quote3}${path}${MUTANT_SUFFIX}${quote3}`;
     return {
-      run: run20.replace(full, replaced),
+      run: run21.replace(full, replaced),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const grep = GREP.exec(run20);
+  const grep = GREP.exec(run21);
   if (grep) {
     const [full, cmd, flags, quote3, pattern] = grep;
     return {
-      run: run20.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
+      run: run21.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const grepBare = GREP_BARE.exec(run20);
+  const grepBare = GREP_BARE.exec(run21);
   if (grepBare) {
     const [full, cmd, flags, pattern] = grepBare;
     return {
-      run: run20.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
+      run: run21.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const runnerPath = runnerPathSpan(run20);
+  const runnerPath = runnerPathSpan(run21);
   if (runnerPath) {
     const path = stripOperators(runnerPath.text);
     const replaced = runnerPath.text.replace(path, `${path}${MUTANT_SUFFIX}`);
     return {
-      run: run20.slice(0, runnerPath.start) + replaced + run20.slice(runnerPath.start + runnerPath.text.length),
+      run: run21.slice(0, runnerPath.start) + replaced + run21.slice(runnerPath.start + runnerPath.text.length),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const quoted = QUOTED.exec(run20);
+  const quoted = QUOTED.exec(run21);
   if (quoted) {
     const [full, quote3, body] = quoted;
     return {
-      run: run20.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
+      run: run21.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i chu\u1ED7i \`${body}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
   return null;
 }
-async function proveCanFail(run20, expect, opts) {
-  const mutation = mutateProbe(run20);
+async function proveCanFail(run21, expect, opts) {
+  const mutation = mutateProbe(run21);
   if (!mutation) {
     return {
       status: "unproven",
@@ -14460,7 +15053,7 @@ async function proveCanFail(run20, expect, opts) {
       status: "cannot_fail",
       what: mutation.what,
       message: `b\u1EA3n b\xF3p m\xE9o (${mutation.what}) V\u1EAAN PASS \u2014 probe n\xE0y kh\xF4ng ki\u1EC3m th\u1EE9 n\xF3 n\xF3i l\xE0 \u0111ang ki\u1EC3m.
-    b\u1EA3n g\u1ED1c:    ${run20}
+    b\u1EA3n g\u1ED1c:    ${run21}
     b\xF3p m\xE9o:    ${mutation.run}
     C\u1EA3 hai c\xF9ng pass ngh\u0129a l\xE0 k\u1EBFt qu\u1EA3 pass kh\xF4ng mang th\xF4ng tin g\xEC.`
     };
@@ -14500,7 +15093,7 @@ var init_mutate = __esm({
 });
 
 // src/verify/run.ts
-import { mkdtemp, readFile as readFile6, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile as readFile6, rm as rm2, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join as join6 } from "node:path";
 function factTarget(sourced) {
@@ -14570,10 +15163,10 @@ async function runTarget(target, opts) {
     return { target, result: "unprovable", reason: "ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh thu\u1ED9c `ganas trace`" };
   }
   const v = target.verification;
-  const run20 = target.kind === "eval" ? v.run : target.definition.run;
+  const run21 = target.kind === "eval" ? v.run : target.definition.run;
   const skipIf = v?.skip_if ?? target.definition.skip_if;
   if (target.kind === "probe") {
-    const findings = lintProbe({ run: run20, statement: target.statement, context: target.context });
+    const findings = lintProbe({ run: run21, statement: target.statement, context: target.context });
     if (hasBlockingFinding(findings)) {
       const blocking = findings.filter((f) => f.severity === "error");
       return {
@@ -14596,23 +15189,23 @@ async function runTarget(target, opts) {
     outcome2.entry = await record(target, outcome2, opts);
     return outcome2;
   }
-  const outcome = target.kind === "eval" ? await runEval(target, run20, opts) : await runProbe(target, run20, opts);
+  const outcome = target.kind === "eval" ? await runEval(target, run21, opts) : await runProbe(target, run21, opts);
   outcome.entry = await record(target, outcome, opts);
   if (target.fact && (outcome.result === "pass" || outcome.result === "fail")) {
     await writeBackFact(target.fact, outcome, root);
   }
   return outcome;
 }
-async function runProbe(target, run20, opts) {
+async function runProbe(target, run21, opts) {
   const def = target.definition;
   const expect = def.expect ?? "exit_zero";
-  const result = await runShell(run20, { cwd: opts.root, timeoutMs: def.timeout_ms });
+  const result = await runShell(run21, { cwd: opts.root, timeoutMs: def.timeout_ms });
   const verdict = judge(result, expect);
   if (!verdict.pass) {
     return { target, result: "fail", reason: verdict.reason };
   }
   if (opts.skipMutation) return { target, result: "pass" };
-  const proof = await proveCanFail(run20, expect, { cwd: opts.root });
+  const proof = await proveCanFail(run21, expect, { cwd: opts.root });
   if (proof.status === "cannot_fail") {
     return {
       target,
@@ -14628,12 +15221,12 @@ async function runProbe(target, run20, opts) {
     reason: proof.status === "unproven" ? proof.message : void 0
   };
 }
-async function runEval(target, run20, opts) {
+async function runEval(target, run21, opts) {
   const v = target.verification;
   const dir = await mkdtemp(join6(tmpdir(), "ganas-eval-"));
   const outFile = join6(dir, "result.json");
   try {
-    const result = await runShell(run20, {
+    const result = await runShell(run21, {
       cwd: opts.root,
       timeoutMs: v.timeout_ms ?? 6e5,
       env: { GANAS_EVAL_OUT: outFile }
@@ -14659,7 +15252,7 @@ async function runEval(target, run20, opts) {
       reason: score < v.threshold ? `\u0111i\u1EC3m ${score.toFixed(3)} d\u01B0\u1EDBi ng\u01B0\u1EE1ng ${v.threshold}` + (reading.n ? ` (${reading.passed}/${reading.n} ca \u0111\u1EA1t)` : "") : marginal ? `\u0111i\u1EC3m ${score.toFixed(3)} n\u1EB1m trong v\xF9ng nhi\u1EC5u quanh ng\u01B0\u1EE1ng ${v.threshold} (\xB1${v.margin}) \u2014 ch\u01B0a \u0111\u1EE7 \u0111\u1EC3 g\u1ECDi l\xE0 \u0111\u1EA1t` : void 0
     };
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm2(dir, { recursive: true, force: true });
   }
 }
 async function depsHash(context, root, allProjectFiles) {
@@ -14726,7 +15319,6 @@ __export(freshness_exports, {
   computeFreshness: () => computeFreshness,
   freshnessMark: () => freshnessMark
 });
-import { stat } from "node:fs/promises";
 import { join as join7 } from "node:path";
 function freshnessMark(state) {
   if (!state) return "\u26A0 [KH\xD4NG R\xD5]";
@@ -14832,11 +15424,7 @@ async function computeFreshness(graph, opts = {}) {
   const mtimeOf = async (rel) => {
     const cached = mtimeCache.get(rel);
     if (cached !== void 0) return cached;
-    let value = 0;
-    try {
-      value = (await stat(join7(graph.root, rel))).mtimeMs;
-    } catch {
-    }
+    const value = await mtimeMs(join7(graph.root, rel)) ?? 0;
     mtimeCache.set(rel, value);
     return value;
   };
@@ -14895,6 +15483,7 @@ async function currentFingerprint(target, root) {
 var init_freshness = __esm({
   "src/graph/freshness.ts"() {
     "use strict";
+    init_fsprobe();
     init_glob();
     init_ledger();
     init_run();
@@ -14921,12 +15510,12 @@ __export(state_exports, {
   updateState: () => updateState,
   writeState: () => writeState
 });
-import { existsSync as existsSync6 } from "node:fs";
-import { mkdir as mkdir2, readFile as readFile7, rename, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname as dirname3 } from "node:path";
+import { existsSync as existsSync3 } from "node:fs";
+import { mkdir as mkdir3, readFile as readFile7, rename, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname4 } from "node:path";
 async function readState(root) {
   const file = ganasPath(root, STATE_FILE);
-  if (!existsSync6(file)) return { ...EMPTY };
+  if (!existsSync3(file)) return { ...EMPTY };
   try {
     const parsed = JSON.parse(await readFile7(file, "utf8"));
     return {
@@ -14940,7 +15529,7 @@ async function readState(root) {
 }
 async function writeState(root, state) {
   const file = ganasPath(root, STATE_FILE);
-  await mkdir2(dirname3(file), { recursive: true });
+  await mkdir3(dirname4(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   await writeFile2(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   await rename(tmp, file);
@@ -15166,7 +15755,6 @@ var init_boundary = __esm({
     init_state();
     init_glob();
     init_shell();
-    init_ledger();
     GLOB_CHARS = /[*?[\]{}]/;
     YAML_EXT = /\.ya?ml$/;
   }
@@ -15242,6 +15830,7 @@ var init_flow = __esm({
     init_paths();
     init_select();
     init_validate();
+    init_fsprobe();
     activeGoals = (g) => [...g.goals.values()].filter((x) => x.value.status === "active");
     servingDesigns = (g) => [...g.designs.values()].filter(
       (d) => d.value.status !== "archived" && d.value.serves.some((id) => g.goals.has(id))
@@ -15507,6 +16096,16 @@ models:
   main: claude-opus-5
   verifier: claude-sonnet-5
   scribe: claude-haiku-4-5
+
+# L\u1EC7nh ki\u1EC3m TO\xC0N D\u1EF0 \xC1N m\xE0 \`ganas commit\` ch\u1EA1y tr\xEAn c\xE2y s\u1EAFp \u0111\u01B0\u1EE3c commit.
+# Kh\xE1c c\xE1c l\u1EC7nh trong \`exit_contract\` c\u1EE7a task: ch\xFAng ch\u1EC9 ki\u1EC3m ph\u1EA7n task ch\u1EA1m
+# t\u1EDBi, c\xF2n c\xE1i n\xE0y ki\u1EC3m c\u1EA3 c\xE2y \u2014 ch\u1ED7 m\xE0 m\u1ED9t thay \u0111\u1ED5i tr\u1EA3i sang ph\u1EA1m vi kh\xE1c l\xE0m
+# g\xE3y build m\xE0 kh\xF4ng ti\xEAu ch\xED n\xE0o c\u1EE7a task nh\xECn th\u1EA5y.
+#
+# So v\u1EDBi M\u1ED0C, kh\xF4ng so v\u1EDBi "xanh": n\u1EBFu HEAD c\u0169ng \u0111\u1ECF th\xEC KH\xD4NG ch\u1EB7n, ch\u1EC9 b\xE1o.
+# N\xEAn b\u1EADt \u0111\u01B0\u1EE3c ngay c\u1EA3 tr\xEAn d\u1EF1 \xE1n c\u0169 ch\u01B0a bao gi\u1EDD s\u1EA1ch.
+# Kh\xF4ng khai th\xEC b\u1ECF qua ph\xE9p ki\u1EC3m n\xE0y.
+# build_check: npm run typecheck
 `;
 }
 function guideMd(v) {
@@ -15609,8 +16208,9 @@ architecture / ports & adapters, \xE1p d\u1EE5ng b\u1EA5t k\u1EC3 ng\xF4n ng\u1E
 
 \`Module.nature\` \u0111\xE3 s\u1EB5n c\xF3 b\u1ED1n gi\xE1 tr\u1ECB, v\xE0 ch\xFAng CH\xCDNH L\xC0 ranh gi\u1EDBi n\xE0y:
 
-- \`code\` / \`data\` / \`llm\` \u2014 **l\xF5i**. Kh\xF4ng t\u1EF1 m\u1EDF file, kh\xF4ng t\u1EF1 g\u1ECDi network,
-  kh\xF4ng t\u1EF1 query DB b\xEAn trong.
+- \`code\` / \`data\` / \`llm\` \u2014 **l\xF5i**. Kh\xF4ng t\u1EF1 \u0111\u1ECDc/ghi n\u1ED9i dung file, kh\xF4ng t\u1EF1
+  g\u1ECDi network, kh\xF4ng t\u1EF1 query DB b\xEAn trong. (Tra tr\u1EA1ng th\xE1i qua c\xF4ng c\u1EE5 d\xF9ng
+  chung th\xEC \u0111\u01B0\u1EE3c \u2014 xem m\u1EE5c ngay d\u01B0\u1EDBi.)
 - \`io\` \u2014 **n\u01A1i CH\u1EA0M I/O th\u1EADt**. API, h\xE0ng \u0111\u1EE3i, filesystem \u2014 \u0111\xFAng nh\u01B0 docstring
   c\u1EE7a \`MODULE_NATURE\` \u0111\xE3 \u0111\u1ECBnh ngh\u0129a.
 
@@ -15618,6 +16218,38 @@ L\xF5i **\u0111\u1ECBnh ngh\u0129a port** (interface/Protocol) v\xE0 kh\xF4ng nh
 \`fetch\`/\`fs.readFile\`/query th\u1EB3ng v\xE0o code c\u1EE7a m\xECnh. Kh\u1ED1i \`io\` **c\xE0i \u0111\u1EB7t** port \u0111\xF3,
 n\xEAn ch\xEDnh n\xF3 khai \`depends_on: [<kh\u1ED1i l\xF5i>]\` \u2014 adapter ph\u1EE5 thu\u1ED9c l\xF5i, kh\xF4ng ng\u01B0\u1EE3c
 l\u1EA1i. \u0110\xF3 c\u0169ng l\xE0 chi\u1EC1u m\xE0 \`ganas scope new\` sinh ra khi n\xF3 t\u1EF1 t\xE1ch hai kh\u1ED1i.
+
+## C\xF4ng c\u1EE5 io d\xF9ng chung \u2014 d\xF9ng n\xF3 KH\xD4NG l\xE0m h\xE0m g\u1ECDi n\xF3 th\xE0nh io
+
+Ranh gi\u1EDBi tr\xEAn c\xF2n thi\u1EBFu m\u1ED9t v\u1EBF, v\xE0 thi\u1EBFu v\u1EBF \u0111\xF3 th\xEC lu\u1EADt t\u1EF1 m\xE2u thu\u1EABn: g\u1EA7n nh\u01B0
+m\u1ECDi h\xE0m nghi\u1EC7p v\u1EE5 \u0111\u1EC1u c\xF3 l\xFAc ph\u1EA3i h\u1ECFi "ch\u1ED7 n\xE0y c\xF3 t\u1ED3n t\u1EA1i kh\xF4ng".
+
+| Tra tr\u1EA1ng th\xE1i \u2014 **C\xD4NG C\u1EE4** | Ch\u1EA1m ra ngo\xE0i th\u1EADt \u2014 **I/O** |
+|---|---|
+| \`existsSync\`, \`stat\`, \`readdir\` | \u0111\u1ECDc/ghi N\u1ED8I DUNG file |
+| h\u1ECFi c\xF3/kh\xF4ng, h\u1ECFi danh s\xE1ch t\xEAn | sinh ti\u1EBFn tr\xECnh con |
+| \u2014 | stdin/stdout, network, DB, h\xE0ng \u0111\u1EE3i |
+
+H\xE0m nghi\u1EC7p v\u1EE5 g\u1ECDi **c\xF4ng c\u1EE5** v\u1EABn l\xE0 h\xE0m nghi\u1EC7p v\u1EE5: n\xF3 \u0111ang D\xD9NG c\xF4ng c\u1EE5, kh\xF4ng
+ph\u1EA3i \u0111ang L\xC0 ch\u1ED7 ch\u1EA1m. Kh\u1ED1i ch\u1EE9a n\xF3 kh\xF4ng v\xEC th\u1EBF m\xE0 ph\u1EA3i khai \`io\`.
+
+Ranh gi\u1EDBi n\u1EB1m \u0111\xFAng ch\u1ED7 \u0111\xF3 v\xEC n\xF3 l\xE0 ranh gi\u1EDBi c\u1EE7a vi\u1EC7c TEST. H\xE0m ch\u1EC9 h\u1ECFi "c\xF3 t\u1ED3n
+t\u1EA1i kh\xF4ng" v\u1EABn test \u0111\u01B0\u1EE3c b\u1EB1ng m\u1ED9t th\u01B0 m\u1EE5c t\u1EA1m, kh\xF4ng ph\u1EA3i d\u1EF1ng g\xEC. H\xE0m \u0111\u1ECDc n\u1ED9i
+dung th\xEC k\xE9o theo \u0111\u1ECBnh d\u1EA1ng d\u1EEF li\u1EC7u, l\u1ED7i ph\xE2n t\xEDch c\xFA ph\xE1p v\xE0 phi\xEAn b\u1EA3n schema \u2014
+\u0111\xF3 m\u1EDBi l\xE0 th\u1EE9 \u0111\xE1ng nh\u1ED1t sau m\u1ED9t ranh gi\u1EDBi \u0111\u1EC3 c\xF2n thay \u0111\u01B0\u1EE3c.
+
+Hai \u0111i\u1EC1u ki\u1EC7n, thi\u1EBFu m\u1ED9t l\xE0 h\u1ECFng lu\u1EADt:
+
+1. **C\xF4ng c\u1EE5 ph\u1EA3i n\u1EB1m M\u1ED8T ch\u1ED7 d\xF9ng chung.** M\u1ED7i n\u01A1i t\u1EF1 \`import\` m\u1ED9t ki\u1EC3u th\xEC
+   kh\xF4ng c\xF2n g\xEC \u0111\u1EC3 thay khi \u0111\u1ED5i n\u1EC1n t\u1EA3ng, v\xE0 "c\xF4ng c\u1EE5" ch\u1EC9 l\xE0 t\xEAn g\u1ECDi kh\xE1c c\u1EE7a
+   "g\u1ECDi th\u1EB3ng".
+2. **Lu\u1EADt n\xE0y KH\xD4NG n\u1EDBi cho th\u1EE9 kh\xE1c.** N\u1EA1p c\u1EA3 m\u1ED9t t\xE0i li\u1EC7u, g\u1ECDi m\u1EA1ng, query DB,
+   ch\u1EA1y l\u1EC7nh shell \u2014 v\u1EABn l\xE0 \`io\`, b\u1ECDc \u0111\u1EB9p \u0111\u1EBFn \u0111\xE2u c\u0169ng v\u1EADy.
+
+\u0110\xE2y l\xE0 m\u1ED9t n\u1EDBi l\u1ECFng C\xD3 CH\u1EE6 \xDD so v\u1EDBi hexagonal ch\u1EB7t. B\u1EA3n ch\u1EB7t b\u1EAFt m\u1ECDi th\u1EE9 ch\u1EA1m
+\u0111\u0129a \u0111i qua port, k\u1EC3 c\u1EA3 m\u1ED9t c\xE2u h\u1ECFi c\xF3/kh\xF4ng \u2014 tr\u1EA3 gi\xE1 b\u1EB1ng m\u1ED9t t\u1EA7ng interface
+cho th\u1EE9 kh\xF4ng ai bao gi\u1EDD thay. N\u1EDBi \u0111\xFAng ch\u1ED7 n\xE0y gi\u1EEF l\u1EA1i c\xE1i \u0111\u1EAFt (\u0111\u1ED5i h\u1EA1 t\u1EA7ng
+kh\xF4ng \u0111\u1EE5ng nghi\u1EC7p v\u1EE5) v\xE0 b\u1ECF c\xE1i r\u1EBB.
 
 ## V\xEC sao
 
@@ -15640,10 +16272,14 @@ ch\u1EA1m I/O (client HTTP, driver DB) ngay trong h\xE0m nghi\u1EC7p v\u1EE5.
 
 ## \u0110\xE2y l\xE0 h\u01B0\u1EDBng d\u1EABn, kh\xF4ng ph\u1EA3i lu\u1EADt m\xE1y ki\u1EC3m
 
-ganas kh\xF4ng (v\xE0 kh\xF4ng th\u1EC3 ki\u1EC3m \u0111\xE1ng tin c\u1EADy) validator n\xE0o b\u1EAFt vi ph\u1EA1m n\xE0y \u2014
-kh\xE1c v\u1EDBi lu\u1EADt ghi tri th\u1EE9c (\`.claude/rules/ganas-knowledge.md\`), \u0111\xE2y kh\xF4ng c\xF3
-hook n\xE0o ch\u1EB7n. \xC1p d\u1EE5ng khi vi\u1EBFt code, v\xE0 khi g\xE1n \`nature\` cho kh\u1ED1i m\u1EDBi: h\u1ECFi
-"kh\u1ED1i n\xE0y c\xF3 t\u1EF1 ch\u1EA1m ra ngo\xE0i kh\xF4ng" tr\u01B0\u1EDBc khi ch\u1ECDn \`io\` hay kh\xF4ng.
+ganas kh\xF4ng c\xF3 validator n\xE0o b\u1EAFt vi ph\u1EA1m n\xE0y \u2014 kh\xE1c lu\u1EADt ghi tri th\u1EE9c
+(\`.claude/rules/ganas-knowledge.md\`), \u0111\xE2y kh\xF4ng c\xF3 hook n\xE0o ch\u1EB7n. \xC1p d\u1EE5ng khi
+vi\u1EBFt code, v\xE0 khi g\xE1n \`nature\` cho kh\u1ED1i m\u1EDBi: h\u1ECFi "kh\u1ED1i n\xE0y c\xF3 t\u1EF1 \u0111\u1ECDc/ghi n\u1ED9i
+dung, t\u1EF1 g\u1ECDi ra ngo\xE0i kh\xF4ng" tr\u01B0\u1EDBc khi ch\u1ECDn \`io\`.
+
+D\u1EF1 \xE1n mu\u1ED1n c\u01B0\u1EE1ng ch\u1EBF th\u1EADt th\xEC t\u1EF1 vi\u1EBFt m\u1ED9t test: duy\u1EC7t \`paths\` c\u1EE7a t\u1EEBng kh\u1ED1i,
+\u0111\u1EBFm xem file trong \u0111\xF3 g\u1ECDi h\xE0m I/O n\xE0o, r\u1ED3i \u0111\u1ED1i chi\u1EBFu v\u1EDBi \`nature\` \u0111\xE3 khai. R\u1EBB,
+v\xE0 b\u1EAFt \u0111\u01B0\u1EE3c \u0111\xFAng ki\u1EC3u tr\xF4i \xE2m th\u1EA7m m\xE0 \u0111\u1ECDc code kh\xF4ng th\u1EA5y.
 `;
 }
 function guideRuleMd(harness) {
@@ -15945,6 +16581,53 @@ Kho tr\u1EA1ng th\xE1i v\xE0 tri th\u1EE9c c\u1EE7a d\u1EF1 \xE1n, do \`ganas\` 
 S\u1EEDa tay \u0111\u01B0\u1EE3c \u2014 \u0111\u1EC1u l\xE0 YAML. Sau khi s\u1EEDa ch\u1EA1y \`ganas validate\`.
 `;
 }
+function moduleGuideMd(v) {
+  const io = v.nature === "io" ? `Kh\u1ED1i n\xE0y l\xE0 \`nature: io\` \u2014 **\u0111\xE2y l\xE0 n\u01A1i ch\u1EA1m ra ngo\xE0i th\u1EADt** (file, m\u1EA1ng, ti\u1EBFn tr\xECnh con, DB). L\xF5i kh\xF4ng \u0111\u01B0\u1EE3c t\u1EF1 l\xE0m vi\u1EC7c \u0111\xF3; n\u1EBFu b\u1EA1n th\u1EA5y m\u1ED9t kh\u1ED1i l\xF5i g\u1ECDi th\u1EB3ng ra ngo\xE0i, \u0111\xF3 l\xE0 ch\u1ED7 l\u1EC7ch \u0111\xE1ng ghi \`ganas proposal new\`.
+` : `Kh\u1ED1i n\xE0y l\xE0 \`nature: ${v.nature}\` \u2014 **l\xF5i**. Kh\xF4ng t\u1EF1 m\u1EDF file, kh\xF4ng t\u1EF1 g\u1ECDi m\u1EA1ng, kh\xF4ng t\u1EF1 query DB \u1EDF \u0111\xE2y; ch\u1EA1m ra ngo\xE0i th\xEC \u0111i qua m\u1ED9t kh\u1ED1i \`io\`.
+`;
+  const testBlock = v.probes.length ? v.probes.map((run21) => `${run21}`).join("\n") : `# kh\u1ED1i n\xE0y ch\u01B0a khai probe n\xE0o \u2014 \`ganas validate\` \u0111ang b\xE1o verify/module-unverified`;
+  return `# ${v.dir}/ \u2014 ${v.title}
+
+<!-- Kh\u1ED1i \`${v.id}\`. File n\xE0y ch\u1EC9 \u0111\u01B0\u1EE3c n\u1EA1p khi agent \u0111\u1EE5ng v\xE0o file trong th\u01B0 m\u1EE5c
+     n\xE0y, n\xEAn n\xF3 KH\xD4NG ph\u1EA3i ch\u1ED7 ch\xE9p l\u1EA1i lu\u1EADt g\u1ED1c hay t\u1ED5ng quan d\u1EF1 \xE1n. Vi\u1EBFt \u1EDF \u0111\xE2y
+     \u0111\xFAng th\u1EE9 ch\u1EC9 \u0111\xFAng khi \u0111ang s\u1EEDa v\xF9ng n\xE0y. -->
+
+${io}
+## C\u1ED5ng v\xE0o
+
+<!-- H\xE0m/file n\xE0o l\xE0 c\u1EEDa v\xE0o th\u1EADt c\u1EE7a v\xF9ng, v\xE0 ai g\u1ECDi n\xF3. M\u1ED9t \u0111o\u1EA1n, kh\xF4ng ph\u1EA3i
+     danh s\xE1ch file \u2014 \`ls\` l\xE0m vi\u1EC7c \u0111\xF3 t\u1ED1t h\u01A1n v\xE0 kh\xF4ng bao gi\u1EDD l\u1EC7ch. -->
+
+TODO
+
+## B\u1EA5t bi\u1EBFn d\u1EC5 ph\xE1
+
+<!-- \u0110i\u1EC1u ph\u1EA3i lu\xF4n \u0111\xFAng \u1EDF v\xF9ng n\xE0y m\xE0 code kh\xF4ng t\u1EF1 b\u1EA3o v\u1EC7 \u0111\u01B0\u1EE3c. M\u1ED7i m\u1EE5c m\u1ED9t
+     d\xF2ng, n\xF3i r\xF5 H\u1ECENG RA SAO n\u1EBFu ph\xE1 \u2014 "ph\u1EA3i c\u1EA9n th\u1EADn" th\xEC kh\xF4ng ai l\xE0m g\xEC \u0111\u01B0\u1EE3c. -->
+
+TODO
+
+## C\u1EA1m b\u1EABy \u0111\xE3 tr\u1EA3 gi\xE1
+
+<!-- CH\u1EC8 ghi th\u1EE9 \u0111\xE3 h\u1ECFng th\u1EADt m\u1ED9t l\u1EA7n. C\u1EA1m b\u1EABy t\u01B0\u1EDFng t\u01B0\u1EE3ng l\xE0m lo\xE3ng c\u1EA1m b\u1EABy
+     th\u1EADt, v\xE0 ng\u01B0\u1EDDi \u0111\u1ECDc s\u1EBD ng\u1EEBng \u0111\u1ECDc c\u1EA3 hai. -->
+
+TODO
+
+## Ch\u1EA1y test ri\xEAng c\u1EE7a v\xF9ng
+
+\`\`\`
+${testBlock}
+\`\`\`
+
+## Tri th\u1EE9c ki\u1EC3m ch\u1EE9ng \u0111\u01B0\u1EE3c
+
+<!-- \u0110\u1EEBng vi\u1EBFt k\u1EBFt lu\u1EADn th\xE0nh ch\u1EEF \u1EDF \u0111\xE2y. Ghi fact c\xF3 probe trong \`.ganas/\` r\u1ED3i
+     tr\u1ECF id \u2014 ch\u1EEF \u1EDF file n\xE0y kh\xF4ng c\xF3 last_verified_at, kh\xF4ng ai b\u1EAFt n\xF3 c\xF2n \u0111\xFAng. -->
+
+- (ch\u01B0a c\xF3 \u2014 \`ganas search\` \u0111\u1EC3 t\xECm fact c\u1EE7a ph\u1EA1m vi n\xE0y)
+`;
+}
 var init_project = __esm({
   "src/templates/project.ts"() {
     "use strict";
@@ -15958,8 +16641,7 @@ var init_exports = {};
 __export(init_exports, {
   run: () => run2
 });
-import { existsSync as existsSync7 } from "node:fs";
-import { appendFile as appendFile2, chmod, mkdir as mkdir3, readFile as readFile8, writeFile as writeFile3 } from "node:fs/promises";
+import { appendFile as appendFile2, chmod, mkdir as mkdir4, readFile as readFile8, writeFile as writeFile3 } from "node:fs/promises";
 import { basename, join as join8, resolve as resolve2 } from "node:path";
 async function prompt(question, fallback = "") {
   const { createInterface } = await import("node:readline/promises");
@@ -15973,8 +16655,8 @@ async function prompt(question, fallback = "") {
   }
 }
 async function writeNew(file, content, force) {
-  if (existsSync7(file) && !force) return "kept";
-  await mkdir3(join8(file, ".."), { recursive: true });
+  if (exists(file) && !force) return "kept";
+  await mkdir4(join8(file, ".."), { recursive: true });
   await writeFile3(file, content, "utf8");
   return "written";
 }
@@ -16007,7 +16689,7 @@ async function run2(argv) {
   const track = (rel, result) => {
     (result === "written" ? written : kept).push(rel);
   };
-  for (const dir of SUBDIRS) await mkdir3(ganasPath(cwd, dir), { recursive: true });
+  for (const dir of SUBDIRS) await mkdir4(ganasPath(cwd, dir), { recursive: true });
   track(
     `${GANAS_DIR}/${CONFIG_FILE}`,
     await writeNew(ganasPath(cwd, CONFIG_FILE), configYaml(vars), force)
@@ -16087,8 +16769,8 @@ Ti\u1EBFp theo:
 }
 async function ensureGitignore(cwd) {
   const file = join8(cwd, ".gitignore");
-  if (!existsSync7(file)) {
-    if (!existsSync7(join8(cwd, ".git"))) return;
+  if (!exists(file)) {
+    if (!exists(join8(cwd, ".git"))) return;
     await writeFile3(file, gitignoreAddition().trimStart(), "utf8");
     return;
   }
@@ -16097,7 +16779,7 @@ async function ensureGitignore(cwd) {
   await appendFile2(file, gitignoreAddition(), "utf8");
 }
 async function ensureGitHook(cwd, name, content, force) {
-  if (!existsSync7(join8(cwd, ".git"))) return void 0;
+  if (!exists(join8(cwd, ".git"))) return void 0;
   const hookFile = join8(cwd, ".githooks", name);
   const result = await writeNew(hookFile, content, force);
   await chmod(hookFile, 493);
@@ -16121,6 +16803,7 @@ var init_init = __esm({
     init_args();
     init_errors();
     init_exec();
+    init_fsprobe();
     SUBDIRS = [
       DIRS.goals,
       DIRS.designs,
@@ -16248,13 +16931,7 @@ function portIssues(from, to) {
   for (const input of to.contract.inputs) {
     if (input.optional) continue;
     const out = outputs.get(input.name);
-    if (!out) {
-      issues.push({
-        port: input.name,
-        reason: `${from.id} kh\xF4ng c\xF3 c\u1ED5ng ra t\xEAn "${input.name}" m\xE0 ${to.id} c\u1EA7n`
-      });
-      continue;
-    }
+    if (!out) continue;
     if (out.shape.trim() !== input.shape.trim()) {
       issues.push({
         port: input.name,
@@ -16280,10 +16957,10 @@ async function checkEdge(graph, edge, root) {
   if (issues.length > 0) {
     return { edge, result: "fail", issues, reason: issues.map((i) => i.reason).join("; ") };
   }
-  const run20 = edge.verification.run;
-  if (!run20) return { edge, result: "pass", issues: [] };
+  const run21 = edge.verification.run;
+  if (!run21) return { edge, result: "pass", issues: [] };
   const findings = lintProbe({
-    run: run20,
+    run: run21,
     statement: `${from.id} \u2192 ${to.id}`,
     context: [
       ...from.contract.outputs.map((p) => p.name),
@@ -16299,7 +16976,7 @@ async function checkEdge(graph, edge, root) {
       reason: blocking.map((f) => f.message).join("; ")
     };
   }
-  const result = await runShell(run20, { cwd: root, timeoutMs: 6e4 });
+  const result = await runShell(run21, { cwd: root, timeoutMs: 6e4 });
   const verdict = judge(result, "exit_zero");
   if (!verdict.pass) {
     return { edge, result: "fail", issues: [], reason: verdict.reason };
@@ -16382,6 +17059,22 @@ function computeDebt(graph, checks) {
       }
     }
   }
+  for (const [id, sourced] of graph.modules) {
+    const supplied = /* @__PURE__ */ new Set();
+    for (const dep of sourced.value.depends_on) {
+      for (const out of graph.modules.get(dep)?.value.contract.outputs ?? []) {
+        supplied.add(out.name);
+      }
+    }
+    for (const input of sourced.value.contract.inputs) {
+      if (input.optional || supplied.has(input.name)) continue;
+      items.push({
+        kind: "uncovered-port",
+        moduleId: id,
+        message: `kh\u1ED1i ${id} c\u1EA7n c\u1ED5ng v\xE0o "${input.name}" nh\u01B0ng kh\xF4ng kh\u1ED1i n\xE0o trong \`depends_on\` khai c\u1ED5ng ra c\xF9ng t\xEAn`
+      });
+    }
+  }
   for (const check of checks) {
     if (check.result === "fail") {
       items.push({
@@ -16453,9 +17146,8 @@ __export(scope_exports, {
   run: () => run4,
   slugify: () => slugify
 });
-import { existsSync as existsSync8 } from "node:fs";
-import { mkdir as mkdir4, readdir as readdir3, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname as dirname4, join as join9, relative as relative3 } from "node:path";
+import { mkdir as mkdir5, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname5, join as join9, relative as relative3 } from "node:path";
 async function writeNewYaml(file, content, describe) {
   try {
     await writeFile4(file, content, { encoding: "utf8", flag: "wx" });
@@ -16591,6 +17283,31 @@ verify: []
 function looksLikeIoGlob(glob) {
   return IO_SEGMENT.test(glob.replace(/\*+/g, ""));
 }
+async function writeModuleGuide(root, graph, mod) {
+  const dir = moduleGuideDir(mod.paths);
+  if (dir === void 0) return;
+  const absDir = join9(root, dir);
+  if (!exists(absDir)) return;
+  const file = join9(absDir, guideFileName(graph.config.harness));
+  if (exists(file)) return;
+  const body = moduleGuideMd({
+    id: mod.id,
+    title: mod.title,
+    dir,
+    nature: mod.nature ?? "code",
+    probes: []
+  });
+  try {
+    await writeFile4(file, body, { encoding: "utf8", flag: "wx" });
+    process.stdout.write(`  ${relative3(root, file)} (khung file h\u01B0\u1EDBng d\u1EABn c\u1EE7a v\xF9ng)
+`);
+  } catch {
+    process.stdout.write(
+      `  \u26A0 kh\xF4ng ghi \u0111\u01B0\u1EE3c ${relative3(root, file)} \u2014 t\u1EA1o tay, ho\u1EB7c \`ganas validate\` s\u1EBD nh\u1EAFc.
+`
+    );
+  }
+}
 async function runNew(argv, root, graph) {
   const interactive = process.stdin.isTTY && !flag(argv, "yes", "y");
   const title = option(argv, "title") ?? (interactive ? await prompt2("B\xE0n giao c\xE1i g\xEC?") : "");
@@ -16620,9 +17337,10 @@ async function runNew(argv, root, graph) {
   if (reused.length === 0) {
     const write = async (mod) => {
       const file = ganasPath(root, DIRS.modules, `${mod.id}.yaml`);
-      await mkdir4(dirname4(file), { recursive: true });
+      await mkdir5(dirname5(file), { recursive: true });
       await writeNewYaml(file, moduleYaml(mod), `kh\u1ED1i ${mod.id}`);
       created.push(relative3(root, file));
+      await writeModuleGuide(root, graph, mod);
     };
     if (split) {
       await write({ id: `M-${stem}`, scopeId: id, title, paths: corePaths });
@@ -16639,7 +17357,7 @@ async function runNew(argv, root, graph) {
     }
   }
   const scopeFile = ganasPath(root, DIRS.scopes, `${id}.yaml`);
-  await mkdir4(dirname4(scopeFile), { recursive: true });
+  await mkdir5(dirname5(scopeFile), { recursive: true });
   await writeNewYaml(
     scopeFile,
     scopeYaml({ id, title, owner, moduleIds, accept }),
@@ -16692,8 +17410,8 @@ async function scanMissing(root, graph) {
     [DIRS.tasks, "task"]
   ]) {
     const abs = ganasPath(root, dir);
-    if (!existsSync8(abs)) continue;
-    for (const entry of await readdir3(abs, { withFileTypes: true })) {
+    if (!exists(abs)) continue;
+    for (const entry of await listDir(abs)) {
       if (!entry.isFile() || !/\.ya?ml$/.test(entry.name)) continue;
       const file = join9(abs, entry.name);
       const doc = (0, import_yaml5.parseDocument)(await readFile9(file, "utf8"));
@@ -16808,8 +17526,10 @@ var init_scope2 = __esm({
     init_paths();
     init_trace();
     init_model();
+    init_project();
     init_args();
     init_errors();
+    init_fsprobe();
     init_glob();
     init_common2();
     SLUG_MAX = 40;
@@ -16818,8 +17538,8 @@ var init_scope2 = __esm({
 });
 
 // src/graph/claim.ts
-import { mkdir as mkdir5, open, readdir as readdir4, readFile as readFile10, rm as rm2, stat as stat2 } from "node:fs/promises";
-import { dirname as dirname5 } from "node:path";
+import { mkdir as mkdir6, open as open2, readdir as readdir3, readFile as readFile10, rm as rm3 } from "node:fs/promises";
+import { dirname as dirname6 } from "node:path";
 function claimFile(root, taskId) {
   return ganasPath(root, DIRS.locks, `${taskId}.claim`);
 }
@@ -16841,7 +17561,7 @@ async function readClaimFile(file) {
 }
 async function createClaimFile(file, claim) {
   try {
-    const handle = await open(file, "wx");
+    const handle = await open2(file, "wx");
     try {
       await handle.writeFile(JSON.stringify(claim));
     } finally {
@@ -16854,14 +17574,14 @@ async function createClaimFile(file, claim) {
   }
 }
 async function acquireLock(file, sessionId, ttlMinutes, sameSessionKeeps) {
-  await mkdir5(dirname5(file), { recursive: true });
+  await mkdir6(dirname6(file), { recursive: true });
   const claim = { session_id: sessionId, claimed_at: (/* @__PURE__ */ new Date()).toISOString() };
   if (await createClaimFile(file, claim)) return true;
   const existing = await readClaimFile(file);
   if (!existing) return createClaimFile(file, claim);
   if (existing.session_id === sessionId && sameSessionKeeps) return true;
   if (!isStale(existing, ttlMinutes)) return false;
-  await rm2(file, { force: true });
+  await rm3(file, { force: true });
   return createClaimFile(file, claim);
 }
 async function claimTask(root, taskId, sessionId, ttlMinutes) {
@@ -16869,37 +17589,6 @@ async function claimTask(root, taskId, sessionId, ttlMinutes) {
 }
 async function reserveId(root, id, sessionId, ttlMinutes) {
   return acquireLock(idFile(root, id), sessionId, ttlMinutes, false);
-}
-async function withFileLock(lockFile, ttlMs, fn) {
-  await mkdir5(dirname5(lockFile), { recursive: true });
-  const giveUpAfterMs = ttlMs * 5;
-  const waitStartedAt = Date.now();
-  for (; ; ) {
-    try {
-      const handle = await open(lockFile, "wx");
-      await handle.close();
-      break;
-    } catch (err) {
-      if (err.code !== "EEXIST") throw err;
-      const info = await stat2(lockFile).catch(() => null);
-      if (!info || Date.now() - info.mtimeMs > ttlMs) {
-        await rm2(lockFile, { force: true });
-        continue;
-      }
-      if (Date.now() - waitStartedAt > giveUpAfterMs) {
-        throw new Error(
-          `withFileLock: kh\xF4ng gi\xE0nh \u0111\u01B0\u1EE3c kho\xE1 ${lockFile} sau ${giveUpAfterMs}ms \u2014 c\xF3 ti\u1EBFn tr\xECnh kh\xE1c \u0111ang gi\u1EEF n\xF3 l\xE2u b\u1EA5t th\u01B0\u1EDDng.`,
-          { cause: err }
-        );
-      }
-      await new Promise((resolve4) => setTimeout(resolve4, LOCK_POLL_MS));
-    }
-  }
-  try {
-    return await fn();
-  } finally {
-    await rm2(lockFile, { force: true });
-  }
 }
 async function claimNextTask(graph, root, sessionId, opts = {}) {
   const ttlMinutes = graph.config.claim.ttl_minutes;
@@ -16912,7 +17601,7 @@ async function releaseClaimsForSession(root, sessionId) {
   const dir = ganasPath(root, DIRS.locks);
   let entries;
   try {
-    entries = await readdir4(dir);
+    entries = await readdir3(dir);
   } catch {
     return;
   }
@@ -16922,17 +17611,17 @@ async function releaseClaimsForSession(root, sessionId) {
       if (!suffix) return;
       const file = ganasPath(root, DIRS.locks, name);
       const claim = await readClaimFile(file);
-      if (claim?.session_id === sessionId) await rm2(file, { force: true });
+      if (claim?.session_id === sessionId) await rm3(file, { force: true });
     })
   );
 }
-var LOCK_POLL_MS, LOCK_SUFFIXES;
+var LOCK_SUFFIXES;
 var init_claim = __esm({
   "src/graph/claim.ts"() {
     "use strict";
     init_paths();
     init_select();
-    LOCK_POLL_MS = 20;
+    init_lock();
     LOCK_SUFFIXES = [".claim", ".id"];
   }
 });
@@ -17222,7 +17911,6 @@ var init_group = __esm({
 });
 
 // src/render/brief.ts
-import { existsSync as existsSync9 } from "node:fs";
 import { join as join10 } from "node:path";
 function relevantLegacyClaims(graph, task) {
   const paths = new Set(task.context_contract.must_read.map((m) => m.path));
@@ -17283,6 +17971,15 @@ function overdueIceboxSection(graph, t, now) {
 \u0110\xE2y l\xE0 vi\u1EC7c **\u0111\xE3 c\xF3 ng\u01B0\u1EDDi quy\u1EBFt \u0111\u1ECBnh ho\xE3n**, kh\xF4ng ph\u1EA3i vi\u1EC7c ph\u1EA3i l\xE0m b\xE2y gi\u1EDD. M\u1ED1c h\u1EB9n xem l\u1EA1i quy\u1EBFt \u0111\u1ECBnh \u0111\xF3 \u0111\xE3 qua \u2014 kh\xF4ng t\u1EF1 \xFD l\xE0m, c\u0169ng kh\xF4ng t\u1EF1 \xFD b\u1ECF; x\xE1c nh\u1EADn l\u1EA1i l\xFD do ho\xE3n (\`why_deferred\`) c\xF2n \u0111\xFAng kh\xF4ng, qua \`ganas icebox review\` (in k\xE8m anchor t\u1EDBi code) ho\u1EB7c \u0111\u1ECDc th\u1EB3ng file trong \`.ganas/icebox/\`:
 
 ` + bullet(lines) + note;
+}
+function pendingProposalsSection(graph, t) {
+  const count = [...graph.proposals.values()].filter(
+    (s) => s.value.status === "pending" && s.value.scope === t.scope
+  ).length;
+  if (count === 0) return "";
+  return `## \u0110\u1EC1 xu\u1EA5t \u0111ang ch\u1EDD duy\u1EC7t
+
+${count} \u0111\u1EC1 xu\u1EA5t \`pending\` c\xF9ng ph\u1EA1m vi \`${t.scope}\` \u2014 n\u1ED9i dung kh\xF4ng in \u1EDF \u0111\xE2y, xem \`ganas proposal list\`.`;
 }
 function findSupersededBy(graph, designId) {
   for (const sourced of graph.designs.values()) {
@@ -17489,7 +18186,7 @@ Ng\u01B0\u1EDDi \u0111\xE3 quy\u1EBFt. Model kh\xF4ng \u0111\u01B0\u1EE3c t\u1EA
   }
   if (t.context_contract.must_read.length > 0) {
     const items = t.context_contract.must_read.map((m) => {
-      const missing = !existsSync9(join10(graph.root, m.path));
+      const missing = !exists(join10(graph.root, m.path));
       return `\`${m.path}\`${missing ? " \u2014 \u26A0 **KH\xD4NG T\u1ED2N T\u1EA0I**" : ""}
   ${m.why}`;
     });
@@ -17658,6 +18355,8 @@ C\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn (kh\xF4ng ch\u1EB7n phi\xEAn, nh\u01B0
   );
   const icebox = overdueIceboxSection(graph, t, now);
   if (icebox) parts.push(icebox);
+  const proposals = pendingProposalsSection(graph, t);
+  if (proposals) parts.push(proposals);
   parts.push(RULE_REMINDER);
   const stable = parts.join("\n\n");
   if (stable.length > BRIEF_LENGTH_WARNING_CHARS) {
@@ -17684,6 +18383,7 @@ var init_brief = __esm({
     init_select();
     init_model();
     init_search();
+    init_fsprobe();
     init_group();
     RULE_REMINDER = `## Lu\u1EADt ghi tri th\u1EE9c
 
@@ -17872,6 +18572,173 @@ var init_next = __esm({
   }
 });
 
+// src/commit.ts
+import { mkdtemp as mkdtemp2, rm as rm4, symlink } from "node:fs/promises";
+import { tmpdir as tmpdir2 } from "node:os";
+import { join as join11 } from "node:path";
+function buildCommitMessage(graph, task, gate) {
+  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
+  for (const r of gate.results) {
+    const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
+    lines.push(`  ${mark} ${r.label}`);
+  }
+  const design = graph.designs.get(task.implements)?.value;
+  const context = [
+    `ph\u1EE5c v\u1EE5 ${task.serves.join(", ")}`,
+    design ? `design ${design.id} \u2014 ${design.title}` : `design ${task.implements}`,
+    `ph\u1EA1m vi ${task.scope}`
+  ].join(" \xB7 ");
+  lines.push("", context);
+  return lines.join("\n") + "\n";
+}
+function shellQuote(p) {
+  return `'${p.split("'").join(`'\\''`)}'`;
+}
+async function materializeTree(root, treeish) {
+  const dir = await mkdtemp2(join11(tmpdir2(), "ganas-tree-"));
+  const extract = await runShell(`git archive ${treeish} | tar -x -C ${shellQuote(dir)}`, {
+    cwd: root,
+    timeoutMs: 12e4
+  });
+  if (extract.code !== 0) {
+    await rm4(dir, { recursive: true, force: true }).catch(() => void 0);
+    return void 0;
+  }
+  const modules = join11(root, "node_modules");
+  if (exists(modules)) {
+    await symlink(modules, join11(dir, "node_modules"), "dir").catch(() => void 0);
+  }
+  return dir;
+}
+async function checkStagedTree(root, task, buildCheck) {
+  const tree = await runShell("git write-tree", { cwd: root, timeoutMs: 3e4 });
+  if (tree.code !== 0 || !tree.stdout.trim()) {
+    return {
+      status: "skipped",
+      failures: [],
+      reason: `\`git write-tree\` kh\xF4ng ch\u1EA1y \u0111\u01B0\u1EE3c: ${tree.stderr.trim() || "kh\xF4ng r\xF5 l\xFD do"}`
+    };
+  }
+  const dir = await materializeTree(root, tree.stdout.trim());
+  if (dir === void 0) {
+    return {
+      status: "skipped",
+      failures: [],
+      reason: "bung c\xE2y \u0111\xE3 stage ra th\u01B0 m\u1EE5c t\u1EA1m th\u1EA5t b\u1EA1i"
+    };
+  }
+  try {
+    const results = await evaluateTreeCriteria(dir, task.exit_contract);
+    const failures = results.filter((r) => r.status === "fail").map((r) => ({ label: r.label, reason: r.reason ?? "kh\xF4ng \u0111\u1EA1t" }));
+    if (failures.length > 0) return { status: "failed", failures };
+    if (!buildCheck) return { status: "ok", failures: [] };
+    const staged = await runShell(buildCheck, { cwd: dir, timeoutMs: BUILD_CHECK_TIMEOUT_MS });
+    if (staged.code === 0) return { status: "ok", failures: [] };
+    if (staged.timedOut) {
+      return {
+        status: "skipped",
+        failures: [],
+        reason: `\`${buildCheck}\` qu\xE1 ${BUILD_CHECK_TIMEOUT_MS / 1e3}s tr\xEAn c\xE2y \u0111\xE3 stage \u2014 kh\xF4ng k\u1EBFt lu\u1EADn`
+      };
+    }
+    const headDir = await materializeTree(root, "HEAD");
+    if (headDir === void 0) {
+      return {
+        status: "skipped",
+        failures: [],
+        reason: `\`${buildCheck}\` \u0111\u1ECF tr\xEAn c\xE2y \u0111\xE3 stage, nh\u01B0ng kh\xF4ng d\u1EF1ng \u0111\u01B0\u1EE3c c\xE2y HEAD \u0111\u1EC3 \u0111\u1ED1i chi\u1EBFu`
+      };
+    }
+    try {
+      const base2 = await runShell(buildCheck, { cwd: headDir, timeoutMs: BUILD_CHECK_TIMEOUT_MS });
+      if (base2.code !== 0) {
+        return {
+          status: "baseline-red",
+          failures: [],
+          reason: `\`${buildCheck}\` \u0111\u1ECF \u1EDF C\u1EA2 c\xE2y \u0111\xE3 stage l\u1EABn HEAD \u2014 commit n\xE0y kh\xF4ng l\xE0m g\xE3y th\xEAm`
+        };
+      }
+    } finally {
+      await rm4(headDir, { recursive: true, force: true }).catch(() => void 0);
+    }
+    return {
+      status: "failed",
+      failures: [
+        {
+          label: `l\u1EC7nh ki\u1EC3m to\xE0n d\u1EF1 \xE1n \`${buildCheck}\``,
+          reason: (staged.stderr.trim() || staged.stdout.trim() || "tho\xE1t kh\xE1c 0").slice(0, 800)
+        }
+      ]
+    };
+  } finally {
+    await rm4(dir, { recursive: true, force: true }).catch(() => void 0);
+  }
+}
+function parsePorcelainZ(stdout) {
+  const fields = stdout.split("\0");
+  const entries = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    if (!field || field.length < 4) continue;
+    const x = field[0];
+    const y = field[1];
+    entries.push({ x, y, path: field.slice(3) });
+    if (x === "R" || x === "C" || y === "R" || y === "C") {
+      const other = fields[++i];
+      if (other) entries.push({ x, y, path: other });
+    }
+  }
+  return entries;
+}
+async function gitChangedPaths(root, pathspec) {
+  if (pathspec.length === 0) return [];
+  const spec = pathspec.map(shellQuote).join(" ");
+  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
+    cwd: root,
+    timeoutMs: 15e3
+  });
+  if (res.code !== 0) return [];
+  return parsePorcelainZ(res.stdout);
+}
+async function gitTouchedPaths(root) {
+  const entries = await gitChangedPaths(root, ["."]);
+  return [...new Set(entries.map((e) => e.path))];
+}
+function formatStagedTreeCheck(taskId, check) {
+  if (check.status === "ok") return "";
+  if (check.status === "baseline-red") {
+    return `
+\u26A0 ${check.reason}
+  Commit v\u1EABn \u0111i ti\u1EBFp. Ch\u1ED7 \u0111\u1ECF s\u1EB5n \u0111\xF3 l\xE0 n\u1EE3 c\u1EE7a c\u1EA3 d\u1EF1 \xE1n, kh\xF4ng ph\u1EA3i c\u1EE7a ${taskId}.
+`;
+  }
+  if (check.status === "skipped") {
+    return `
+\u26A0 KH\xD4NG ch\u1EA5m l\u1EA1i \u0111\u01B0\u1EE3c tr\xEAn c\xE2y s\u1EAFp commit: ${check.reason}
+  Gate \u0111\xE3 xanh tr\xEAn working tree, nh\u01B0ng \u0111\xF3 l\xE0 m\u1ED9t c\xE2y KH\xC1C v\u1EDBi c\xE2y s\u1EAFp \u0111i v\xE0o commit.
+`;
+  }
+  return `
+\u2717 ${taskId} xanh tr\xEAn working tree nh\u01B0ng \u0110\u1ECE tr\xEAn c\xE2y s\u1EAFp \u0111\u01B0\u1EE3c commit:
+` + check.failures.map((f) => `    ${f.label}
+      ${f.reason}`).join("\n") + `
+
+  G\u1EA7n nh\u01B0 lu\xF4n c\xF9ng m\u1ED9t nguy\xEAn nh\xE2n: file trong ranh gi\u1EDBi c\u1EE7a task ph\u1EE5 thu\u1ED9c m\u1ED9t
+  file NGO\xC0I ranh gi\u1EDBi \u0111ang s\u1EEDa d\u1EDF. Working tree c\xF3 \u0111\u1EE7 c\u1EA3 hai, commit th\xEC kh\xF4ng.
+  Ho\u1EB7c khai th\xEAm kh\u1ED1i v\xE0o \`touches\`, ho\u1EB7c commit file kia tr\u01B0\u1EDBc b\u1EB1ng task s\u1EDF h\u1EEFu n\xF3.
+`;
+}
+var BUILD_CHECK_TIMEOUT_MS;
+var init_commit = __esm({
+  "src/commit.ts"() {
+    "use strict";
+    init_gate();
+    init_exec();
+    init_fsprobe();
+    BUILD_CHECK_TIMEOUT_MS = 3e5;
+  }
+});
+
 // src/commands/gate.ts
 var gate_exports = {};
 __export(gate_exports, {
@@ -17886,7 +18753,7 @@ async function run8(argv) {
   if (!task) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
   const green = alreadyGreen(result, await baselineFor(root, sessionId, taskId));
-  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const touched = await gitTouchedPaths(root);
   const boundary = taskBoundary(task.value, graph);
   const outside = outsideBoundary(task.value, graph, touched);
   if (flag(argv, "json")) {
@@ -17947,6 +18814,7 @@ var init_gate2 = __esm({
   "src/commands/gate.ts"() {
     "use strict";
     init_boundary();
+    init_commit();
     init_gate();
     init_state();
     init_args();
@@ -18410,6 +19278,11 @@ var init_debt = __esm({
       "verify/eval-weak": { weight: 3, ease: 3 },
       /* --- chu trình: chỉ sửa được bằng cách thiết kế lại phụ thuộc ----------- */
       "spine/module-cycle": { weight: 3, ease: 1 },
+      // Cùng hậu quả với `spine/module-cycle` — độ tin không lan truyền được — nên
+      // cùng `weight`. `ease` KHÔNG giống: cạnh ở đây đo từ import thật, nên sửa
+      // là sửa CODE (chuyển kiểu xuống khối lá, tách phần dùng chung), không phải
+      // sửa một dòng YAML. Không có đường tắt nào, kể cả đường tắt sai.
+      "spine/module-cycle-code": { weight: 3, ease: 1 },
       "spine/task-cycle": { weight: 3, ease: 1 },
       "spine/design-cycle": { weight: 3, ease: 1 },
       // Chu trình decision KHÁC hẳn ba cái trên, cả hai trục — đừng chấm theo họ
@@ -18482,10 +19355,38 @@ var init_debt = __esm({
       // task và khỏi báo cáo sau commit — chỉ còn thấy dưới `--all`. Đó là im
       // lặng biến mất khỏi chỗ người thật sự nhìn.
       "icebox/without-scope": { weight: 3, ease: 5 },
+      // Anchor URL thiếu trích dẫn: link chết thì bằng chứng mất theo, nhưng sửa
+      // chỉ là chép lại một đoạn — miễn còn mở được trang.
+      "knowledge/url-anchor-without-quote": { weight: 3, ease: 4 },
+      /* --- bản đồ code: tài liệu vùng, vùng chồng nhau ------------------------ */
+      // Thiếu tài liệu vùng: không sai gì cả, nhưng mỗi phiên đụng vào vùng đó
+      // phải tự suy lại — nợ lãi kép, và viết một file là xong.
+      "scope/module-missing-guide": { weight: 2, ease: 4 },
+      // Hai khối cùng nhận một vùng: `parallelCandidates` có thể xếp hai task
+      // "rời nhau" mà thật ra cùng file — hỏng im lặng, nhưng sửa là chuyện tách
+      // vài dòng glob.
+      "scope/module-paths-overlap": { weight: 4, ease: 4 },
+      /* --- proposal: chỗ lệch chưa ai quyết ---------------------------------- */
+      // Liên kết treo, cùng hạng với các `*-missing-*` khác: sai một id, sửa nhanh.
+      "scope/proposal-scope-not-found": { weight: 3, ease: 5 },
+      "spine/proposal-missing-target": { weight: 3, ease: 5 },
+      "spine/proposal-missing-supersede": { weight: 3, ease: 5 },
+      // Hai đề xuất tranh công một đích: không sai dữ liệu, nhưng lịch sử "vì sao
+      // có D-00x" thành hai bản — người phải xử, nên ease thấp hơn.
+      "spine/proposal-duplicate-target": { weight: 3, ease: 4 },
+      // Vòng lặp supersedes: đồ thị tự mâu thuẫn, nhưng cắt một cạnh là xong.
+      "spine/proposal-cycle": { weight: 4, ease: 4 },
+      // Chất lượng nội dung đề xuất — không chặn gì, sửa bằng cách viết lại hai
+      // câu. Nhẹ nhất bảng, đúng vai một lời nhắc.
+      "knowledge/proposal-repeats-rejected": { weight: 2, ease: 5 },
+      "knowledge/proposal-problem-equals-change": { weight: 1, ease: 5 },
       /* --- computeDebt: nợ riêng của sơ đồ khối (DebtKind, không có "/") ------ */
       // Cạnh `depends_on` không cạnh contract nào kiểm — sơ đồ TRÔNG như đã nối
       // nhưng chưa ai kiểm tương thích thật.
       "uncovered-edge": { weight: 3, ease: 3 },
+      // Cổng vào không khối thượng nguồn nào cấp: sơ đồ tự mâu thuẫn — khối đòi một
+      // thứ mà theo chính sơ đồ thì không ai đưa cho nó. Nặng hơn cạnh chưa kiểm.
+      "uncovered-port": { weight: 4, ease: 3 },
       // Cạnh contract ĐANG fail — tích hợp giữa hai khối thật sự đang gãy ngay
       // lúc này, không phải nguy cơ tương lai: cùng hạng với sổ cái hỏng.
       "broken-contract": { weight: 5, ease: 3 },
@@ -18637,9 +19538,8 @@ __export(icebox_exports, {
   overdueIceboxItems: () => overdueIceboxItems,
   run: () => run12
 });
-import { existsSync as existsSync10 } from "node:fs";
-import { mkdir as mkdir6, readFile as readFile11, writeFile as writeFile5 } from "node:fs/promises";
-import { dirname as dirname6, join as join11 } from "node:path";
+import { mkdir as mkdir7, readFile as readFile11, writeFile as writeFile5 } from "node:fs/promises";
+import { dirname as dirname7, join as join12 } from "node:path";
 function monthOf(d) {
   return d.toISOString().slice(0, 7);
 }
@@ -18668,10 +19568,10 @@ async function nextIceboxId(graph, root, sessionId, ttlMinutes) {
 }
 async function appendIceboxRecord(root, month, record2) {
   const relFile = iceboxRelFile(month);
-  const file = join11(root, relFile);
-  await mkdir6(dirname6(file), { recursive: true });
+  const file = join12(root, relFile);
+  await mkdir7(dirname7(file), { recursive: true });
   await withFileLock(iceboxLockFile(root, relFile), ICEBOX_LOCK_TTL_MS, async () => {
-    const raw = existsSync10(file) ? await readFile11(file, "utf8") : "";
+    const raw = exists(file) ? await readFile11(file, "utf8") : "";
     const doc = (0, import_yaml6.parseDocument)(raw);
     if (doc.contents === null) doc.contents = doc.createNode([]);
     doc.addIn([], record2);
@@ -18679,7 +19579,7 @@ async function appendIceboxRecord(root, month, record2) {
   });
 }
 async function writeIceboxUpdate(root, sourced, updates, deleteKeys = []) {
-  const file = join11(root, sourced.file);
+  const file = join12(root, sourced.file);
   const base2 = sourced.index === void 0 ? [] : [sourced.index];
   await withFileLock(iceboxLockFile(root, sourced.file), ICEBOX_LOCK_TTL_MS, async () => {
     const doc = (0, import_yaml6.parseDocument)(await readFile11(file, "utf8"));
@@ -18927,6 +19827,7 @@ var init_icebox2 = __esm({
     init_model();
     init_args();
     init_errors();
+    init_fsprobe();
     init_common2();
     init_debt2();
     DAY_MS2 = 24 * 60 * 60 * 1e3;
@@ -18934,10 +19835,336 @@ var init_icebox2 = __esm({
   }
 });
 
+// src/commands/proposal.ts
+var proposal_exports = {};
+__export(proposal_exports, {
+  rankProposals: () => rankProposals,
+  run: () => run13
+});
+import { mkdir as mkdir8, readFile as readFile12, writeFile as writeFile6 } from "node:fs/promises";
+import { dirname as dirname8, join as join13, relative as relative4 } from "node:path";
+function relFileOf(id) {
+  return `${GANAS_DIR}/${DIRS.proposals}/${id}.yaml`;
+}
+function lockFileOf(root, id) {
+  return ganasPath(root, DIRS.locks, `proposal-${id}.lock`);
+}
+async function nextProposalId(graph, root, sessionId, ttlMinutes) {
+  let max = 0;
+  for (const id of graph.proposals.keys()) {
+    if (!ID_PATTERNS.proposal.test(id)) continue;
+    const n2 = Number(id.slice("PR-".length));
+    if (Number.isFinite(n2) && n2 > max) max = n2;
+  }
+  const maxAttempts = 1e3;
+  let n = max + 1;
+  for (let attempts = 0; attempts < maxAttempts; attempts++, n++) {
+    const candidate = `PR-${String(n).padStart(3, "0")}`;
+    if (await reserveId(root, candidate, sessionId, ttlMinutes)) return candidate;
+  }
+  throw new GanasError(
+    `kh\xF4ng \u0111\u1EB7t ch\u1ED7 \u0111\u01B0\u1EE3c id PR sau ${maxAttempts} l\u1EA7n th\u1EED \u2014 qu\xE1 nhi\u1EC1u id \u0111ang b\u1ECB gi\u1EEF trong .ganas/.locks/.`
+  );
+}
+function requireProposal(graph, id) {
+  if (!id) throw new GanasError("thi\u1EBFu id \u0111\u1EC1 xu\u1EA5t (vd `ganas proposal show PR-001`).");
+  const found = graph.proposals.get(id);
+  if (!found) throw new GanasError(`kh\xF4ng c\xF3 \u0111\u1EC1 xu\u1EA5t ${id} trong graph.`);
+  return found;
+}
+async function writeUpdate(root, sourced, updates) {
+  const file = join13(root, sourced.file);
+  await withFileLock(lockFileOf(root, sourced.value.id), PROPOSAL_LOCK_TTL_MS, async () => {
+    const doc = (0, import_yaml7.parseDocument)(await readFile12(file, "utf8"));
+    for (const [k, v] of Object.entries(updates)) doc.setIn([k], v);
+    await writeFile6(file, doc.toString(), "utf8");
+  });
+}
+function requireDecider(argv) {
+  const by = option(argv, "by");
+  if (!by) {
+    throw new GanasError(
+      "thi\u1EBFu --by @ai-\u0111\xF3 \u2014 duy\u1EC7t hay t\u1EEB ch\u1ED1i \u0111\u1EC1u l\xE0 c\xE2u tr\u1EA3 l\u1EDDi c\u1EE7a NG\u01AF\u1EDCI, ph\u1EA3i ghi t\xEAn ng\u01B0\u1EDDi \u0111\xF3."
+    );
+  }
+  if (!/^@[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(by)) {
+    throw new GanasError(`--by ph\u1EA3i d\u1EA1ng "@ten", nh\u1EADn \u0111\u01B0\u1EE3c "${by}"`);
+  }
+  return by;
+}
+function parseScoreValue2(raw, flagLabel) {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 5) {
+    throw new GanasError(`${flagLabel} ph\u1EA3i l\xE0 s\u1ED1 nguy\xEAn trong thang 1-5, nh\u1EADn \u0111\u01B0\u1EE3c "${raw}"`);
+  }
+  return n;
+}
+function yamlBlock(key, value) {
+  const body = value.trim().split("\n").map((l) => `  ${l}`).join("\n");
+  return `${key}: >-
+${body}
+`;
+}
+function proposalYaml(p) {
+  return `id: ${p.id}
+title: ${JSON.stringify(p.title)}
+scope: ${p.scope}
+` + yamlBlock("problem", p.problem) + yamlBlock("proposed_change", p.change) + `anchors:
+${p.anchors.map((a) => `  - ${JSON.stringify(a)}`).join("\n")}
+weight: ${p.weight}
+ease: ${p.ease}
+found_at: "${p.foundAt}"
+status: pending
+`;
+}
+async function runNew2(argv, root, graph) {
+  const title = option(argv, "title");
+  if (!title) throw new GanasError("thi\u1EBFu --title \u2014 \u0111\u1EC1 xu\u1EA5t ph\u1EA3i c\xF3 ti\xEAu \u0111\u1EC1.");
+  const problem = option(argv, "problem");
+  if (!problem) {
+    throw new GanasError(
+      "thi\u1EBFu --problem \u2014 ch\u1ED7 L\u1EC6CH l\xE0 g\xEC? N\xEAu gi\u1EA3i ph\xE1p m\xE0 kh\xF4ng n\xEAu v\u1EA5n \u0111\u1EC1 th\xEC ng\u01B0\u1EDDi duy\u1EC7t ch\u1EC9 c\xF2n c\xE1ch tin l\u1EDDi ng\u01B0\u1EDDi \u0111\u1EC1 xu\u1EA5t."
+    );
+  }
+  const change = option(argv, "change");
+  if (!change) throw new GanasError("thi\u1EBFu --change \u2014 \u0111\u1EC1 ngh\u1ECB l\xE0m g\xEC?");
+  const anchors = multiOption(argv, "anchor");
+  if (anchors.length === 0) {
+    throw new GanasError(
+      "thi\u1EBFu --anchor \u2014 \u0111\u1EC1 xu\u1EA5t kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng th\xEC kh\xF4ng ph\u1EA3i ph\xE1t hi\u1EC7n, ch\u1EC9 l\xE0 \xFD ki\u1EBFn (vd `--anchor src/a.ts:12`). L\u1EB7p l\u1EA1i c\u1EDD n\xE0y \u0111\u1EC3 khai nhi\u1EC1u anchor."
+    );
+  }
+  const weightRaw = option(argv, "weight");
+  if (weightRaw === void 0) throw new GanasError("thi\u1EBFu --weight (1-5) \u2014 b\u1ECF qua th\xEC h\u1EA1i \u0111\u1EBFn \u0111\xE2u?");
+  const easeRaw = option(argv, "ease");
+  if (easeRaw === void 0) throw new GanasError("thi\u1EBFu --ease (1-5) \u2014 s\u1EEDa d\u1EC5 \u0111\u1EBFn \u0111\xE2u?");
+  const scope = option(argv, "scope") ?? await scopeFromClaimedTask(argv, root, graph);
+  if (!scope) throw new GanasError("thi\u1EBFu --scope \u2014 \u0111\u1EC1 xu\u1EA5t ph\u1EA3i thu\u1ED9c m\u1ED9t ph\u1EA1m vi.");
+  if (!graph.scopes.has(scope)) throw new GanasError(`ph\u1EA1m vi ${scope} kh\xF4ng t\u1ED3n t\u1EA1i.`);
+  const sessionId = option(argv, "session") ?? "cli";
+  const id = await nextProposalId(graph, root, sessionId, graph.config.claim.ttl_minutes);
+  const file = ganasPath(root, DIRS.proposals, `${id}.yaml`);
+  await mkdir8(dirname8(file), { recursive: true });
+  await writeFile6(
+    file,
+    proposalYaml({
+      id,
+      title,
+      scope,
+      problem,
+      change,
+      anchors,
+      weight: parseScoreValue2(weightRaw, "--weight"),
+      ease: parseScoreValue2(easeRaw, "--ease"),
+      foundAt: (/* @__PURE__ */ new Date()).toISOString()
+    }),
+    { encoding: "utf8", flag: "wx" }
+  );
+  if (flag(argv, "json")) {
+    process.stdout.write(JSON.stringify({ id, file: relFileOf(id) }, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    `\u0110\xE3 ghi ${id} v\xE0o ${relative4(root, file)}
+Ch\u01B0a ai duy\u1EC7t \u2014 ng\u01B0\u1EDDi quy\u1EBFt ch\u1EA1y \`ganas proposal approve ${id} --by @ten\` ho\u1EB7c \`ganas proposal reject ${id} --by @ten --why "..."\`.
+`
+  );
+  return 0;
+}
+function rankProposals(items) {
+  return [...items].sort(
+    (a, b) => b.weight + b.ease - (a.weight + a.ease) || a.id.localeCompare(b.id)
+  );
+}
+async function runList2(argv, root, graph) {
+  const scopeId = await scopeFromClaimedTask(argv, root, graph);
+  const showAllStatus = flag(argv, "all-status");
+  const rows = rankProposals(
+    [...graph.proposals.values()].map((s) => s.value).filter((p) => scopeId === void 0 || p.scope === scopeId).filter((p) => showAllStatus || p.status === "pending")
+  );
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify({ scope: scopeId ?? null, total: rows.length, rows }, null, 2) + "\n"
+    );
+    return 0;
+  }
+  if (rows.length === 0) {
+    process.stdout.write(
+      scopeId ? `Kh\xF4ng c\xF3 \u0111\u1EC1 xu\u1EA5t n\xE0o \u0111ang ch\u1EDD trong ph\u1EA1m vi ${scopeId}.
+` : `Kh\xF4ng c\xF3 \u0111\u1EC1 xu\u1EA5t n\xE0o \u0111ang ch\u1EDD.
+`
+    );
+    return 0;
+  }
+  const lines = rows.map((p) => {
+    const status = p.status === "pending" ? "" : ` \xB7 ${p.status.toUpperCase()}`;
+    return `${p.id} \u2014 ${p.title}
+  weight ${p.weight} + ease ${p.ease} = ${p.weight + p.ease} \xB7 ph\u1EA1m vi ${p.scope}${status}
+  ${p.problem.trim().split("\n")[0]}`;
+  });
+  process.stdout.write(
+    lines.join("\n\n") + `
+
+Chi ti\u1EBFt: \`ganas proposal show <id>\`
+`
+  );
+  return 0;
+}
+function runShow(argv, graph) {
+  const sourced = requireProposal(graph, argv.positional[1]);
+  const p = sourced.value;
+  if (flag(argv, "json")) {
+    process.stdout.write(JSON.stringify(p, null, 2) + "\n");
+    return 0;
+  }
+  const parts = [
+    `# ${p.id} \u2014 ${p.title}`,
+    `ph\u1EA1m vi \`${p.scope}\` \xB7 weight ${p.weight} + ease ${p.ease} = ${p.weight + p.ease} \xB7 tr\u1EA1ng th\xE1i \`${p.status}\``,
+    `## V\u1EA5n \u0111\u1EC1
+
+${p.problem.trim()}`,
+    `## \u0110\u1EC1 ngh\u1ECB
+
+${p.proposed_change.trim()}`,
+    `## B\u1EB1ng ch\u1EE9ng
+
+${p.anchors.map((a) => `- ${formatAnchor(a)}`).join("\n")}`
+  ];
+  if (p.status === "pending") {
+    parts.push(
+      `> Ch\u01B0a ai tr\u1EA3 l\u1EDDi. Ng\u01B0\u1EDDi quy\u1EBFt ch\u1EA1y \`ganas proposal approve ${p.id} --by @ten\` ho\u1EB7c \`ganas proposal reject ${p.id} --by @ten --why "..."\`.`
+    );
+  } else {
+    parts.push(
+      `## \u0110\xE3 quy\u1EBFt
+
+${p.status} b\u1EDFi ${p.decided_by ?? "?"} l\xFAc ${p.decided_at ?? "?"}` + (p.why_rejected ? `
+
+L\xFD do t\u1EEB ch\u1ED1i: ${p.why_rejected.trim()}` : "") + (p.promoted_to ? `
+
+\u0110\xE3 th\xE0nh: ${p.promoted_to}` : "")
+    );
+  }
+  if (p.supersedes.length > 0) parts.push(`Thay th\u1EBF: ${p.supersedes.join(", ")}`);
+  if (p.notes) parts.push(`## Ghi ch\xFA
+
+${p.notes.trim()}`);
+  process.stdout.write(parts.join("\n\n") + "\n");
+  return 0;
+}
+function requirePending(p) {
+  if (p.status !== "pending") {
+    throw new GanasError(
+      `\u0111\u1EC1 xu\u1EA5t ${p.id} \u0111\xE3 \u1EDF tr\u1EA1ng th\xE1i "${p.status}" \u2014 kh\xF4ng quy\u1EBFt l\u1EA1i \u0111\u01B0\u1EE3c. \u0110\u1ED5i \xFD th\xEC ghi \u0111\u1EC1 xu\u1EA5t m\u1EDBi v\u1EDBi \`supersedes: [${p.id}]\`, \u0111\u1EC3 l\u1ECBch s\u1EED gi\u1EEF \u0111\u1EE7 hai l\u1EA7n quy\u1EBFt.`
+    );
+  }
+}
+async function fillPromotedTo(root, sourced, promotedTo) {
+  const p = sourced.value;
+  if (p.promoted_to !== void 0) {
+    throw new GanasError(
+      `\u0111\u1EC1 xu\u1EA5t ${p.id} \u0111\xE3 tr\u1ECF t\u1EDBi ${p.promoted_to} \u2014 kh\xF4ng \u0111\u1ED5i \u0111\xEDch \u0111\u01B0\u1EE3c. Tr\u1ECF l\u1EA1i ch\u1ED7 kh\xE1c l\xE0 m\u1ED9t quy\u1EBFt \u0111\u1ECBnh m\u1EDBi: ghi \u0111\u1EC1 xu\u1EA5t m\u1EDBi v\u1EDBi \`supersedes: [${p.id}]\`.`
+    );
+  }
+  await writeUpdate(root, sourced, { promoted_to: promotedTo });
+  process.stdout.write(`${p.id} (\u0111\xE3 duy\u1EC7t tr\u01B0\u1EDBc \u0111\xF3) nay tr\u1ECF t\u1EDBi ${promotedTo}.
+`);
+  return 0;
+}
+async function runApprove(argv, root, graph) {
+  const sourced = requireProposal(graph, argv.positional[1]);
+  const promotedTo = option(argv, "promoted-to");
+  if (promotedTo !== void 0) {
+    const exists2 = graph.designs.has(promotedTo) || graph.tasks.has(promotedTo) || graph.icebox.has(promotedTo);
+    if (!exists2) {
+      throw new GanasError(
+        `--promoted-to ${promotedTo} kh\xF4ng c\xF3 trong graph \u2014 th\u1EF1c th\u1EC3 ph\u1EA3i T\u1ED2N T\u1EA0I TH\u1EACT tr\u01B0\u1EDBc khi tr\u1ECF t\u1EDBi.`
+      );
+    }
+  }
+  if (sourced.value.status === "approved" && promotedTo !== void 0) {
+    return fillPromotedTo(root, sourced, promotedTo);
+  }
+  requirePending(sourced.value);
+  const by = requireDecider(argv);
+  await writeUpdate(root, sourced, {
+    status: "approved",
+    decided_by: by,
+    decided_at: (/* @__PURE__ */ new Date()).toISOString(),
+    ...promotedTo ? { promoted_to: promotedTo } : {}
+  });
+  process.stdout.write(
+    `${sourced.value.id} \u0111\xE3 \u0111\u01B0\u1EE3c ${by} duy\u1EC7t.
+` + (promotedTo ? `\u0110\xE3 tr\u1ECF t\u1EDBi ${promotedTo}.
+` : `Ch\u01B0a tr\u1ECF t\u1EDBi th\u1EF1c th\u1EC3 n\xE0o \u2014 t\u1EA1o design/task r\u1ED3i ch\u1EA1y l\u1EA1i v\u1EDBi \`--promoted-to <id>\`.
+`)
+  );
+  return 0;
+}
+async function runReject(argv, root, graph) {
+  const sourced = requireProposal(graph, argv.positional[1]);
+  requirePending(sourced.value);
+  const by = requireDecider(argv);
+  const why = option(argv, "why");
+  if (!why) {
+    throw new GanasError(
+      "thi\u1EBFu --why \u2014 t\u1EEB ch\u1ED1i m\xE0 kh\xF4ng n\xF3i v\xEC sao th\xEC phi\xEAn sau \u0111\u1EC1 xu\u1EA5t l\u1EA1i \u0111\xFAng th\u1EE9 v\u1EEBa b\u1ECB lo\u1EA1i, v\xE0 ng\u01B0\u1EDDi quy\u1EBFt ph\u1EA3i tr\u1EA3 l\u1EDDi hai l\u1EA7n."
+    );
+  }
+  await writeUpdate(root, sourced, {
+    status: "rejected",
+    decided_by: by,
+    decided_at: (/* @__PURE__ */ new Date()).toISOString(),
+    why_rejected: why
+  });
+  process.stdout.write(
+    `${sourced.value.id} \u0111\xE3 b\u1ECB ${by} t\u1EEB ch\u1ED1i.
+Mu\u1ED1n gi\u1EEF l\u1EA1i \u0111\u1EC3 xem x\xE9t sau th\xEC ghi v\xE0o s\u1ED5 g\xE1c: \`ganas icebox add --title "..."\` \u2014 t\u1EEB ch\u1ED1i kh\xF4ng ph\u1EA3i xo\xE1.
+`
+  );
+  return 0;
+}
+async function run13(argv) {
+  const sub = argv.positional[0];
+  const { root, graph } = await openProject(argv);
+  switch (sub) {
+    case "new":
+      return runNew2(argv, root, graph);
+    case void 0:
+    case "list":
+      return runList2(argv, root, graph);
+    case "show":
+      return runShow(argv, graph);
+    case "approve":
+      return runApprove(argv, root, graph);
+    case "reject":
+      return runReject(argv, root, graph);
+    default:
+      throw new GanasError(
+        `l\u1EC7nh con kh\xF4ng bi\u1EBFt: "${sub}" \u2014 c\xF3: new, list, show, approve, reject`
+      );
+  }
+}
+var import_yaml7, PROPOSAL_LOCK_TTL_MS;
+var init_proposal2 = __esm({
+  "src/commands/proposal.ts"() {
+    "use strict";
+    import_yaml7 = __toESM(require_dist(), 1);
+    init_claim();
+    init_paths();
+    init_model();
+    init_args();
+    init_errors();
+    init_common2();
+    init_debt2();
+    PROPOSAL_LOCK_TTL_MS = 5e3;
+  }
+});
+
 // src/commands/search.ts
 var search_exports = {};
 __export(search_exports, {
-  run: () => run13
+  run: () => run14
 });
 function displayQuery(query, task) {
   if (task) return `task ${task.id} \u2014 "${task.title}"`;
@@ -18954,7 +20181,7 @@ function renderHit(hit, freshness, referenceScope) {
   ${hit.fact.statement}
   file: ${hit.file}  \xB7  kh\u1EDBp: ${hit.matchedTerms.join(", ")}` + outOfScope;
 }
-async function run13(argv) {
+async function run14(argv) {
   const { graph, freshness } = await openProject(argv);
   const taskId = option(argv, "task");
   const queryArg = argv.positional.join(" ").trim();
@@ -19050,56 +20277,17 @@ var init_search2 = __esm({
   }
 });
 
-// src/commit.ts
-function buildCommitMessage(graph, task, gate) {
-  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
-  for (const r of gate.results) {
-    const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
-    lines.push(`  ${mark} ${r.label}`);
-  }
-  const design = graph.designs.get(task.implements)?.value;
-  const context = [
-    `ph\u1EE5c v\u1EE5 ${task.serves.join(", ")}`,
-    design ? `design ${design.id} \u2014 ${design.title}` : `design ${task.implements}`,
-    `ph\u1EA1m vi ${task.scope}`
-  ].join(" \xB7 ");
-  lines.push("", context);
-  return lines.join("\n") + "\n";
-}
-var init_commit = __esm({
-  "src/commit.ts"() {
-    "use strict";
-  }
-});
-
 // src/commands/commit.ts
 var commit_exports = {};
 __export(commit_exports, {
   parsePorcelainZ: () => parsePorcelainZ,
-  run: () => run14
+  run: () => run15
 });
-import { existsSync as existsSync11 } from "node:fs";
-import { mkdtemp as mkdtemp2, readFile as readFile12, rm as rm3, writeFile as writeFile6 } from "node:fs/promises";
-import { tmpdir as tmpdir2 } from "node:os";
-import { join as join12 } from "node:path";
+import { mkdtemp as mkdtemp3, readFile as readFile13, rm as rm5, writeFile as writeFile7 } from "node:fs/promises";
+import { tmpdir as tmpdir3 } from "node:os";
+import { join as join14 } from "node:path";
 function quote(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
-}
-function parsePorcelainZ(stdout) {
-  const fields = stdout.split("\0");
-  const entries = [];
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i];
-    if (!field || field.length < 4) continue;
-    const x = field[0];
-    const y = field[1];
-    entries.push({ x, y, path: field.slice(3) });
-    if (x === "R" || x === "C" || y === "R" || y === "C") {
-      const other = fields[++i];
-      if (other) entries.push({ x, y, path: other });
-    }
-  }
-  return entries;
 }
 function notFullyStaged(e) {
   return e.x === "?" || e.y !== " ";
@@ -19110,24 +20298,14 @@ function ownedPaths(task, entries) {
 function foreignPaths(task, entries) {
   return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
 }
-async function changedUnder(root, pathspec) {
-  if (pathspec.length === 0) return [];
-  const spec = pathspec.map(quote).join(" ");
-  const res = await runShell(`git status --porcelain -z -uall -- ${spec}`, {
-    cwd: root,
-    timeoutMs: 15e3
-  });
-  if (res.code !== 0) return [];
-  return parsePorcelainZ(res.stdout);
-}
 async function closeTaskFile(root, sourced) {
-  const file = join12(root, sourced.file);
-  const original = await readFile12(file, "utf8");
-  const doc = (0, import_yaml7.parseDocument)(original);
+  const file = join14(root, sourced.file);
+  const original = await readFile13(file, "utf8");
+  const doc = (0, import_yaml8.parseDocument)(original);
   const base2 = sourced.index === void 0 ? [] : [sourced.index];
   doc.setIn([...base2, "status"], "done");
   doc.setIn([...base2, "done_at"], (/* @__PURE__ */ new Date()).toISOString());
-  await writeFile6(file, doc.toString(), "utf8");
+  await writeFile7(file, doc.toString(), "utf8");
   return original;
 }
 function reportBaseline(gate, baseline) {
@@ -19140,7 +20318,7 @@ function reportBaseline(gate, baseline) {
   M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
 `;
 }
-async function run14(argv) {
+async function run15(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
   const taskId = argv.positional[0] ?? option(argv, "task") ?? await taskForSession(root, sessionId);
@@ -19169,7 +20347,7 @@ ${formatGate(gateResult)}
   const baselineWarning = reportBaseline(gateResult, baseline);
   const allGanas = flag(argv, "all-ganas");
   const codePaths = taskBoundary(task, graph);
-  const touched = await touchedPathsFor(root, sessionId, taskId);
+  const touched = await gitTouchedPaths(root);
   const outsideWarning = formatBoundaryWarning(
     taskId,
     codePaths,
@@ -19178,7 +20356,7 @@ ${formatGate(gateResult)}
   );
   const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
   if (flag(argv, "dry-run")) {
-    const ganasChanged2 = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+    const ganasChanged2 = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
     const owned2 = ownedPaths(task, ganasChanged2);
     const foreign2 = foreignPaths(task, ganasChanged2);
     const message2 = buildCommitMessage(graph, task, gateResult);
@@ -19200,7 +20378,7 @@ ${message2}`
   }
   let originalTaskFile = null;
   if (willClose) originalTaskFile = await closeTaskFile(root, sourced);
-  const ganasChanged = allGanas ? [] : await changedUnder(root, [GANAS_DIR]);
+  const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
   const owned = ownedPaths(task, ganasChanged);
   const foreign = foreignPaths(task, ganasChanged);
   for (const p of [...allGanas ? [GANAS_DIR] : owned, ...codePaths]) {
@@ -19209,7 +20387,7 @@ ${message2}`
   const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
   if (staged.code === 0) {
     if (originalTaskFile !== null) {
-      await writeFile6(join12(root, sourced.file), originalTaskFile, "utf8");
+      await writeFile7(join14(root, sourced.file), originalTaskFile, "utf8");
     }
     process.stdout.write(
       `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} \u0111ang s\u1EA1ch.
@@ -19221,18 +20399,33 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
     );
     return 0;
   }
+  if (!flag(argv, "no-recheck")) {
+    const recheck = await checkStagedTree(root, task, graph.config.build_check);
+    const report = formatStagedTreeCheck(taskId, recheck);
+    if (recheck.status === "failed") {
+      if (originalTaskFile !== null) {
+        await writeFile7(join14(root, sourced.file), originalTaskFile, "utf8");
+      }
+      throw new GanasError(
+        report.trimStart() + `
+  Th\u1EADt s\u1EF1 c\u1EA7n b\u1ECF qua th\xEC \`ganas commit ${taskId} --no-recheck\` \u2014 nh\u01B0ng bi\u1EBFt r\xF5 l\xE0 \u0111ang commit m\u1ED9t c\xE2y ch\u01B0a ai ki\u1EC3m.
+`
+      );
+    }
+    if (report) process.stdout.write(report);
+  }
   const message = buildCommitMessage(graph, task, gateResult);
-  const dir = await mkdtemp2(join12(tmpdir2(), "ganas-commit-"));
+  const dir = await mkdtemp3(join14(tmpdir3(), "ganas-commit-"));
   try {
-    const msgFile = join12(dir, "MSG");
-    await writeFile6(msgFile, message, "utf8");
+    const msgFile = join14(dir, "MSG");
+    await writeFile7(msgFile, message, "utf8");
     const result = await runShell(`git commit -F ${quote(msgFile)}`, {
       cwd: root,
       timeoutMs: 3e4
     });
     if (result.code !== 0) {
       if (originalTaskFile !== null) {
-        await writeFile6(join12(root, sourced.file), originalTaskFile, "utf8");
+        await writeFile7(join14(root, sourced.file), originalTaskFile, "utf8");
       }
       throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
 ${result.stderr || result.stdout}`);
@@ -19253,13 +20446,13 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
     );
     return 0;
   } finally {
-    await rm3(dir, { recursive: true, force: true });
+    await rm5(dir, { recursive: true, force: true });
   }
 }
 async function unstagedContractPaths(root, task) {
-  const existing = contractPathRefs(task).filter((r) => existsSync11(join12(root, r.path)));
+  const existing = contractPathRefs(task).filter((r) => exists(join14(root, r.path)));
   if (existing.length === 0) return [];
-  const changed = await changedUnder(
+  const changed = await gitChangedPaths(
     root,
     existing.map((r) => r.path)
   );
@@ -19278,11 +20471,11 @@ function reportUnstagedContract(task, left) {
   Clone v\u1EC1 m\xE1y kh\xE1c, gate c\u1EE7a ${task.id} s\u1EBD \u0111\u1ECF. \`git add\` ch\xFAng r\u1ED3i commit ti\u1EBFp.
 `;
 }
-var import_yaml7;
+var import_yaml8;
 var init_commit2 = __esm({
   "src/commands/commit.ts"() {
     "use strict";
-    import_yaml7 = __toESM(require_dist(), 1);
+    import_yaml8 = __toESM(require_dist(), 1);
     init_boundary();
     init_commit();
     init_gate();
@@ -19291,6 +20484,7 @@ var init_commit2 = __esm({
     init_args();
     init_errors();
     init_exec();
+    init_fsprobe();
     init_ledger();
     init_common2();
     init_debt2();
@@ -19298,18 +20492,17 @@ var init_commit2 = __esm({
 });
 
 // src/prune.ts
-import { existsSync as existsSync12 } from "node:fs";
-import { mkdir as mkdir7, readdir as readdir5, rename as rename2, rm as rm4, stat as stat3 } from "node:fs/promises";
-import { basename as basename3, dirname as dirname7, join as join13, relative as relative4 } from "node:path";
+import { mkdir as mkdir9, rename as rename2, rm as rm6 } from "node:fs/promises";
+import { basename as basename3, dirname as dirname9, join as join15, relative as relative5 } from "node:path";
 function notePath(root, sessionId) {
-  return join13(ganasPath(root, DIRS.runs), NOTES_DIRNAME, `${sessionId}.md`);
+  return join15(ganasPath(root, DIRS.runs), NOTES_DIRNAME, `${sessionId}.md`);
 }
 async function planPrune(root, graph, opts) {
   const now = opts.now ?? Date.now();
   const cutoff = now - opts.olderThanDays * DAY_MS3;
   const state = await readState(root);
   const runsDir = ganasPath(root, DIRS.runs);
-  const notesDir = join13(runsDir, NOTES_DIRNAME);
+  const notesDir = join15(runsDir, NOTES_DIRNAME);
   const staleRuns = [
     ...await collectStaleIn(runsDir, state, cutoff, now),
     ...await collectStaleIn(notesDir, state, cutoff, now)
@@ -19327,6 +20520,10 @@ async function planPrune(root, graph, opts) {
   const promotedTargets = /* @__PURE__ */ new Set();
   for (const rec of graph.icebox.values()) {
     if (rec.value.promoted_to) promotedTargets.add(rec.value.promoted_to);
+  }
+  for (const rec of graph.proposals.values()) {
+    const target = rec.value.promoted_to;
+    if (target && ID_PATTERNS.task.test(target)) promotedTargets.add(target);
   }
   const doneTasks = [];
   for (const t of graph.tasks.values()) {
@@ -19367,15 +20564,15 @@ function collectClosedIceboxFiles(icebox, cutoff, now) {
 }
 async function collectStaleIn(dir, state, cutoff, now) {
   const out = [];
-  if (!existsSync12(dir)) return out;
-  for (const entry of await readdir5(dir, { withFileTypes: true })) {
+  if (!exists(dir)) return out;
+  for (const entry of await listDir(dir)) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
     const sessionId = entry.name.slice(0, -3);
     if (state.sessions[sessionId]) continue;
-    const file = join13(dir, entry.name);
-    const mtimeMs = (await stat3(file)).mtimeMs;
-    if (mtimeMs > cutoff) continue;
-    out.push({ sessionId, file, ageDays: Math.floor((now - mtimeMs) / DAY_MS3) });
+    const file = join15(dir, entry.name);
+    const mtime = await mtimeMs(file) ?? 0;
+    if (mtime > cutoff) continue;
+    out.push({ sessionId, file, ageDays: Math.floor((now - mtime) / DAY_MS3) });
   }
   return out;
 }
@@ -19383,13 +20580,13 @@ function quote2(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
 }
 async function archive(root, relFile, archiveDirName) {
-  const src = join13(root, relFile);
-  const dstRel = join13(dirname7(relFile), archiveDirName, basename3(relFile));
-  const dst = join13(root, dstRel);
-  await mkdir7(dirname7(dst), { recursive: true });
-  if (existsSync12(join13(root, ".git"))) {
+  const src = join15(root, relFile);
+  const dstRel = join15(dirname9(relFile), archiveDirName, basename3(relFile));
+  const dst = join15(root, dstRel);
+  await mkdir9(dirname9(dst), { recursive: true });
+  if (exists(join15(root, ".git"))) {
     const result = await runShell(
-      `git mv -- ${quote2(relative4(root, src))} ${quote2(relative4(root, dst))}`,
+      `git mv -- ${quote2(relative5(root, src))} ${quote2(relative5(root, dst))}`,
       { cwd: root, timeoutMs: 15e3 }
     );
     if (result.code === 0) return dstRel;
@@ -19399,7 +20596,7 @@ async function archive(root, relFile, archiveDirName) {
 }
 async function applyPrune(root, plan) {
   for (const r of plan.staleRuns) {
-    await rm4(r.file, { force: true });
+    await rm6(r.file, { force: true });
   }
   if (plan.deadSessions.length > 0) {
     const state = await readState(root);
@@ -19414,8 +20611,10 @@ var init_prune = __esm({
   "src/prune.ts"() {
     "use strict";
     init_paths();
+    init_model();
     init_state();
     init_exec();
+    init_fsprobe();
     NOTES_DIRNAME = "notes";
     DAY_MS3 = 864e5;
   }
@@ -19424,11 +20623,10 @@ var init_prune = __esm({
 // src/commands/note.ts
 var note_exports = {};
 __export(note_exports, {
-  run: () => run15
+  run: () => run16
 });
-import { existsSync as existsSync13 } from "node:fs";
-import { appendFile as appendFile3, mkdir as mkdir8, writeFile as writeFile7 } from "node:fs/promises";
-import { dirname as dirname8 } from "node:path";
+import { appendFile as appendFile3, mkdir as mkdir10, writeFile as writeFile8 } from "node:fs/promises";
+import { dirname as dirname10 } from "node:path";
 async function gitSha(root) {
   const result = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5e3 });
   return result.code === 0 ? result.stdout.trim() : void 0;
@@ -19458,7 +20656,7 @@ function renderEntry(opts) {
   );
   return lines.join("\n") + "\n";
 }
-async function run15(argv) {
+async function run16(argv) {
   const content = argv.positional.join(" ").trim();
   if (!content) {
     throw new GanasError(`c\u1EA7n n\u1ED9i dung ghi ch\xFA \u2014 vd: ganas note "ch\u01B0a r\xF5 v\xEC sao webhook retry 3 l\u1EA7n"`);
@@ -19470,12 +20668,12 @@ async function run15(argv) {
   const sha = await gitSha(root);
   const at2 = (/* @__PURE__ */ new Date()).toISOString();
   const path = notePath(root, sessionId);
-  await mkdir8(dirname8(path), { recursive: true });
+  await mkdir10(dirname10(path), { recursive: true });
   const entry = renderEntry({ at: at2, taskId, sha, touchedPaths, content });
-  if (existsSync13(path)) {
+  if (await existsAsync(path)) {
     await appendFile3(path, entry, "utf8");
   } else {
-    await writeFile7(path, renderHead(sessionId) + entry, "utf8");
+    await writeFile8(path, renderHead(sessionId) + entry, "utf8");
   }
   process.stdout.write(`\u0110\xE3 ghi note v\xE0o ${path}
 `);
@@ -19491,14 +20689,14 @@ var init_note = __esm({
     init_args();
     init_errors();
     init_exec();
+    init_fsprobe();
     DEFAULT_SESSION_LABEL = "manual";
   }
 });
 
 // src/handoff.ts
-import { existsSync as existsSync14 } from "node:fs";
-import { mkdir as mkdir9, readFile as readFile13, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname9 } from "node:path";
+import { mkdir as mkdir11, readFile as readFile14, writeFile as writeFile9 } from "node:fs/promises";
+import { dirname as dirname11 } from "node:path";
 function textOf(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -19623,17 +20821,17 @@ function runsPath(root, sessionId) {
 }
 async function generateHandoff(root, graph, task, gate, opts) {
   let transcript = null;
-  if (opts.transcriptPath && existsSync14(opts.transcriptPath)) {
+  if (opts.transcriptPath && exists(opts.transcriptPath)) {
     try {
-      transcript = parseTranscript(await readFile13(opts.transcriptPath, "utf8"));
+      transcript = parseTranscript(await readFile14(opts.transcriptPath, "utf8"));
     } catch {
       transcript = null;
     }
   }
   const content = renderHandoff({ sessionId: opts.sessionId, task, gate, graph, transcript });
   const path = runsPath(root, opts.sessionId);
-  await mkdir9(dirname9(path), { recursive: true });
-  await writeFile8(path, content, "utf8");
+  await mkdir11(dirname11(path), { recursive: true });
+  await writeFile9(path, content, "utf8");
   return { path, content };
 }
 var WRITE_TOOL_NAMES, SYNTHETIC_PREFIXES;
@@ -19642,6 +20840,7 @@ var init_handoff = __esm({
     "use strict";
     init_gate();
     init_paths();
+    init_fsprobe();
     WRITE_TOOL_NAMES = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
     SYNTHETIC_PREFIXES = ["<local-command-", "<command-name>", "<system-reminder>"];
   }
@@ -19650,9 +20849,9 @@ var init_handoff = __esm({
 // src/commands/handoff.ts
 var handoff_exports = {};
 __export(handoff_exports, {
-  run: () => run16
+  run: () => run17
 });
-async function run16(argv) {
+async function run17(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
   if (!sessionId) {
@@ -19693,7 +20892,7 @@ var init_handoff2 = __esm({
 // src/commands/prune.ts
 var prune_exports = {};
 __export(prune_exports, {
-  run: () => run17
+  run: () => run18
 });
 function summarize(plan) {
   const lines = [];
@@ -19717,7 +20916,7 @@ function summarize(plan) {
   }
   return lines.join("\n");
 }
-async function run17(argv) {
+async function run18(argv) {
   const { root, graph } = await openProject(argv);
   const olderThanRaw = option(argv, "older-than");
   const olderThanDays = olderThanRaw === void 0 ? DEFAULT_OLDER_THAN_DAYS : Number(olderThanRaw);
@@ -19768,9 +20967,9 @@ var init_prune2 = __esm({
 // src/commands/ledger.ts
 var ledger_exports = {};
 __export(ledger_exports, {
-  run: () => run18
+  run: () => run19
 });
-async function run18(argv) {
+async function run19(argv) {
   const root = requireGanasRoot(process.cwd());
   const entries = await readLedger(root);
   const corrupt = ledgerCorruption(root);
@@ -19818,35 +21017,8 @@ var init_ledger2 = __esm({
   }
 });
 
-// src/hooks/io.ts
-async function readHookInput() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
-  const raw = Buffer.concat(chunks).toString("utf8").trim();
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-function writeHookOutput(output) {
-  process.stdout.write(JSON.stringify(output));
-}
-function degraded(message) {
-  return { systemMessage: `ganas kh\xF4ng ch\u1EA1y \u0111\u01B0\u1EE3c (\u0111ang b\u1ECF qua ki\u1EC3m so\xE1t): ${message}` };
-}
-var ALLOW;
-var init_io = __esm({
-  "src/hooks/io.ts"() {
-    "use strict";
-    ALLOW = {};
-  }
-});
-
-// src/hooks/handlers.ts
-import { stat as stat4 } from "node:fs/promises";
-import { isAbsolute, relative as relative5, resolve as resolve3 } from "node:path";
+// src/hooks/policy/index.ts
+import { isAbsolute, relative as relative6, resolve as resolve3 } from "node:path";
 function isAnchorIssue(d) {
   return d.message.includes("anchor") || d.message.includes("b\u1EB1ng ch\u1EE9ng");
 }
@@ -19858,6 +21030,151 @@ function formatDiagnostics(diags) {
     \u2192 ${d.hint}` : ""}`;
   }).join("\n");
 }
+function denyPreTool(reason) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: reason
+    }
+  };
+}
+function isEntityPath(rel) {
+  return ENTITY_DIRS.some((dir) => rel.startsWith(`${GANAS_DIR}/${dir}/`));
+}
+function isProposalPath(rel) {
+  return rel.startsWith(`${GANAS_DIR}/${DIRS.proposals}/`) && rel.endsWith(".yaml");
+}
+function writtenText(toolInput) {
+  const texts = [];
+  if (typeof toolInput["content"] === "string") texts.push(toolInput["content"]);
+  if (typeof toolInput["new_string"] === "string") texts.push(toolInput["new_string"]);
+  const edits = toolInput["edits"];
+  if (Array.isArray(edits)) {
+    for (const edit of edits) {
+      if (edit && typeof edit === "object") {
+        const ns = edit["new_string"];
+        if (typeof ns === "string") texts.push(ns);
+      }
+    }
+  }
+  return texts;
+}
+function setsProposalDecision(toolInput) {
+  if (!toolInput) return false;
+  return writtenText(toolInput).some((t) => PROPOSAL_DECISION_PATTERN.test(t));
+}
+function denyOrWarnPreTool(mode, reason) {
+  return mode === "enforce" ? denyPreTool(reason) : { systemMessage: `ganas (ch\u1EBF \u0111\u1ED9 warn \u2014 ch\u01B0a ch\u1EB7n):
+${reason}` };
+}
+function decideWriteEarly(t) {
+  if (t.abs === t.ledgerAbs) return { kind: "deny", reason: LEDGER_REASON };
+  if (t.abs === t.configAbs) return { kind: "deny", reason: CONFIG_REASON };
+  if (t.fromSubagent && t.rel.startsWith(SKILL_DIR)) {
+    return { kind: "deny", reason: SKILL_WRITE_REASON };
+  }
+  if (t.toolName === "Write" && isEntityPath(t.rel)) return { kind: "need", probe: "entity-exists" };
+  if (isProposalPath(t.rel) && setsProposalDecision(t.toolInput)) {
+    return { kind: "need", probe: "proposal-mode" };
+  }
+  return { kind: "allow" };
+}
+function decideEntityOverwrite(exists2) {
+  return exists2 ? { kind: "deny", reason: ENTITY_OVERWRITE_REASON } : { kind: "allow" };
+}
+function decideProposalWrite(mode) {
+  return denyOrWarnPreTool(mode, PROPOSAL_DECISION_REASON);
+}
+function shellLooksLikeWrite(command) {
+  return SHELL_WRITE_HINTS.some((h) => command.includes(h));
+}
+function ruleForDiagnostics(diags) {
+  return diags.some(isAnchorIssue) ? "knowledge_anchor" : "schema";
+}
+function knowledgeWriteBody(rel, diags, rule, nudgeTail) {
+  return `Ghi v\xE0o \`${rel}\` ch\u01B0a h\u1EE3p l\u1EC7:
+
+${formatDiagnostics(diags)}
+
+` + (rule === "knowledge_anchor" ? `Kho tri th\u1EE9c ch\u1EC9 nh\u1EADn ph\xE1t bi\u1EC3u c\xF3 b\u1EB1ng ch\u1EE9ng. Th\xEAm anchor (\`file:line\`, \`commit:sha\`, ho\u1EB7c URL k\xE8m \`fetched_at\`), ho\u1EB7c b\u1ECF h\u1EB3n ph\xE1t bi\u1EC3u \u0111\xF3 ra v\xE0 ghi v\xE0o \`open_questions\` c\u1EE7a task.` : `S\u1EEDa l\u1EA1i cho \u0111\xFAng schema r\u1ED3i ghi l\u1EA1i. Xem \`.claude/rules/ganas-knowledge.md\`.`) + nudgeTail;
+}
+function applyEnforcement(mode, body) {
+  return mode === "enforce" ? { decision: "block", reason: body } : { systemMessage: `ganas (ch\u1EBF \u0111\u1ED9 warn \u2014 ch\u01B0a ch\u1EB7n):
+${body}` };
+}
+function inRepoTree(rel) {
+  return rel !== void 0 && rel !== "" && !rel.startsWith("../");
+}
+function locate(raw, cwd, root) {
+  const abs = isAbsolute(raw) ? raw : resolve3(cwd, raw);
+  return { abs, rel: relative6(root, abs).split("\\").join("/") };
+}
+var WRITE_TOOLS, SHELL_WRITE_HINTS, LEDGER_REASON, CONFIG_REASON, SKILL_DIR, SKILL_WRITE_REASON, ENTITY_DIRS, ENTITY_OVERWRITE_REASON, PROPOSAL_DECISION_PATTERN, PROPOSAL_DECISION_REASON, PLAN_APPROVED_REASON, DISPATCH_NUDGE_REASON;
+var init_policy = __esm({
+  "src/hooks/policy/index.ts"() {
+    "use strict";
+    init_paths();
+    init_model();
+    WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+    SHELL_WRITE_HINTS = [">", ">>", "tee", "sed -i", "truncate", "rm ", "mv ", "cp ", "dd "];
+    LEDGER_REASON = `\`${LEDGER_FILE}\` l\xE0 s\u1ED5 c\xE1i x\xE1c minh \u2014 b\u1EB1ng ch\u1EE9ng r\u1EB1ng probe \u0111\xE3 th\u1EADt s\u1EF1 ch\u1EA1y. Ch\u1EC9 \`ganas verify\` m\u1EDBi \u0111\u01B0\u1EE3c ghi v\xE0o \u0111\xF3.
+
+Mu\u1ED1n m\u1ED9t fact \u0111\u01B0\u1EE3c coi l\xE0 \u0111\xE3 ki\u1EC3m ch\u1EE9ng th\xEC ch\u1EA1y \`ganas verify <id>\` cho probe ch\u1EA1y th\u1EADt, \u0111\u1EEBng ghi k\u1EBFt qu\u1EA3 b\u1EB1ng tay. N\u1EBFu probe \u0111ang fail th\xEC \u0111\xF3 l\xE0 th\xF4ng tin c\u1EA7n gi\u1EEF, kh\xF4ng ph\u1EA3i th\u1EE9 c\u1EA7n che \u0111i.`;
+    CONFIG_REASON = `\`.ganas/${CONFIG_FILE}\` gi\u1EEF m\u1EE9c c\u01B0\u1EE1ng ch\u1EBF c\u1EE7a c\u1EA3 d\u1EF1 \xE1n. Ghi \`enforcement: warn\` v\xE0o \u0111\xF3 l\xE0 t\u1EF1 t\u1EAFt m\u1ECDi h\xE0ng r\xE0o trong \u0111\xFAng phi\xEAn \u0111ang b\u1ECB h\xE0ng r\xE0o ch\u1EB7n \u2014 v\xF2ng l\u1EB7p m\xE0 kh\xF4ng lu\u1EADt n\xE0o b\xEAn trong ganas ph\xE1 \u0111\u01B0\u1EE3c.
+
+M\u1EE9c c\u01B0\u1EE1ng ch\u1EBF l\xE0 quy\u1EBFt \u0111\u1ECBnh c\u1EE7a NG\u01AF\u1EDCI, s\u1EEDa ngo\xE0i phi\xEAn agent. N\u1EBFu m\u1ED9t lu\u1EADt \u0111ang ch\u1EB7n sai th\xEC n\xEAu ra \u0111\u1EC3 ng\u01B0\u1EDDi x\u1EED l\xFD, \u0111\u1EEBng h\u1EA1 lu\u1EADt xu\u1ED1ng.`;
+    SKILL_DIR = `.claude/skills/`;
+    SKILL_WRITE_REASON = `Sub-agent kh\xF4ng \u0111\u01B0\u1EE3c s\u1EEDa skill trong \`${SKILL_DIR}\` \u2014 ch\u1EC9 phi\xEAn ch\xEDnh m\u1EDBi \u0111\u01B0\u1EE3c. Skill \u0111\u1ECBnh h\xECnh C\xC1CH l\xE0m vi\u1EC7c; \u0111\u1EC3 sub-agent t\u1EF1 \u0111\u1ED5i n\xF3 gi\u1EEFa l\xFAc ch\u1EA1y l\xE0 m\u1EA5t ki\u1EC3m so\xE1t, phi\xEAn ch\xEDnh kh\xF4ng bi\u1EBFt n\xF3 \u0111\xE3 \u0111\u1ED5i g\xEC.
+
+Nh\u1EDD phi\xEAn ch\xEDnh s\u1EEDa h\u1ED9 n\u1EBFu skill c\u1EA7n c\u1EADp nh\u1EADt.`;
+    ENTITY_DIRS = [
+      DIRS.goals,
+      DIRS.designs,
+      DIRS.tasks,
+      DIRS.scopes,
+      DIRS.modules,
+      DIRS.facts,
+      DIRS.claims,
+      DIRS.decisions,
+      DIRS.icebox
+    ];
+    ENTITY_OVERWRITE_REASON = `File n\xE0y \u0111\xE3 t\u1ED3n t\u1EA1i trong m\u1ED9t th\u01B0 m\u1EE5c th\u1EF1c th\u1EC3 c\u1EE7a ganas. \`Write\` s\u1EBD GHI \u0110\xC8 \xC2M TH\u1EA6M l\xEAn n\xF3 \u2014 kh\xF4ng c\xF3 g\xEC b\xE1o cho phi\xEAn \u0111ang gi\u1EEF n\u1ED9i dung c\u0169 bi\u1EBFt n\xF3 v\u1EEBa m\u1EA5t d\u1EEF li\u1EC7u.
+
+Mu\u1ED1n S\u1EECA file c\xF3 s\u1EB5n th\xEC d\xF9ng \`Edit\`, kh\xF4ng d\xF9ng \`Write\`.
+
+N\u1EBFu t\u01B0\u1EDFng \u0111ang t\u1EA1o m\u1ED9t th\u1EF1c th\u1EC3 M\u1EDAI: id n\xE0y \u0111\xE3 c\xF3 ch\u1EE7. Ch\u1EA1y \`ganas id <lo\u1EA1i>\` \u0111\u1EC3 l\u1EA5y m\u1ED9t id kh\xE1c, \u0111\u1EEBng t\u1EF1 \u0111o\xE1n s\u1ED1 k\u1EBF ti\u1EBFp.`;
+    PROPOSAL_DECISION_PATTERN = /^[ \t]*(status:\s*["']?(approved|rejected)["']?\s*$|decided_by:\s*\S|decided_at:\s*\S)/m;
+    PROPOSAL_DECISION_REASON = `Duy\u1EC7t hay t\u1EEB ch\u1ED1i m\u1ED9t \u0111\u1EC1 xu\u1EA5t l\xE0 vi\u1EC7c c\u1EE7a NG\u01AF\u1EDCI \u2014 c\xF9ng lu\u1EADt \u0111\xE3 \xE1p cho \`decision\` (\`.claude/rules/ganas-knowledge.md\`). Ghi th\u1EB3ng \`status: approved\`/\`rejected\` (hay \`decided_by\`/\`decided_at\`) v\xE0o file proposal b\u1EB1ng Write/Edit l\xE0 gi\u1EA3 m\u1EA1o m\u1ED9t quy\u1EBFt \u0111\u1ECBnh ch\u01B0a x\u1EA3y ra.
+
+\u0110\u01B0\u1EDDng \u0111\xFAng: \`ganas proposal approve <id> --by @ten\` ho\u1EB7c \`ganas proposal reject <id> --by @ten --why "..."\` \u2014 hai l\u1EC7nh \u0111\xF3 \u0111\xF2i ng\u01B0\u1EDDi g\xF5 \`--by\`, kh\xF4ng c\xF3 m\u1EB7c \u0111\u1ECBnh, v\xE0 ghi l\u1EA1i \u0111\xFAng ai \u0111\xE3 quy\u1EBFt.`;
+    PLAN_APPROVED_REASON = `Plan v\u1EEBa \u0111\u01B0\u1EE3c duy\u1EC7t \u0111ang n\u1EB1m trong context \u2014 v\xE0 s\u1EBD M\u1EA4T khi context b\u1ECB compact. Ch\u1EBB ngay th\xE0nh Task, \u0111\u1EEBng \u0111\u1EC3 sau.
+
+D\xF9ng skill \`plan-to-tasks\`: n\xF3 \u0111\xE3 d\u1EA1y \u0111\u1EE7 c\xE1c b\u01B0\u1EDBc, kh\xF4ng c\u1EA7n \u0111\u1ECDc l\u1EA1i plan t\u1EEB \u0111\xE2u c\u1EA3. C\u1EA5p ID th\u1EADt ngay b\u1EB1ng \`ganas id task --count N\` \u2014 \u0111\u1EEBng d\xF9ng nh\xE3n t\u1EA1m ki\u1EC3u T1, T4a.
+
+Nh\u01B0ng ph\xE1t hi\u1EC7n KH\xD4NG thu\u1ED9c plan n\xE0y \u2014 th\u1EA5y d\u1ECDc \u0111\u01B0\u1EDDng, ch\u01B0a ai duy\u1EC7t \u2014 th\xEC \u0111\u1EEBng nh\xE9t th\xE0nh Task cho \u0111\u1EE7 b\u1ED9: \`serves\`/\`implements\`/\`exit_contract\` b\u1ECBa ra l\xE0 d\u1EEF li\u1EC7u gi\u1EA3. Ghi v\xE0o s\u1ED5 icebox b\u1EB1ng \`ganas icebox add\`. Task l\xE0 \u0111\xE3 quy\u1EBFt L\xC0M; icebox l\xE0 \u0111\xE3 quy\u1EBFt CH\u01AFA l\xE0m, k\xE8m \u0111i\u1EC3m, l\xFD do v\xE0 ng\xE0y xem l\u1EA1i. C\xE1i repo n\xE0y kh\xF4ng cho ph\xE9p t\u1ED3n t\u1EA1i l\xE0 m\u1ED9t vi\u1EC7c ch\u01B0a quy\u1EBFt g\xEC c\u1EA3, n\u1EB1m l\u01A1 l\u1EEDng \u2014 icebox kh\xF4ng ph\u1EA3i th\u1EE9 \u0111\xF3.`;
+    DISPATCH_NUDGE_REASON = `Task \u0111ang l\xE0m khai tier r\u1EBB h\u01A1n \`main\` (\`scribe\`/\`verifier\`) \u2014 vi\u1EC7c c\u01A1 h\u1ECDc ho\u1EB7c ki\u1EC3m ch\u1EE9ng, kh\xF4ng c\u1EA7n model m\u1EA1nh nh\u1EA5t. Nh\u01B0ng phi\xEAn ch\xEDnh \u0111ang t\u1EF1 s\u1EEDa file thay v\xEC giao vi\u1EC7c.
+
+Vi\u1EC7c c\u01A1 h\u1ECDc l\xE0m b\u1EB1ng model m\u1EA1nh nh\u1EA5t ch\xEDnh l\xE0 ch\u1ED7 over-engineering sinh ra. Brief \u0111\xE3 n\u1EA1p c\xF3 s\u1EB5n h\u01B0\u1EDBng d\u1EABn giao sub-agent \u1EDF m\u1EE5c "Giao vi\u1EC7c" (k\xE8m alias model) \u2014 d\xF9ng n\xF3.
+
+(Ch\u1EC9 nh\u1EAFc m\u1ED9t l\u1EA7n trong phi\xEAn n\xE0y \u2014 kh\xF4ng l\u1EB7p l\u1EA1i \u1EDF nh\u1EEFng l\u01B0\u1EE3t s\u1EEDa ti\u1EBFp theo.)`;
+  }
+});
+
+// src/hooks/policy/types.ts
+function degraded(message) {
+  return { systemMessage: `ganas kh\xF4ng ch\u1EA1y \u0111\u01B0\u1EE3c (\u0111ang b\u1ECF qua ki\u1EC3m so\xE1t): ${message}` };
+}
+var ALLOW;
+var init_types3 = __esm({
+  "src/hooks/policy/types.ts"() {
+    "use strict";
+    ALLOW = {};
+  }
+});
+
+// src/hooks/io/handlers.ts
+import { relative as relative7 } from "node:path";
 async function sessionStart(input) {
   const root = findGanasRoot(input.cwd ?? process.cwd());
   if (!root) return ALLOW;
@@ -19907,26 +21224,6 @@ ${body}`
   }
   return out;
 }
-function denyPreTool(reason) {
-  return {
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: reason
-    }
-  };
-}
-function isEntityPath(rel) {
-  return ENTITY_DIRS.some((dir) => rel.startsWith(`${GANAS_DIR}/${dir}/`));
-}
-async function fileExists(path) {
-  try {
-    await stat4(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
 async function pendingDispatchNudge(root, sessionId, fromSubagent) {
   const rec = await sessionRecord(root, sessionId);
   if (!rec) return void 0;
@@ -19944,20 +21241,31 @@ async function preToolUse(input) {
   if (input.tool_name && WRITE_TOOLS.has(input.tool_name)) {
     const raw = input.tool_input?.["file_path"];
     if (typeof raw === "string") {
-      const abs = isAbsolute(raw) ? raw : resolve3(cwd, raw);
-      if (abs === ledgerPath(root)) return denyPreTool(LEDGER_REASON);
-      if (abs === ganasPath(root, CONFIG_FILE)) return denyPreTool(CONFIG_REASON);
-      const rel = relative5(root, abs).split("\\").join("/");
-      if (input.agent_id && rel.startsWith(SKILL_DIR)) return denyPreTool(SKILL_WRITE_REASON);
-      if (input.tool_name === "Write" && isEntityPath(rel) && await fileExists(abs)) {
-        return denyPreTool(ENTITY_OVERWRITE_REASON);
+      const { abs, rel } = locate(raw, cwd, root);
+      const step = decideWriteEarly({
+        toolName: input.tool_name,
+        abs,
+        rel,
+        ledgerAbs: ledgerPath(root),
+        configAbs: ganasPath(root, CONFIG_FILE),
+        fromSubagent: input.agent_id !== void 0,
+        toolInput: input.tool_input
+      });
+      if (step.kind === "deny") return denyPreTool(step.reason);
+      if (step.kind === "need" && step.probe === "entity-exists") {
+        const after = decideEntityOverwrite(await existsAsync(abs));
+        if (after.kind === "deny") return denyPreTool(after.reason);
+      }
+      if (step.kind === "need" && step.probe === "proposal-mode") {
+        const graph = await loadGraph(root);
+        return decideProposalWrite(enforcementFor(graph.config, "proposal_decision"));
       }
     }
     return ALLOW;
   }
   if (input.tool_name === "Bash" || input.tool_name === "PowerShell") {
     const command = input.tool_input?.["command"];
-    if (typeof command === "string" && SHELL_WRITE_HINTS.some((h) => command.includes(h))) {
+    if (typeof command === "string" && shellLooksLikeWrite(command)) {
       if (input.session_id) await markTouched(root, input.session_id);
     }
   }
@@ -19972,9 +21280,8 @@ async function postToolUse(input) {
   const root = findGanasRoot(cwd);
   if (!root) return ALLOW;
   const raw = input.tool_input?.["file_path"];
-  const abs = typeof raw === "string" ? isAbsolute(raw) ? raw : resolve3(cwd, raw) : void 0;
-  const rel = abs === void 0 ? void 0 : relative5(root, abs).split("\\").join("/");
-  const inTree = rel !== void 0 && rel !== "" && !rel.startsWith("../");
+  const rel = typeof raw === "string" ? locate(raw, cwd, root).rel : void 0;
+  const inTree = inRepoTree(rel);
   const sessionId = input.session_id;
   const fromSubagent = input.agent_id !== void 0;
   if (sessionId) await markTouched(root, sessionId, inTree ? rel : void 0, fromSubagent);
@@ -19990,7 +21297,7 @@ async function postToolUse(input) {
   const all = validateGraph(graph);
   const mine = all.filter((d) => d.severity === "error" && d.file === rel);
   if (mine.length === 0) return deliverNudge();
-  const rule = mine.some(isAnchorIssue) ? "knowledge_anchor" : "schema";
+  const rule = ruleForDiagnostics(mine);
   const mode = enforcementFor(graph.config, rule);
   const nudgeTail = nudgeText === void 0 ? "" : `
 
@@ -20000,13 +21307,7 @@ ${nudgeText}`;
   if (nudgeText !== void 0 && sessionId !== void 0) {
     await markDispatchNudged(root, sessionId);
   }
-  const body = `Ghi v\xE0o \`${rel}\` ch\u01B0a h\u1EE3p l\u1EC7:
-
-${formatDiagnostics(mine)}
-
-` + (rule === "knowledge_anchor" ? `Kho tri th\u1EE9c ch\u1EC9 nh\u1EADn ph\xE1t bi\u1EC3u c\xF3 b\u1EB1ng ch\u1EE9ng. Th\xEAm anchor (\`file:line\`, \`commit:sha\`, ho\u1EB7c URL k\xE8m \`fetched_at\`), ho\u1EB7c b\u1ECF h\u1EB3n ph\xE1t bi\u1EC3u \u0111\xF3 ra v\xE0 ghi v\xE0o \`open_questions\` c\u1EE7a task.` : `S\u1EEDa l\u1EA1i cho \u0111\xFAng schema r\u1ED3i ghi l\u1EA1i. Xem \`.claude/rules/ganas-knowledge.md\`.`) + nudgeTail;
-  return mode === "enforce" ? { decision: "block", reason: body } : { systemMessage: `ganas (ch\u1EBF \u0111\u1ED9 warn \u2014 ch\u01B0a ch\u1EB7n):
-${body}` };
+  return applyEnforcement(mode, knowledgeWriteBody(rel, mine, rule, nudgeTail));
 }
 async function stop(input) {
   if (input.stop_hook_active) return ALLOW;
@@ -20067,7 +21368,7 @@ async function preCompact(input) {
   const handoff = await tryHandoff(root, input);
   const handoffNote = handoff ? `
 
-\u0110\xE3 ghi handoff: ${relative5(root, handoff.path)}.` : "";
+\u0110\xE3 ghi handoff: ${relative7(root, handoff.path)}.` : "";
   return {
     systemMessage: `ganas: context s\u1EAFp b\u1ECB n\xE9n. Tr\u01B0\u1EDBc khi m\u1EA5t chi ti\u1EBFt, ghi nh\u1EEFng g\xEC \u0111\xE3 x\xE1c l\u1EADp ra file: fact \u0111\xE3 verify v\xE0o .ganas/facts/, \u0111i\u1EC1u ch\u01B0a ki\u1EC3m ch\u1EE9ng v\xE0o .ganas/claims/ (k\xE8m anchor), c\xE2u h\u1ECFi c\xF2n m\u1EDF v\xE0o task ${taskId}.` + handoffNote
   };
@@ -20080,9 +21381,8 @@ async function sessionEnd(input) {
   await releaseSession(root, input.session_id);
   return ALLOW;
 }
-var WRITE_TOOLS, SHELL_WRITE_HINTS, LEDGER_REASON, CONFIG_REASON, SKILL_DIR, SKILL_WRITE_REASON, ENTITY_DIRS, ENTITY_OVERWRITE_REASON, PLAN_APPROVED_REASON, DISPATCH_NUDGE_REASON;
 var init_handlers = __esm({
-  "src/hooks/handlers.ts"() {
+  "src/hooks/io/handlers.ts"() {
     "use strict";
     init_gate();
     init_claim();
@@ -20095,55 +21395,41 @@ var init_handlers = __esm({
     init_model();
     init_brief();
     init_state();
+    init_fsprobe();
     init_ledger();
-    init_io();
-    WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
-    SHELL_WRITE_HINTS = [">", ">>", "tee", "sed -i", "truncate", "rm ", "mv ", "cp ", "dd "];
-    LEDGER_REASON = `\`${LEDGER_FILE}\` l\xE0 s\u1ED5 c\xE1i x\xE1c minh \u2014 b\u1EB1ng ch\u1EE9ng r\u1EB1ng probe \u0111\xE3 th\u1EADt s\u1EF1 ch\u1EA1y. Ch\u1EC9 \`ganas verify\` m\u1EDBi \u0111\u01B0\u1EE3c ghi v\xE0o \u0111\xF3.
+    init_policy();
+    init_types3();
+  }
+});
 
-Mu\u1ED1n m\u1ED9t fact \u0111\u01B0\u1EE3c coi l\xE0 \u0111\xE3 ki\u1EC3m ch\u1EE9ng th\xEC ch\u1EA1y \`ganas verify <id>\` cho probe ch\u1EA1y th\u1EADt, \u0111\u1EEBng ghi k\u1EBFt qu\u1EA3 b\u1EB1ng tay. N\u1EBFu probe \u0111ang fail th\xEC \u0111\xF3 l\xE0 th\xF4ng tin c\u1EA7n gi\u1EEF, kh\xF4ng ph\u1EA3i th\u1EE9 c\u1EA7n che \u0111i.`;
-    CONFIG_REASON = `\`.ganas/${CONFIG_FILE}\` gi\u1EEF m\u1EE9c c\u01B0\u1EE1ng ch\u1EBF c\u1EE7a c\u1EA3 d\u1EF1 \xE1n. Ghi \`enforcement: warn\` v\xE0o \u0111\xF3 l\xE0 t\u1EF1 t\u1EAFt m\u1ECDi h\xE0ng r\xE0o trong \u0111\xFAng phi\xEAn \u0111ang b\u1ECB h\xE0ng r\xE0o ch\u1EB7n \u2014 v\xF2ng l\u1EB7p m\xE0 kh\xF4ng lu\u1EADt n\xE0o b\xEAn trong ganas ph\xE1 \u0111\u01B0\u1EE3c.
-
-M\u1EE9c c\u01B0\u1EE1ng ch\u1EBF l\xE0 quy\u1EBFt \u0111\u1ECBnh c\u1EE7a NG\u01AF\u1EDCI, s\u1EEDa ngo\xE0i phi\xEAn agent. N\u1EBFu m\u1ED9t lu\u1EADt \u0111ang ch\u1EB7n sai th\xEC n\xEAu ra \u0111\u1EC3 ng\u01B0\u1EDDi x\u1EED l\xFD, \u0111\u1EEBng h\u1EA1 lu\u1EADt xu\u1ED1ng.`;
-    SKILL_DIR = `.claude/skills/`;
-    SKILL_WRITE_REASON = `Sub-agent kh\xF4ng \u0111\u01B0\u1EE3c s\u1EEDa skill trong \`${SKILL_DIR}\` \u2014 ch\u1EC9 phi\xEAn ch\xEDnh m\u1EDBi \u0111\u01B0\u1EE3c. Skill \u0111\u1ECBnh h\xECnh C\xC1CH l\xE0m vi\u1EC7c; \u0111\u1EC3 sub-agent t\u1EF1 \u0111\u1ED5i n\xF3 gi\u1EEFa l\xFAc ch\u1EA1y l\xE0 m\u1EA5t ki\u1EC3m so\xE1t, phi\xEAn ch\xEDnh kh\xF4ng bi\u1EBFt n\xF3 \u0111\xE3 \u0111\u1ED5i g\xEC.
-
-Nh\u1EDD phi\xEAn ch\xEDnh s\u1EEDa h\u1ED9 n\u1EBFu skill c\u1EA7n c\u1EADp nh\u1EADt.`;
-    ENTITY_DIRS = [
-      DIRS.goals,
-      DIRS.designs,
-      DIRS.tasks,
-      DIRS.scopes,
-      DIRS.modules,
-      DIRS.facts,
-      DIRS.claims,
-      DIRS.decisions,
-      DIRS.icebox
-    ];
-    ENTITY_OVERWRITE_REASON = `File n\xE0y \u0111\xE3 t\u1ED3n t\u1EA1i trong m\u1ED9t th\u01B0 m\u1EE5c th\u1EF1c th\u1EC3 c\u1EE7a ganas. \`Write\` s\u1EBD GHI \u0110\xC8 \xC2M TH\u1EA6M l\xEAn n\xF3 \u2014 kh\xF4ng c\xF3 g\xEC b\xE1o cho phi\xEAn \u0111ang gi\u1EEF n\u1ED9i dung c\u0169 bi\u1EBFt n\xF3 v\u1EEBa m\u1EA5t d\u1EEF li\u1EC7u.
-
-Mu\u1ED1n S\u1EECA file c\xF3 s\u1EB5n th\xEC d\xF9ng \`Edit\`, kh\xF4ng d\xF9ng \`Write\`.
-
-N\u1EBFu t\u01B0\u1EDFng \u0111ang t\u1EA1o m\u1ED9t th\u1EF1c th\u1EC3 M\u1EDAI: id n\xE0y \u0111\xE3 c\xF3 ch\u1EE7. Ch\u1EA1y \`ganas id <lo\u1EA1i>\` \u0111\u1EC3 l\u1EA5y m\u1ED9t id kh\xE1c, \u0111\u1EEBng t\u1EF1 \u0111o\xE1n s\u1ED1 k\u1EBF ti\u1EBFp.`;
-    PLAN_APPROVED_REASON = `Plan v\u1EEBa \u0111\u01B0\u1EE3c duy\u1EC7t \u0111ang n\u1EB1m trong context \u2014 v\xE0 s\u1EBD M\u1EA4T khi context b\u1ECB compact. Ch\u1EBB ngay th\xE0nh Task, \u0111\u1EEBng \u0111\u1EC3 sau.
-
-D\xF9ng skill \`plan-to-tasks\`: n\xF3 \u0111\xE3 d\u1EA1y \u0111\u1EE7 c\xE1c b\u01B0\u1EDBc, kh\xF4ng c\u1EA7n \u0111\u1ECDc l\u1EA1i plan t\u1EEB \u0111\xE2u c\u1EA3. C\u1EA5p ID th\u1EADt ngay b\u1EB1ng \`ganas id task --count N\` \u2014 \u0111\u1EEBng d\xF9ng nh\xE3n t\u1EA1m ki\u1EC3u T1, T4a.
-
-Nh\u01B0ng ph\xE1t hi\u1EC7n KH\xD4NG thu\u1ED9c plan n\xE0y \u2014 th\u1EA5y d\u1ECDc \u0111\u01B0\u1EDDng, ch\u01B0a ai duy\u1EC7t \u2014 th\xEC \u0111\u1EEBng nh\xE9t th\xE0nh Task cho \u0111\u1EE7 b\u1ED9: \`serves\`/\`implements\`/\`exit_contract\` b\u1ECBa ra l\xE0 d\u1EEF li\u1EC7u gi\u1EA3. Ghi v\xE0o s\u1ED5 icebox b\u1EB1ng \`ganas icebox add\`. Task l\xE0 \u0111\xE3 quy\u1EBFt L\xC0M; icebox l\xE0 \u0111\xE3 quy\u1EBFt CH\u01AFA l\xE0m, k\xE8m \u0111i\u1EC3m, l\xFD do v\xE0 ng\xE0y xem l\u1EA1i. C\xE1i repo n\xE0y kh\xF4ng cho ph\xE9p t\u1ED3n t\u1EA1i l\xE0 m\u1ED9t vi\u1EC7c ch\u01B0a quy\u1EBFt g\xEC c\u1EA3, n\u1EB1m l\u01A1 l\u1EEDng \u2014 icebox kh\xF4ng ph\u1EA3i th\u1EE9 \u0111\xF3.`;
-    DISPATCH_NUDGE_REASON = `Task \u0111ang l\xE0m khai tier r\u1EBB h\u01A1n \`main\` (\`scribe\`/\`verifier\`) \u2014 vi\u1EC7c c\u01A1 h\u1ECDc ho\u1EB7c ki\u1EC3m ch\u1EE9ng, kh\xF4ng c\u1EA7n model m\u1EA1nh nh\u1EA5t. Nh\u01B0ng phi\xEAn ch\xEDnh \u0111ang t\u1EF1 s\u1EEDa file thay v\xEC giao vi\u1EC7c.
-
-Vi\u1EC7c c\u01A1 h\u1ECDc l\xE0m b\u1EB1ng model m\u1EA1nh nh\u1EA5t ch\xEDnh l\xE0 ch\u1ED7 over-engineering sinh ra. Brief \u0111\xE3 n\u1EA1p c\xF3 s\u1EB5n h\u01B0\u1EDBng d\u1EABn giao sub-agent \u1EDF m\u1EE5c "Giao vi\u1EC7c" (k\xE8m alias model) \u2014 d\xF9ng n\xF3.
-
-(Ch\u1EC9 nh\u1EAFc m\u1ED9t l\u1EA7n trong phi\xEAn n\xE0y \u2014 kh\xF4ng l\u1EB7p l\u1EA1i \u1EDF nh\u1EEFng l\u01B0\u1EE3t s\u1EEDa ti\u1EBFp theo.)`;
+// src/hooks/io/io.ts
+async function readHookInput() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+function writeHookOutput(output) {
+  process.stdout.write(JSON.stringify(output));
+}
+var init_io = __esm({
+  "src/hooks/io/io.ts"() {
+    "use strict";
+    init_types3();
   }
 });
 
 // src/commands/hook.ts
 var hook_exports = {};
 __export(hook_exports, {
-  run: () => run19
+  run: () => run20
 });
-async function run19(argv) {
+async function run20(argv) {
   const event = argv.positional[0];
   const handler = event ? HANDLERS[event] : void 0;
   if (!handler) {
@@ -20199,6 +21485,7 @@ var COMMANDS = {
   trace: () => Promise.resolve().then(() => (init_trace2(), trace_exports)),
   debt: () => Promise.resolve().then(() => (init_debt2(), debt_exports)),
   icebox: () => Promise.resolve().then(() => (init_icebox2(), icebox_exports)),
+  proposal: () => Promise.resolve().then(() => (init_proposal2(), proposal_exports)),
   search: () => Promise.resolve().then(() => (init_search2(), search_exports)),
   commit: () => Promise.resolve().then(() => (init_commit2(), commit_exports)),
   note: () => Promise.resolve().then(() => (init_note(), note_exports)),
@@ -20227,6 +21514,9 @@ L\u1EC7nh:
   icebox [add|list|review|close|promote]
                        S\u1ED5 vi\u1EC7c \u0111\xE3 quy\u1EBFt CH\u01AFA l\xE0m: ghi, xem l\u1EA1i khi t\u1EDBi h\u1EA1n, \u0111\xF3ng, th\u0103ng c\u1EA5p
                        Vi\u1EC7c \u0111\xE3 quy\u1EBFt CH\u01AFA l\xE0m \u2014 ghi, xem, xem l\u1EA1i qu\xE1 h\u1EA1n, \u0111\xF3ng, ho\u1EB7c l\xEAn task
+  proposal [new|list|show|approve|reject]
+                       \u0110\u1EC1 xu\u1EA5t ch\u1EDD NG\u01AF\u1EDCI duy\u1EC7t: ghi ch\u1ED7 l\u1EC7ch, xem, duy\u1EC7t, t\u1EEB ch\u1ED1i
+                       (list s\u1EAFp theo weight + ease; approve/reject \u0111\xF2i --by @ten)
   search <chu\u1ED7i>       T\xECm fact li\xEAn quan (BM25) \u2014 ho\u1EB7c --task \u0111\u1EC3 d\xF9ng ch\xEDnh task l\xE0m truy v\u1EA5n
   commit [task]        Commit task \u0111\xE3 \u0111\u1EA1t gate \u2014 message d\u1EF1ng t\u1EEB d\u1EEF li\u1EC7u \u0111\xE3 ki\u1EC3m ch\u1EE9ng
   note "..."           Ghi ch\xFA th\xF4 c\u1EE7a phi\xEAn v\xE0o .ganas/runs/notes/ (ch\u01B0a ki\u1EC3m, kh\xF4ng ph\u1EA3i fact)
@@ -20246,7 +21536,7 @@ async function main() {
   const raw = process.argv.slice(2);
   const argv = parseArgs(raw);
   if (argv.flags["version"] || argv.flags["v"]) {
-    process.stdout.write(`${"0.6.0"}
+    process.stdout.write(`${"1.0.0"}
 `);
     return 0;
   }

@@ -9,7 +9,7 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
-## Chưa phát hành
+## v1.0.0 — 2026-08-25
 
 - **Sơ đồ khối thôi là niềm tin có cấu trúc.** Lần chẻ bản đồ ở bản trước để
   lại một trạng thái mà `ganas debt` chỉ ra được nhưng không ai chữa: **14 cạnh,
