@@ -1,0 +1,63 @@
+id: T-053
+title: "prune phải đếm cả promoted_to của proposal trước khi archive task done"
+serves:
+  - G-001
+implements: D-007
+scope: P-cli
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: ".ganas/icebox/2026-08.yaml"
+      why: "ICE-013 ghi đầy đủ sự cố đã đo và ba hướng chữa"
+    - path: "src/prune.ts"
+      why: "Tầng archive — chỗ gom tập tham chiếu, thiếu đúng một nguồn"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-workflow
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/prune.test.ts'"
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+  - kind: command
+    run: "npm test"
+  - kind: artifact
+    path: "test/prune.test.ts"
+    must_contain: "promoted_to"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+
+notes: >-
+  Sự cố đo được ngày 2026-08-25, xem ICE-013. `ganas prune --older-than 1 --yes`
+  dời 24 task done sang `tasks/done/`, trong đó bảy task là đích `promoted_to`
+  của PR-006/007/008/009/011/012/013. Loader không đọc `tasks/done/` nên bảy
+  tham chiếu thành treo: `ganas validate` từ 0 lỗi lên 7 lỗi
+  `spine/proposal-missing-target`, số task tụt 50 → 26.
+
+  Chỗ hỏng nằm gọn ở `src/prune.ts` (tầng 2 của `collectPrunable`): nó gom
+  `blocked_by` từ task và `promoted_to` từ ICEBOX, nhưng KHÔNG gom `promoted_to`
+  từ PROPOSAL. Comment ngay tại chỗ chứng tỏ tác giả đã lường mối nguy tham
+  chiếu treo — chỉ phủ thiếu một nguồn.
+
+  Sửa: gom thêm `promoted_to` của proposal vào tập tham chiếu. Lưu ý
+  `proposal.promoted_to` nhận `D-`/`T-`/`ICE-` (`src/model/proposal.ts:56`), nên
+  phải LỌC lấy riêng id dạng task — nhét cả `D-`/`ICE-` vào tập chặn task là vô
+  hại nhưng làm ý đồ đọc khó hiểu.
+
+  Hai hướng còn lại trong ICE-013 CỐ Ý không chọn, đừng làm thay: cho loader đọc
+  `tasks/done/` sẽ kéo task đã archive trở lại graph, tức xoá sạch lý do tồn tại
+  của việc archive; bắt prune tự chạy validate rồi hoàn lại là cơ chế nặng hơn
+  hẳn, đáng một quyết định riêng của người.
+
+  Thêm test vào `test/prune.test.ts`: dựng project có một proposal `approved`
+  khai `promoted_to` trỏ vào một task `done` đủ tuổi, rồi khẳng định task đó
+  KHÔNG nằm trong danh sách archive. Test hiện có phủ ca icebox — theo đúng
+  khuôn đó.
+
+  Đừng đụng `src/graph/load.ts` (P-graph-core, ngoài phạm vi task này).

@@ -299,4 +299,6 @@
     - src/prune.ts:138
     - .ganas/proposals/PR-006.yaml:1
   scope: P-cli
-  status: open
+  status: promoted
+  promoted_to: T-053
+  closed_at: 2026-08-25T08:55:04.690Z
