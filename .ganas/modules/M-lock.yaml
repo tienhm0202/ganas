@@ -29,3 +29,8 @@ verify:
     to: M-verify
     run: >-
       grep -qF "export async function withFileLock<T>(" src/util/lock.ts
+  - id: V-lock-to-claim
+    kind: contract
+    to: M-claim
+    run: >-
+      grep -qF "export async function withFileLock<T>(" src/util/lock.ts

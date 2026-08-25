@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: small
 model: scribe
 
@@ -18,7 +18,11 @@ context_contract:
   open_questions: []
 
 touches:
-  - M-verify
+  # M-lock là khối T-058 dựng ra; lúc viết task này nó chưa tồn tại nên phải
+  # khai tạm M-verify cho qua validate. Thiếu M-lock thì `ownsGanasFile` không
+  # stage M-lock.yaml và commit rỗng ruột — đã xảy ra thật ở commit 7a572d1,
+  # phải amend. Cùng lớp lỗi với T-058, xem ICE-008.
+  - M-lock
 
 exit_contract:
   - kind: command
@@ -26,7 +30,7 @@ exit_contract:
   - kind: command
     run: "npm test"
   - kind: verification
-    target: "M-verify/V-verify-run"
+    target: "M-lock/V-lock-probe"
 
 notes: >-
   Chỉ chạy SAU T-059. Mảnh cuối, đúng khuôn T-052 đã đi qua.
@@ -47,7 +51,9 @@ notes: >-
 
   Xong thì `ganas trace` phải về 0 nợ kiểm chứng.
 
-  LƯU Ý `touches`: task này sửa `.ganas/modules/M-lock.yaml`, nhưng `M-lock` là
-  khối T-058 mới dựng nên lúc viết task này nó chưa tồn tại trong graph. Khai
-  `M-verify` cho qua validate; khi làm thật, nếu `ownsGanasFile` không cho stage
-  `M-lock.yaml` thì DỪNG và báo — đừng `git add` tay để lách.
+  ĐÃ XẢY RA đúng điều cảnh báo: bản đầu khai `touches: [M-verify]` vì lúc viết
+  task thì `M-lock` chưa tồn tại. Hệ quả — `ownsGanasFile` không stage
+  `M-lock.yaml`, commit 7a572d1 chỉ mang file task và sổ cái, KHÔNG mang bản
+  sửa; `ganas trace` tại HEAD vẫn báo 1 nợ. Đã sửa `touches` thành `M-lock` và
+  amend. Cùng lớp lỗi với T-058, xem ICE-008.
+done_at: 2026-08-25T10:48:56.447Z
