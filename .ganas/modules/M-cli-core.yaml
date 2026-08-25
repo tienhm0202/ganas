@@ -9,18 +9,84 @@ paths:
   # một file chỉ CLI dùng lại nằm trong phạm vi đồ thị tri thức.
   - "src/util/args.ts"
 
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-037):
+#
+#     node scripts/gen-ports.mjs --scope P-cli --print M-cli-core
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`) thay vì chép
+# nguyên thân: chép nguyên thì mỗi lần thêm một field không liên quan cũng làm
+# cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn tin cạnh đỏ nữa.
 # `flow.ts` (M-workflow) nạp `taskBoundary` bằng dynamic import
-# (`await import("./boundary.js")`), không phải import tĩnh — grep import
-# thường không thấy, nhưng cạnh vẫn có thật.
+# (`await import("./boundary.js")`), không phải import tĩnh — gen-ports.mjs chỉ
+# đọc import TĨNH nên cạnh đó nó KHÔNG thấy; cạnh vẫn có thật, xem
+# V-cli-core-to-workflow.
 contract:
+  inputs:
+    # từ M-claim (src/state.ts)
+    - name: TOUCHED_PATHS_CAP
+      shape: "200"
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: DIRS
+      shape: "object"
+    - name: GANAS_DIR
+      shape: '".ganas"'
+    - name: Graph
+      shape: "interface"
+    - name: LEDGER_FILE
+      shape: '"verify-ledger.jsonl"'
+    # từ M-model (src/model/knowledge.ts, src/model/task.ts)
+    - name: Fact
+      shape: "z.infer<typeof zFact>"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
+    # từ M-util (src/util/glob.ts, src/util/shell.ts)
+    - name: looksLikePath
+      shape: "(token: string) => boolean"
+    - name: matchesAny
+      shape: "(path: string, patterns: readonly string[]) => boolean"
+    - name: stripOperators
+      shape: "(token: string) => string"
+    - name: tokenizeShell
+      shape: "(command: string) => string[]"
   outputs:
+    - name: Argv
+      shape: "interface"
+    - name: contractPathRefs
+      shape: "(task: Task) => ContractPathRef[]"
+    - name: enabled
+      shape: "(argv: Argv, ...names: string[]) => boolean"
+    - name: flag
+      shape: "(argv: Argv, ...names: string[]) => boolean"
+    - name: formatBoundaryWarning
+      shape: "(taskId: string, boundary: readonly string[], touched: readonly string[], outside: readonly string[]) => string"
+    - name: formatDispatchWarning
+      shape: '(taskId: string, tier: Task["model"], subagentTouched: boolean) => string'
+    - name: multiOption
+      shape: "(argv: Argv, ...names: string[]) => string[]"
+    - name: option
+      shape: "(argv: Argv, ...names: string[]) => string | undefined"
+    - name: outsideBoundary
+      shape: "(task: Task, graph: Graph, touched: readonly string[]) => string[]"
+    - name: ownsGanasFile
+      shape: "(task: Task, relPath: string) => boolean"
+    - name: parseArgs
+      shape: "(raw: string[], booleanFlags?: Iterable<string>) => Argv"
     - name: searchFacts
       shape: "(graph: Graph, query: string, opts?: SearchOptions) => SearchHit[]"
-    - name: taskQuery
-      shape: "(task: Task) => string"
+    - name: SearchHit
+      shape: "interface"
     - name: taskBoundary
       shape: "(task: Task, graph: Graph) => string[]"
+    - name: taskQuery
+      shape: "(task: Task) => string"
 
+depends_on:
+  - M-claim
+  - M-graph-base
+  - M-model
+  - M-util
 status: surveyed
 verify:
   - id: V-cli-core-boundary

@@ -4,17 +4,181 @@ title: "Cài đặt từng lệnh con (scope, id, next, verify, icebox, search, 
 nature: io
 paths:
   - "src/commands/**"
-depends_on:
-  - M-templates
-  - M-render
-  - M-workflow
 
-# `inputs`: hợp nhất ba cạnh tới khối này (M-templates, M-render, M-workflow) — mỗi tên khớp CHỮ KÝ TỪNG KÝ TỰ với `outputs` bên khối cấp nó,
-# xem verify tương ứng ở từng khối đó để biết bằng chứng.
-# `outputs`: `run` — mọi module lệnh export, M-mcp gọi lại qua `server.ts`.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-037):
+#
+#     node scripts/gen-ports.mjs --scope P-cli --print M-commands
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`) thay vì chép
+# nguyên thân: chép nguyên thì mỗi lần thêm một field không liên quan cũng làm
+# cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn tin cạnh đỏ nữa.
+# `outputs`: `run` — mọi module lệnh export, và cả `cli.ts` lẫn `mcp/server.ts`
+# gọi lại qua đó. `inputs`: hợp nhất mười sáu cạnh tới khối này; mười ba cạnh
+# mới của T-037 XUYÊN PHẠM VI (nguồn ở P-graph-core / P-hook) nên chỉ khai được
+# đầu ĐÍCH — `contract.outputs` đầu nguồn phải do chính phạm vi kia khai.
 contract:
   inputs:
-    # từ M-templates — xem V-templates-to-commands
+    # từ M-claim (src/graph/claim.ts, src/state.ts)
+    - name: baselineFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<Record<string, boolean> | undefined>"
+    - name: bindSession
+      shape: "(root: string, sessionId: string, taskId: string) => Promise<void>"
+    - name: claimNextTask
+      shape: "(graph: Graph, root: string, sessionId: string, opts?: SelectOptions) => Promise<Candidate | null>"
+    - name: reserveId
+      shape: "(root: string, id: string, sessionId: string, ttlMinutes: number) => Promise<boolean>"
+    - name: setBaseline
+      shape: "(root: string, sessionId: string, baseline: Record<string, boolean>) => Promise<void>"
+    - name: subagentTouchedFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<boolean>"
+    - name: taskForSession
+      shape: "(root: string, sessionId?: string) => Promise<string | null>"
+    - name: touchedPathsFor
+      shape: "(root: string, sessionId: string | undefined, taskId: string) => Promise<string[]>"
+    - name: updateState
+      shape: "(root: string, mutate: (state: State) => void) => Promise<State>"
+    - name: withFileLock
+      shape: "<T>(lockFile: string, ttlMs: number, fn: () => Promise<T>) => Promise<T>"
+    # từ M-cli-core (src/boundary.ts, src/search.ts, src/util/args.ts)
+    - name: Argv
+      shape: "interface"
+    - name: contractPathRefs
+      shape: "(task: Task) => ContractPathRef[]"
+    - name: enabled
+      shape: "(argv: Argv, ...names: string[]) => boolean"
+    - name: flag
+      shape: "(argv: Argv, ...names: string[]) => boolean"
+    - name: formatBoundaryWarning
+      shape: "(taskId: string, boundary: readonly string[], touched: readonly string[], outside: readonly string[]) => string"
+    - name: formatDispatchWarning
+      shape: '(taskId: string, tier: Task["model"], subagentTouched: boolean) => string'
+    - name: multiOption
+      shape: "(argv: Argv, ...names: string[]) => string[]"
+    - name: option
+      shape: "(argv: Argv, ...names: string[]) => string | undefined"
+    - name: outsideBoundary
+      shape: "(task: Task, graph: Graph, touched: readonly string[]) => string[]"
+    - name: ownsGanasFile
+      shape: "(task: Task, relPath: string) => boolean"
+    - name: searchFacts
+      shape: "(graph: Graph, query: string, opts?: SearchOptions) => SearchHit[]"
+    - name: SearchHit
+      shape: "interface"
+    - name: taskBoundary
+      shape: "(task: Task, graph: Graph) => string[]"
+    - name: taskQuery
+      shape: "(task: Task) => string"
+    # từ M-exec (src/util/exec.ts)
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv; }) => Promise<ExecResult>"
+    # từ M-freshness (src/graph/freshness.ts)
+    - name: computeFreshness
+      shape: "(graph: Graph, opts?: { now?: number; }) => Promise<Map<string, VerificationState>>"
+    - name: FactFreshness
+      shape: "VerificationState"
+    - name: freshnessMark
+      shape: "(state: VerificationState | undefined) => string"
+    - name: VerificationState
+      shape: "interface"
+    # từ M-fsprobe (src/util/fsprobe.ts)
+    - name: exists
+      shape: "(path: string) => boolean"
+    - name: existsAsync
+      shape: "(path: string) => Promise<boolean>"
+    - name: listDir
+      shape: "(dir: string) => Promise<DirEntry[]>"
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: CONFIG_FILE
+      shape: '"config.yaml"'
+    - name: countBySeverity
+      shape: "(diags: readonly Diagnostic[]) => Record<Severity, number>"
+    - name: Diagnostic
+      shape: "interface"
+    - name: DIRS
+      shape: "object"
+    - name: findGanasRoot
+      shape: "(from?: string) => string | null"
+    - name: GANAS_DIR
+      shape: '".ganas"'
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+    - name: Graph
+      shape: "interface"
+    - name: LedgerResult
+      shape: "(typeof LEDGER_RESULT)[number]"
+    - name: requireGanasRoot
+      shape: "(from?: string) => string"
+    - name: Severity
+      shape: '"error" | "warning" | "info"'
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    - name: STATE_FILE
+      shape: '"state.json"'
+    # từ M-graph-read (src/graph/select.ts, src/graph/trace.ts)
+    - name: blockedTasks
+      shape: "(graph: Graph) => Candidate[]"
+    - name: checkAllEdges
+      shape: "(graph: Graph, root: string) => Promise<EdgeCheck[]>"
+    - name: computeDebt
+      shape: "(graph: Graph, checks: readonly EdgeCheck[]) => DebtItem[]"
+    - name: EdgeCheck
+      shape: "interface"
+    - name: rankedCandidates
+      shape: "(graph: Graph, opts?: SelectOptions) => Candidate[]"
+    - name: recordEdgeChecks
+      shape: "(graph: Graph, checks: readonly EdgeCheck[], opts: { root: string; by: string; }) => Promise<void>"
+    - name: renderDiagram
+      shape: "(graph: Graph, opts?: DiagramOptions) => string"
+    # từ M-hook-io (src/hooks/io/io.ts, src/hooks/policy/types.ts)
+    - name: ALLOW
+      shape: "HookOutput"
+    - name: degraded
+      shape: "(message: string) => HookOutput"
+    - name: HookInput
+      shape: "interface"
+    - name: HookOutput
+      shape: "interface"
+    - name: readHookInput
+      shape: "() => Promise<HookInput>"
+    - name: writeHookOutput
+      shape: "(output: HookOutput) => void"
+    # từ M-load (src/graph/load.ts)
+    - name: loadGraph
+      shape: "(root: string) => Promise<Graph>"
+    # từ M-model (src/model/anchor.ts, src/model/common.ts, src/model/config.ts, src/model/icebox.ts, src/model/module.ts, src/model/proposal.ts, src/model/task.ts)
+    - name: formatAnchor
+      shape: "(a: AnchorObject) => string"
+    - name: guideFileName
+      shape: "(harness: Harness) => string"
+    - name: Harness
+      shape: "(typeof HARNESS)[number]"
+    - name: HARNESS
+      shape: 'readonly ["claude-code", "codex", "cursor", "zed", "windsurf", "gemini", "other"]'
+    - name: Icebox
+      shape: "z.infer<typeof zIcebox>"
+    - name: ID_PATTERNS
+      shape: "object"
+    - name: moduleGuideDir
+      shape: "(paths: readonly string[]) => string | undefined"
+    - name: pointerFileName
+      shape: "(harness: Harness) => string | undefined"
+    - name: Proposal
+      shape: "z.infer<typeof zProposal>"
+    - name: ScoreValue
+      shape: "z.infer<typeof zScoreValue>"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
+    # từ M-render (src/render/brief.ts, src/render/group.ts)
+    - name: renderBrief
+      shape: "(input: BriefInput) => string"
+    - name: renderGroupedByScope
+      shape: "<T>(graph: Graph, items: readonly T[], taskOf: (item: T) => Task, renderTask: (item: T) => string) => string"
+    # từ M-templates (src/templates/project.ts)
+    # `init.ts` nạp CẢ MODULE (`import * as T`), mà gen-ports.mjs chỉ suy cổng
+    # từ import ĐỊNH DANH — mười bốn cổng dưới đây khai tay, khớp từng ký tự với
+    # `outputs` của M-templates.
     - name: InitVars
       shape: "{ project: string; owner?: string | undefined; harness?: Harness | undefined }"
     - name: configYaml
@@ -44,51 +208,99 @@ contract:
     - name: readme
       shape: "() => string"
     - name: moduleGuideMd
-      shape: "(v: { id: string; title: string; dir: string; nature: string; probes: readonly string[] }) => string"
-    # từ M-render — xem V-render-to-commands
-    - name: renderBrief
-      shape: "(input: BriefInput) => string"
-    - name: renderGroupedByScope
-      shape: "<T>(graph: Graph, items: readonly T[], taskOf: (item: T) => Task, renderTask: (item: T) => string) => string"
-    # từ M-workflow — xem V-workflow-to-commands
+      shape: "(v: { id: string; title: string; dir: string; nature: string; probes: readonly string[]; }) => string"
+    # từ M-util (src/util/errors.ts, src/util/glob.ts)
+    - name: GanasError
+      shape: "class"
+    - name: matchesAny
+      shape: "(path: string, patterns: readonly string[]) => boolean"
+    # từ M-validate (src/debt.ts, src/graph/validate.ts)
+    - name: DebtRow
+      shape: "interface"
+    - name: debtRows
+      shape: "(diagnostics: readonly Diagnostic[], items: readonly DebtItem[], graph: Graph) => DebtRow[]"
+    - name: rowsInScope
+      shape: "(rows: readonly DebtRow[], scopeId: string | undefined) => DebtRow[]"
+    - name: validateGraph
+      shape: "(graph: Graph, opts?: { now?: number; }) => Diagnostic[]"
+    # từ M-verify (src/verify/ledger.ts, src/verify/run.ts)
+    - name: allTargets
+      shape: "(graph: Graph) => Target[]"
+    - name: lastFor
+      shape: "(index: Map<string, LedgerEntry[]>, target: string) => LedgerEntry | undefined"
+    - name: ledgerCorruption
+      shape: "(root: string) => number"
+    - name: readLedger
+      shape: "(root: string) => Promise<LedgerEntry[]>"
+    - name: RunOutcome
+      shape: "interface"
+    - name: runTarget
+      shape: "(target: Target, opts: RunOptions) => Promise<RunOutcome>"
+    - name: scopeOfTarget
+      shape: "(target: Target, graph: Graph) => string | undefined"
+    - name: Target
+      shape: "interface"
+    - name: verifyChain
+      shape: "(entries: readonly LedgerEntry[]) => ChainVerdict"
+    # từ M-workflow (src/commit.ts, src/flow.ts, src/gate.ts, src/handoff.ts, src/prune.ts)
     - name: alreadyGreen
       shape: "(gate: GateResult, baseline: Record<string, boolean> | undefined) => CriterionResult[]"
-    - name: evaluateGate
-      shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
-    - name: formatGate
-      shape: "(result: GateResult) => string"
-    - name: criterionKey
-      shape: "(c: ExitCriterion) => string"
-    - name: isAutoCriterion
-      shape: "(c: ExitCriterion) => boolean"
-    - name: GateResult
-      shape: "{ task: string; ok: boolean; results: CriterionResult[]; unmet: CriterionResult[]; pendingHuman: CriterionResult[] }"
     - name: applyPrune
       shape: "(root: string, plan: PrunePlan) => Promise<void>"
-    - name: planPrune
-      shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
-    - name: PrunePlan
-      shape: "{ staleRuns: StaleRun[]; deadSessions: DeadSession[]; doneTasks: ArchivableRecord[]; iceboxFiles: ArchivableIceboxFile[] }"
-    - name: notePath
-      shape: "(root: string, sessionId: string) => string"
-    - name: generateHandoff
-      shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined }) => Promise<HandoffResult>"
     - name: buildCommitMessage
       shape: "(graph: Graph, task: Task, gate: GateResult) => string"
     - name: checkStagedTree
       shape: "(root: string, task: Task, buildCheck?: string) => Promise<StagedTreeCheck>"
-    - name: formatStagedTreeCheck
-      shape: "(taskId: string, check: StagedTreeCheck) => string"
+    - name: criterionKey
+      shape: "(c: ExitCriterion) => string"
+    - name: evaluateGate
+      shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
     - name: flowContext
       shape: "(cwd: string) => Promise<FlowContext>"
+    - name: formatGate
+      shape: "(result: GateResult) => string"
+    - name: formatStagedTreeCheck
+      shape: "(taskId: string, check: StagedTreeCheck) => string"
+    - name: GateResult
+      shape: "interface"
+    - name: generateHandoff
+      shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined; }) => Promise<HandoffResult>"
+    - name: isAutoCriterion
+      shape: "(c: ExitCriterion) => boolean"
     - name: nextStep
       shape: "(c: FlowContext) => FlowStep | null"
+    - name: notePath
+      shape: "(root: string, sessionId: string) => string"
+    - name: planPrune
+      shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
+    - name: PrunePlan
+      shape: "interface"
     - name: STAGES
       shape: "Stage[]"
+  # `outputs`: gen-ports.mjs KHÔNG sinh mục này — hai bên tiêu thụ `run` đều vô
+  # hình với nó (`cli.ts` nạp ĐỘNG `./commands/x.js`; `mcp/server.ts` nạp CẢ
+  # MODULE `import * as flow`). Khai tay, khớp chữ ký thật của mọi module lệnh.
   outputs:
     - name: run
       shape: "(argv: Argv) => Promise<number>"
 
+depends_on:
+  - M-claim
+  - M-cli-core
+  - M-exec
+  - M-freshness
+  - M-fsprobe
+  - M-graph-base
+  - M-graph-read
+  - M-hook-io
+  - M-load
+  - M-model
+  - M-render
+  - M-templates
+  - M-util
+  - M-validate
+  - M-verify
+  - M-workflow
 status: surveyed
 verify:
   - id: V-commands-smoke

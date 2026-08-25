@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-007
 scope: P-cli
-status: todo
+status: done
 estimated_context: large
 model: main
 
@@ -31,6 +31,13 @@ exit_contract:
     run: "npx tsx src/cli.ts validate"
   - kind: command
     run: "npm test"
+  # Tập đóng MISSING_EDGES là ĐẦU BÀI của task, nhưng không lệnh nào ở trên
+  # nhắc tên file — nên `taskBoundary` không phủ nó và `ganas commit` bỏ sót
+  # (đã xảy ra ở T-036/T-038, xem ICE-008). Khai `artifact` là cách đưa file
+  # vào ranh giới bằng chính cơ chế sẵn có.
+  - kind: artifact
+    path: "test/module-deps.test.ts"
+    must_contain: "MISSING_EDGES"
   - kind: verification
     target: "M-cli/V-cli-smoke"
   - kind: verification
@@ -60,3 +67,4 @@ notes: >-
   `shape` do MÁY sinh từ chính code (bảng cổng dựng một lần, áp cho cả ba phạm
   vi). Chép tay 224 cổng qua ba phạm vi thì lệch là chắc chắn, mà lệch `shape`
   giữa hai khối là cạnh đỏ ở một chỗ chẳng ai ngờ.
+done_at: 2026-08-25T03:24:04.253Z

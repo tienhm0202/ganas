@@ -4,28 +4,72 @@ title: "Dựng brief và bảng nhóm — chữ mà phiên làm việc thật s�
 nature: code
 paths:
   - "src/render/**"
-depends_on:
-  - M-cli-core
 
-# `outputs`: cổng thật mà `commands/next.ts` và `commands/brief.ts` gọi.
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-037):
 #
+#     node scripts/gen-ports.mjs --scope P-cli --print M-render
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`) thay vì chép
+# nguyên thân: chép nguyên thì mỗi lần thêm một field không liên quan cũng làm
+# cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn tin cạnh đỏ nữa.
 # `inputs`: `brief.ts` nhập `searchFacts`/`taskQuery` từ `src/search.js`. File đó
 # ĐÃ chuyển sang `M-cli-core` ở T-021, nhưng `depends_on` vẫn trỏ `M-workflow`
 # từ T-006 — cạnh lỗi thời suốt từ đó, không gì báo. T-033 đảo lại cho khớp
-# import thật; cổng khai theo hàm THẬT `brief.ts` gọi, không theo suy đoán về ý
-# định kiến trúc.
+# import thật; T-037 khai nốt năm cạnh còn lại, tất cả XUYÊN PHẠM VI
+# (nguồn ở P-graph-core) nên chỉ khai được đầu ĐÍCH.
 contract:
+  inputs:
+    # từ M-cli-core (src/search.ts)
+    - name: searchFacts
+      shape: "(graph: Graph, query: string, opts?: SearchOptions) => SearchHit[]"
+    - name: taskQuery
+      shape: "(task: Task) => string"
+    # từ M-freshness (src/graph/freshness.ts)
+    - name: FactFreshness
+      shape: "VerificationState"
+    - name: freshnessMark
+      shape: "(state: VerificationState | undefined) => string"
+    # từ M-fsprobe (src/util/fsprobe.ts)
+    - name: exists
+      shape: "(path: string) => boolean"
+    # từ M-graph-base (src/graph/types.ts)
+    - name: Graph
+      shape: "interface"
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    # từ M-graph-read (src/graph/select.ts)
+    - name: openBlockers
+      shape: "(graph: Graph, task: Task) => string[]"
+    - name: parallelCandidates
+      shape: "(graph: Graph, task: Task) => Sourced<Task>[]"
+    # từ M-model (src/model/anchor.ts, src/model/config.ts, src/model/knowledge.ts, src/model/task.ts)
+    - name: agentModelAlias
+      shape: "(modelId: string) => string | undefined"
+    - name: canDispatchSubagent
+      shape: "(harness: Harness) => boolean"
+    - name: Claim
+      shape: "z.infer<typeof zClaim>"
+    - name: enforcementFor
+      shape: "(config: Config, rule: EnforcementRule) => Enforcement"
+    - name: formatAnchor
+      shape: "(a: AnchorObject) => string"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
   outputs:
     - name: renderBrief
       shape: "(input: BriefInput) => string"
     - name: renderGroupedByScope
       shape: "<T>(graph: Graph, items: readonly T[], taskOf: (item: T) => Task, renderTask: (item: T) => string) => string"
-  inputs:
-    - name: searchFacts
-      shape: "(graph: Graph, query: string, opts?: SearchOptions) => SearchHit[]"
-    - name: taskQuery
-      shape: "(task: Task) => string"
 
+depends_on:
+  - M-cli-core
+  - M-freshness
+  - M-fsprobe
+  - M-graph-base
+  - M-graph-read
+  - M-model
 status: surveyed
 verify:
   - id: V-render-brief

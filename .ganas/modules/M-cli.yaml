@@ -10,13 +10,32 @@ paths:
 # LẠI — cli.ts nạp động từng module lệnh rồi gọi `mod.run(argv)`, nên nó là bên
 # TIÊU THỤ. Bản đồ khai `M-commands depends_on M-cli` từ T-006, sai chiều suốt
 # tới T-033.
+#
+# Bảng dưới do MÁY sinh từ chữ ký thật, không chép tay:
+#   node scripts/gen-ports.mjs --scope P-cli --print M-cli
 contract:
   inputs:
+    # từ M-cli-core (src/util/args.ts)
+    - name: Argv
+      shape: "interface"
+    - name: parseArgs
+      shape: "(raw: string[], booleanFlags?: Iterable<string>) => Argv"
+    # từ M-commands (src/commands/*.ts) — nạp ĐỘNG (`import("./commands/x.js")`),
+    # nên gen-ports.mjs (chỉ đọc import TĨNH) không thấy cạnh này; cổng khai tay.
     - name: run
       shape: "(argv: Argv) => Promise<number>"
+    # từ M-util (src/util/errors.ts)
+    - name: GanasError
+      shape: "class"
 
+# `M-util` XUYÊN PHẠM VI (nguồn ở P-graph-core), nên `contract.outputs` đầu
+# nguồn của cạnh đó phải do chính phạm vi kia khai — T-037 chỉ khai được đầu
+# ĐÍCH. Hai cạnh còn lại khép kín trong P-cli, xem V-cli-core-to-cli và
+# V-commands-to-cli.
 depends_on:
+  - M-cli-core
   - M-commands
+  - M-util
 status: surveyed
 verify:
   - id: V-cli-smoke

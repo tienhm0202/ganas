@@ -8,57 +8,130 @@ paths:
   - "src/gate.ts"
   - "src/handoff.ts"
   - "src/prune.ts"
-depends_on:
-  - M-cli-core
 
-# `outputs`: hợp nhất mọi tên mà `src/commands/*.ts` thật sự import từ 5 file
-# của khối này (gate/prune/handoff/commit/flow.ts) — không phải mọi export.
-# `isAutoCriterion`/`criterionKey` còn được M-render dùng (xem ghi chú ở
-# M-render.yaml — cạnh đó là phán đoán, cạnh NÀY tới M-commands thì là import
-# thật, kiểm được trực tiếp).
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-037):
 #
-# `inputs`: `flowContext` (flow.ts) hỏi `taskBoundary` qua dynamic import từ
-# M-cli-core — xem V-cli-core-to-workflow.
+#     node scripts/gen-ports.mjs --scope P-cli --print M-workflow
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`) thay vì chép
+# nguyên thân: chép nguyên thì mỗi lần thêm một field không liên quan cũng làm
+# cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn tin cạnh đỏ nữa.
+#
+# `flowContext` (flow.ts) nạp bốn cổng bằng DYNAMIC import
+# (`await import("./x.js")`). gen-ports.mjs chỉ đọc import TĨNH nên nó thấy
+# `readState`/`runShell` (còn được nhập tĩnh ở file khác của khối) mà KHÔNG thấy
+# `taskBoundary`, `loadGraph`, `computeFreshness` — ba cổng đó khai tay, đánh
+# dấu ngay tại chỗ.
+#
+# Chín cạnh mới của T-037 XUYÊN PHẠM VI (nguồn ở P-graph-core), nên
+# `contract.outputs` đầu nguồn phải do chính phạm vi đó khai — ở đây chỉ khai
+# được đầu ĐÍCH.
 contract:
+  inputs:
+    # từ M-claim (src/state.ts)
+    - name: readState
+      shape: "(root: string) => Promise<State>"
+    - name: State
+      shape: "{ version: 1; current_task: string | null; sessions: Record<string, SessionRecord> }"
+    - name: writeState
+      shape: "(root: string, state: State) => Promise<void>"
+    # từ M-cli-core (src/boundary.ts) — nạp ĐỘNG trong `flowContext`, khai tay
+    - name: taskBoundary
+      shape: "(task: Task, graph: Graph) => string[]"
+    # từ M-exec (src/util/exec.ts)
+    - name: judge
+      shape: "(result: ExecResult, expect: Expect) => Judgement"
+    - name: runShell
+      shape: "(command: string, opts?: { cwd?: string | undefined; timeoutMs?: number | undefined; env?: NodeJS.ProcessEnv; }) => Promise<ExecResult>"
+    # từ M-freshness (src/graph/freshness.ts)
+    # `computeFreshness` nạp ĐỘNG trong `flowContext`, khai tay
+    - name: computeFreshness
+      shape: "(graph: Graph, opts?: { now?: number; }) => Promise<Map<string, VerificationState>>"
+    - name: VerificationState
+      shape: "interface"
+    # từ M-fsprobe (src/util/fsprobe.ts)
+    - name: exists
+      shape: "(path: string) => boolean"
+    - name: listDir
+      shape: "(dir: string) => Promise<DirEntry[]>"
+    - name: mtimeMs
+      shape: "(path: string) => Promise<number | undefined>"
+    # từ M-graph-base (src/graph/paths.ts, src/graph/types.ts)
+    - name: DIRS
+      shape: "object"
+    - name: findGanasRoot
+      shape: "(from?: string) => string | null"
+    - name: ganasPath
+      shape: "(root: string, ...parts: string[]) => string"
+    - name: Graph
+      shape: "interface"
+    - name: Sourced
+      shape: "{ value: T; file: string; index?: number }"
+    # từ M-graph-read (src/graph/select.ts)
+    - name: selectNextTask
+      shape: "(graph: Graph, opts?: SelectOptions) => Candidate | null"
+    # từ M-load (src/graph/load.ts) — nạp ĐỘNG trong `flowContext`, khai tay
+    - name: loadGraph
+      shape: "(root: string) => Promise<Graph>"
+    # từ M-model (src/model/icebox.ts, src/model/task.ts)
+    - name: ExitCriterion
+      shape: "z.infer<typeof zExitCriterion>"
+    - name: Icebox
+      shape: "z.infer<typeof zIcebox>"
+    - name: Task
+      shape: "z.infer<typeof zTask>"
+    # từ M-validate (src/graph/validate.ts)
+    - name: validateGraph
+      shape: "(graph: Graph, opts?: { now?: number; }) => Diagnostic[]"
   outputs:
     - name: alreadyGreen
       shape: "(gate: GateResult, baseline: Record<string, boolean> | undefined) => CriterionResult[]"
-    - name: evaluateGate
-      shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
-    - name: formatGate
-      shape: "(result: GateResult) => string"
-    - name: criterionKey
-      shape: "(c: ExitCriterion) => string"
-    - name: isAutoCriterion
-      shape: "(c: ExitCriterion) => boolean"
-    - name: GateResult
-      shape: "{ task: string; ok: boolean; results: CriterionResult[]; unmet: CriterionResult[]; pendingHuman: CriterionResult[] }"
     - name: applyPrune
       shape: "(root: string, plan: PrunePlan) => Promise<void>"
-    - name: planPrune
-      shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
-    - name: PrunePlan
-      shape: "{ staleRuns: StaleRun[]; deadSessions: DeadSession[]; doneTasks: ArchivableRecord[]; iceboxFiles: ArchivableIceboxFile[] }"
-    - name: notePath
-      shape: "(root: string, sessionId: string) => string"
-    - name: generateHandoff
-      shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined }) => Promise<HandoffResult>"
     - name: buildCommitMessage
       shape: "(graph: Graph, task: Task, gate: GateResult) => string"
     - name: checkStagedTree
       shape: "(root: string, task: Task, buildCheck?: string) => Promise<StagedTreeCheck>"
-    - name: formatStagedTreeCheck
-      shape: "(taskId: string, check: StagedTreeCheck) => string"
+    - name: criterionKey
+      shape: "(c: ExitCriterion) => string"
+    - name: evaluateGate
+      shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
     - name: flowContext
       shape: "(cwd: string) => Promise<FlowContext>"
+    - name: formatGate
+      shape: "(result: GateResult) => string"
+    - name: formatStagedTreeCheck
+      shape: "(taskId: string, check: StagedTreeCheck) => string"
+    - name: GateResult
+      shape: "interface"
+    - name: generateHandoff
+      shape: "(root: string, graph: Graph, task: Task, gate: GateResult, opts: { sessionId: string; transcriptPath?: string | undefined; }) => Promise<HandoffResult>"
+    - name: isAutoCriterion
+      shape: "(c: ExitCriterion) => boolean"
     - name: nextStep
       shape: "(c: FlowContext) => FlowStep | null"
+    - name: notePath
+      shape: "(root: string, sessionId: string) => string"
+    - name: planPrune
+      shape: "(root: string, graph: Graph, opts: PlanPruneOptions) => Promise<PrunePlan>"
+    - name: PrunePlan
+      shape: "interface"
     - name: STAGES
       shape: "Stage[]"
-  inputs:
-    - name: taskBoundary
-      shape: "(task: Task, graph: Graph) => string[]"
 
+depends_on:
+  - M-claim
+  - M-cli-core
+  - M-exec
+  - M-freshness
+  - M-fsprobe
+  - M-graph-base
+  - M-graph-read
+  - M-load
+  - M-model
+  - M-validate
 status: surveyed
 verify:
   - id: V-workflow-commit

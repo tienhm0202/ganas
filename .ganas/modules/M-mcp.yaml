@@ -4,16 +4,38 @@ title: "Adapter MCP: phát lệnh ganas ra cho harness gọi qua stdio"
 nature: io
 paths:
   - "src/mcp/**"
-depends_on:
-  - M-commands
 
+# Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-037):
+#
+#     node scripts/gen-ports.mjs --scope P-cli --print M-mcp
+#
+# `portIssues()` so `shape` KHỚP TỪNG KÝ TỰ, nên chép tay vài trăm cổng là chắc
+# chắn lệch — sửa chữ ký trong code thì chạy lại lệnh trên rồi dán, đừng gõ tay.
+# Kiểu cấu trúc RỘNG khai NHÃN LOẠI (`interface`, `object`, `class`) thay vì chép
+# nguyên thân: chép nguyên thì mỗi lần thêm một field không liên quan cũng làm
+# cạnh đỏ oan, mà cạnh đỏ oan thì lần sau không ai còn tin cạnh đỏ nữa.
 # server.ts KHÔNG viết lại logic: mỗi tool MCP gọi thẳng `run(argv)` của đúng
 # module lệnh CLI, y hệt cli.ts (`run: flow.run`, `run: gate.run`, ...).
 contract:
   inputs:
+    # từ M-commands (src/commands/*.ts) — `server.ts` nạp cả module
+    # (`import * as flow from "../commands/flow.js"`), mà gen-ports.mjs chỉ suy
+    # cổng từ import ĐỊNH DANH, nên cổng này khai tay.
     - name: run
       shape: "(argv: Argv) => Promise<number>"
+    # từ M-cli-core (src/util/args.ts)
+    - name: Argv
+      shape: "interface"
+    - name: parseArgs
+      shape: "(raw: string[], booleanFlags?: Iterable<string>) => Argv"
+    # từ M-util (src/util/errors.ts)
+    - name: GanasError
+      shape: "class"
 
+depends_on:
+  - M-cli-core
+  - M-commands
+  - M-util
 status: surveyed
 verify:
   - id: V-mcp-selfcontained

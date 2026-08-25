@@ -74,7 +74,7 @@ test("⭐ mọi depends_on phải có ít nhất một import thật đỡ nó",
 
 test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đã khai", async () => {
   /**
-   * 38 cạnh code CÓ mà bản đồ CHƯA khai.
+   * 1 cạnh code CÓ mà bản đồ CHƯA khai.
    *
    * Từ 67 xuống 66 ở T-041: `M-hook-io → M-hook-policy` biến mất vì kiểu
    * `HookInput`/`HookOutput` đã chuyển về lõi, cắt chu trình policy ↔ io
@@ -136,50 +136,27 @@ test("⭐ import xuyên khối chưa có depends_on: đúng bằng danh sách đ
    * `M-verify → M-cli-core`, T-045 (commit:e6c78e7) gỡ `M-verify → M-hook-policy`
    * — cả hai là cạnh chết vì bốn file thôi nhập qua tái xuất của verify/ledger.
    *
+   * Từ 38 xuống 1 ở T-037, phần P-cli của PR-014 và là phần CUỐI: đúng 37 cạnh
+   * có ĐÍCH thuộc P-cli được khai trên bảy khối (M-cli, M-cli-core, M-commands,
+   * M-mcp, M-render, M-templates, M-workflow). Hầu hết XUYÊN PHẠM VI như T-038,
+   * nên chỉ đầu ĐÍCH khai được và `ganas trace` vẫn chưa sạch — có chủ đích.
+   *
+   * Còn đúng MỘT dòng, và nó KHÔNG rỗng như đoạn D-007 từng hình dung:
+   * `M-exec → M-build` có đích ở phạm vi P-release, không thuộc PR-014. Khai nó
+   * là việc của phạm vi đó, không phải của T-037 — dòng này ở lại cho tới khi
+   * P-release tự dọn.
+   *
+   * Ba cổng của M-workflow và một cổng của M-cli phải khai TAY: chúng đi qua
+   * dynamic import (`await import("./x.js")` trong flow.ts, `cli.ts`) hoặc qua
+   * namespace import (`import * as T` trong init.ts, `import * as flow` trong
+   * mcp/server.ts), mà `gen-ports.mjs` chỉ suy cổng từ import TĨNH ĐỊNH DANH.
+   * Chỗ nào khai tay đều có comment ngay tại chỗ trong file khối.
+   *
    * Tập ĐÓNG, so bằng `deepEqual`: thêm import xuyên khối mới mà quên khai
    * `depends_on` thì đỏ; khai xong một cạnh mà quên xoá dòng cũng đỏ. Danh
    * sách chỉ đi một chiều — ngắn dần.
    */
-  const MISSING_EDGES = [
-    "M-claim → M-cli-core",
-    "M-claim → M-commands",
-    "M-claim → M-workflow",
-    "M-cli-core → M-cli",
-    "M-cli-core → M-commands",
-    "M-cli-core → M-mcp",
-    "M-exec → M-build",
-    "M-exec → M-commands",
-    "M-exec → M-workflow",
-    "M-freshness → M-commands",
-    "M-freshness → M-render",
-    "M-freshness → M-workflow",
-    "M-fsprobe → M-commands",
-    "M-fsprobe → M-render",
-    "M-fsprobe → M-workflow",
-    "M-graph-base → M-cli-core",
-    "M-graph-base → M-commands",
-    "M-graph-base → M-render",
-    "M-graph-base → M-templates",
-    "M-graph-base → M-workflow",
-    "M-graph-read → M-commands",
-    "M-graph-read → M-render",
-    "M-graph-read → M-workflow",
-    "M-hook-io → M-commands",
-    "M-load → M-commands",
-    "M-load → M-workflow",
-    "M-model → M-cli-core",
-    "M-model → M-commands",
-    "M-model → M-render",
-    "M-model → M-templates",
-    "M-model → M-workflow",
-    "M-util → M-cli",
-    "M-util → M-cli-core",
-    "M-util → M-commands",
-    "M-util → M-mcp",
-    "M-validate → M-commands",
-    "M-validate → M-workflow",
-    "M-verify → M-commands",
-  ].sort();
+  const MISSING_EDGES = ["M-exec → M-build"].sort();
 
   const declared = await declaredEdges();
   const missing = [...(await realEdges())].filter((e) => !declared.has(e)).sort();
