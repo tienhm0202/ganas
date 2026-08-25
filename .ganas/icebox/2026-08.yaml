@@ -308,3 +308,28 @@
   status: promoted
   promoted_to: T-053
   closed_at: 2026-08-25T08:55:04.690Z
+- id: ICE-014
+  title: appendEntry ghi sổ cái không khoá — verify song song có thể gãy chuỗi hash
+  found_at: 2026-08-25T09:59:06.433Z
+  review_after_days: 30
+  weight: 5
+  ease: 3
+  why_deferred: "appendEntry (src/verify/ledger.ts:152) ĐỌC toàn bộ sổ cái để tính
+    prev_hash và seq rồi mới appendFile, không hề khoá: grep withFileLock trong
+    src/verify/ledger.ts trả 0. Hai tiến trình ganas verify chạy chồng nhau có
+    thể đọc cùng một trạng thái rồi cùng ghi, sinh seq trùng và prev_hash sai,
+    tức ĐỨT chuỗi hash — mà chuỗi hash chính là thứ ganas dùng để chứng minh
+    không ai sửa sổ cái bằng tay. Nghiêm trọng vì ganas CHỦ ĐỘNG khuyến khích
+    chạy sub-agent song song: brief in hẳn mục Giao được song song ngay bây giờ,
+    và phiên 2026-08-25 đã chạy ba sub-agent cùng gọi ganas verify. Lần đó chuỗi
+    may mắn còn liền (ledger --check xanh, 3410 dòng, không seq trùng) nhưng đó
+    là may chứ không phải an toàn. Chính sub-agent T-054 nêu ra và CỐ Ý không
+    chạy verify để tránh đua. Dự án đã có sẵn withFileLock dùng cho icebox và
+    claim id (src/graph/claim.ts) nên hướng chữa có khuôn: bọc phần đọc-tính-ghi
+    của appendEntry trong cùng cơ chế đó. Cân nhắc thêm một test ép hai tiến
+    trình verify chạy chồng rồi khẳng định ledger --check vẫn xanh."
+  anchors:
+    - src/verify/ledger.ts:152
+    - src/graph/claim.ts:1
+  scope: P-graph-core
+  status: open
