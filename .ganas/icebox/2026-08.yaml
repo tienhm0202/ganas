@@ -396,3 +396,86 @@
     - src/commands/commit.ts:187
   scope: P-cli
   status: open
+- id: ICE-017
+  title: taskBoundary không quét đường dẫn probe của verification target, nên file
+    test của khối bị coi là ngoài ranh giới
+  found_at: 2026-08-29T15:35:10.212Z
+  review_after_days: 30
+  weight: 3
+  ease: 3
+  why_deferred: "Lo ra that trong luc lam T-065. taskBoundary() gop module.paths
+    voi contractPaths(task) — tuc chi duong dan XUAT HIEN TRONG exit_contract.
+    Probe cua verification target thi khong duoc quet, du no la lenh chay THAT:
+    V-hook-policy-pure chay 'npx tsx --test test/hook-policy.test.ts', nhung
+    file do van bi xem la ngoai ranh gioi cua mot task khai touches:
+    [M-hook-policy]. Hau qua cu the: sua test cua khoi la viec BINH THUONG khi
+    sua khoi do, nhung ganas commit bo file ay lai working tree, va npm test
+    tren HEAD do vi test cu chay voi code moi — dung kieu commit nua voi ma
+    boundary sinh ra de chong. Va cai warning 'ngoai ranh gioi' khong doi ma
+    thoat nen khong ai bi chan. Cach va da dung o T-065 la them mot tieu chi
+    kind: command chay chinh file test do — chua duoc, nhung no bat moi task
+    phai nho tay, tuc la se quen. Muc chua goc: contractPaths hoac taskBoundary
+    doc them probe.run cua nhung verification ma exit_contract tro toi, roi rut
+    duong dan bang cung bo looksLikePath da co. Chua lam vi dang giua dot
+    D-008/D-009 va viec nay dung vao src/boundary.ts (khoi M-cli-core) — mot
+    pham vi khac voi task dang chay."
+  anchors:
+    - src/boundary.ts:68-76
+    - src/boundary.ts:250-267
+    - .ganas/tasks/T-065.yaml
+  scope: P-cli
+  status: open
+- id: ICE-018
+  title: readState trả bản sao NÔNG của EMPTY nên mọi dự án chưa có state.json
+    dùng chung một object sessions
+  found_at: 2026-08-29T15:39:58.957Z
+  review_after_days: 30
+  weight: 2
+  ease: 5
+  why_deferred: "Lo ra khi lam T-061 va da TAI LAP DUOC doc lap: EMPTY khai o
+    state.ts:97 la hang so cua module, con readState tra { ...EMPTY } o dong 112
+    va 122 — spread NONG, nen truong sessions dung chung dung mot object voi
+    hang so do. updateState ghi vao s.sessions[id] la ghi thang vao hang so
+    module. Thuc nghiem: updateState tren thu muc A roi readState tren thu muc B
+    (chua he co state.json) tra ve dung session cua A. Muc do hep hon ve ngoai:
+    grep src/mcp/*.ts khong thay readState/updateState nao, va CLI chay mot lan
+    roi thoat nen khong quan sat duoc. Dau thuc te la o TEST — sub-agent lam
+    T-061 mat thoi gian debug vi ba test chia se binding qua thu muc tam khac
+    nhau, phai ne bang cach cho moi test mot session id rieng. Cach chua mot
+    dong: tra { version: 1, current_task: null, sessions: {} } thay vi spread,
+    hoac structuredClone(EMPTY). Chua lam vi src/state.ts thuoc M-claim /
+    P-hook, khac pham vi task dang chay, va vi no chua can ai chay sai — nhung
+    se can ngay khi co mot tien trinh song lau phuc vu nhieu du an."
+  anchors:
+    - src/state.ts:97
+    - src/state.ts:112
+    - src/state.ts:122
+  scope: P-hook
+  status: open
+- id: ICE-019
+  title: in_progress kẹt vĩnh viễn khi phiên chết giữa chừng — chưa ai quyết ghi
+    lại todo hay giữ nguyên
+  found_at: 2026-08-29T15:39:59.372Z
+  review_after_days: 30
+  weight: 3
+  ease: 3
+  why_deferred: "Nua con lai cua T-061, bi rang buoc pham vi chan dung: T-061 khai
+    touches [M-commands] nen chi sua duoc src/commands/**, trong khi hai cho duy
+    nhat chay luc phien ket thuc la releaseSession (state.ts:150) va sessionEnd
+    (hooks/io/handlers.ts:444) — deu thuoc P-hook. Sub-agent DUNG LAI thay vi
+    lach, dung. Hien trang sau T-061: ganas next ghi in_progress vao YAML, nhung
+    khong duong nao ghi lai todo; mot phien chet giua chung de lai in_progress
+    vinh vien va chi ganas commit moi xoa duoc. Cau hoi chua ai tra loi: ghi lai
+    todo luc SessionEnd (mat tin hieu viec do, nhung sach), hay giu in_progress
+    (uu tien -1000 keo no ve dau hang lan sau, nhung khong phan biet duoc 'dang
+    lam' voi 'da chet'). Nghieng ve giu in_progress cong mot dau thoi gian de
+    biet no cu — nhung day la quyet dinh cua NGUOI, khong phai cua model. QUAN
+    TRONG: khi T-062 xong va Design co exit_contract, muc nay phai thanh MOT
+    TIEU CHI CUA D-008 chu khong phai mot task roi — do dung la co che ma D-008
+    dung ra de chua, va de no nam mai trong icebox la lap lai ca T-039."
+  anchors:
+    - src/state.ts:150
+    - src/hooks/io/handlers.ts:444
+    - .ganas/tasks/T-061.yaml
+  scope: P-hook
+  status: open
