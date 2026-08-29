@@ -32,7 +32,7 @@ import type { HookOutput } from "./types.js";
 
 /** Diagnostic liên quan tới bằng chứng — luật `knowledge_anchor`, không phải `schema`. */
 export function isAnchorIssue(d: Diagnostic): boolean {
-  return d.message.includes("anchor") || d.message.includes("bằng chứng");
+  return /^(?:\d+\.)?anchors(?:\.\d+)?:/.test(d.message);
 }
 
 export function formatDiagnostics(diags: readonly Diagnostic[]): string {

@@ -1,24 +1,27 @@
 id: T-065
-title: "`isAnchorIssue` phân loại bằng mã lỗi có cấu trúc, không bằng chuỗi tiếng Việt"
+title: "`isAnchorIssue` phân loại bằng mã lỗi có cấu trúc, không bằng chuỗi
+  tiếng Việt"
 serves:
   - G-001
 implements: D-009
 scope: P-hook
-status: todo
+status: done
 estimated_context: small
 model: scribe
 
 context_contract:
   must_read:
     - path: "src/hooks/policy/index.ts"
-      why: "`isAnchorIssue` dòng 34-36 và `ruleForDiagnostics` dòng 281-283 — chỗ một lỗi anchor kéo cả lượt sang luật `knowledge_anchor`"
+      why: "`isAnchorIssue` dòng 34-36 và `ruleForDiagnostics` dòng 281-283 — chỗ một
+        lỗi anchor kéo cả lượt sang luật `knowledge_anchor`"
     - path: "src/model/anchor.ts"
-      why: "`NEED_ANCHOR` (dòng 106-110) là chuỗi đang bị khớp — đổi câu chữ ở đây là luật im lặng tụt hạng"
+      why: "`NEED_ANCHOR` (dòng 106-110) là chuỗi đang bị khớp — đổi câu chữ ở đây là
+        luật im lặng tụt hạng"
     - path: "src/graph/types.ts"
-      why: "`Diagnostic` có `code` sẵn — mã lỗi có cấu trúc là thứ nên khớp thay cho `message`"
+      why: "`Diagnostic` có `code` sẵn — mã lỗi có cấu trúc là thứ nên khớp thay cho
+        `message`"
   facts: []
-  open_questions:
-    - "Lỗi anchor đến từ schema zod (`load/…` hoặc `schema/…`) chứ không mang mã `knowledge/…` — cần quyết khớp theo `issue.path` chứa 'anchors', hay gắn một mã riêng lúc dựng diagnostic ở `issuesToDiagnostics`."
+  open_questions: []
 
 touches:
   - M-hook-policy
@@ -26,6 +29,9 @@ touches:
 exit_contract:
   - kind: command
     run: "npx tsx --test 'test/anchor-issue-code.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/hook-policy.test.ts'"
     expect: exit_zero
   - kind: verification
     target: "M-hook-policy/V-hook-policy-pure"
@@ -40,8 +46,9 @@ notes: >-
   hook không còn chặn theo `knowledge_anchor` nữa. Không test nào bắt được, vì
   test hiện truyền thẳng diagnostic đã có sẵn chữ "anchor" vào hàm.
 
-  Đây là luật cưỡng chế QUAN TRỌNG NHẤT của ganas (`.claude/rules/ganas-knowledge.md`:
-  "luật duy nhất có hook chặn"), đang được phân loại bằng thứ dễ vỡ nhất.
+  Đây là luật cưỡng chế QUAN TRỌNG NHẤT của ganas
+  (`.claude/rules/ganas-knowledge.md`: "luật duy nhất có hook chặn"), đang được
+  phân loại bằng thứ dễ vỡ nhất.
 
   Test mới phải khoá đúng lỗ đó: dựng một diagnostic anchor mà THÔNG ĐIỆP không
   chứa chữ "anchor" lẫn "bằng chứng" — nó vẫn phải được phân loại là
@@ -51,3 +58,38 @@ notes: >-
   `src/hooks/policy/**`; khối này là `nature: code` thuần, KHÔNG được import gì
   chạm đĩa (`test/module-nature.test.ts` sẽ đỏ) và không import gì từ `../io/`,
   kể cả kiểu.
+
+  ĐÃ QUYẾT (2026-08-29), câu hỏi mở này khép lại — đọc trước khi sửa:
+  `issuesToDiagnostics` (`src/graph/load.ts:36-43`) sinh `code:
+  schema/${issue.code}`, nên lỗi anchor mang mã `schema/too_small`, không phân
+  biệt được với mọi lỗi `.min()` khác. Tín hiệu CÓ CẤU TRÚC nằm ở `issue.path
+  === ["anchors"]`, và nó đi vào `message` dưới dạng tiền tố `"anchors: …"`
+  (hoặc `"anchors.0: …"` khi một anchor sai định dạng).
+
+  Phương án SẠCH NHẤT là gắn mã riêng (`knowledge/anchor-missing`) ngay trong
+  `issuesToDiagnostics`. KHÔNG làm ở task này: `load.ts` thuộc M-load / phạm vi
+  P-graph-core, đụng vào là `scope/task-touches-outside-scope`.
+
+  Làm trong phạm vi P-hook: khớp theo TÊN TRƯỜNG, không theo văn xuôi. Tức là
+  bắt tiền tố đường dẫn `anchors` ở đầu `message`, thay cho `includes("anchor")
+  || includes("bằng chứng")`. Lý do đây là cải thiện thật chứ không phải đổi một
+  chuỗi lấy chuỗi khác: `anchors` là ĐỊNH DANH trong schema, và
+  `.claude/rules/naming.md` bảo đảm định danh không bao giờ được dịch sang tiếng
+  Việt — còn thông điệp lỗi thì được phép viết lại bất cứ lúc nào. Nếu ai đổi
+  tên trường `anchors` trong `zClaim`/`zProposal` thì schema đổi theo và test đỏ
+  ngay, đó là điều kiện an toàn mà cách cũ không có.
+
+  Chỉ khớp `"anchor"` trần thì bắt nhầm mọi message tình cờ chứa chữ đó; phải
+  neo vào ĐẦU chuỗi, vì `message` luôn mở đầu bằng `issue.path.join(".")`.
+
+  BỔ SUNG exit_contract sau khi làm (2026-08-29), nói rõ vì sao — đây là SIẾT,
+  không phải nới: task này phải sửa `test/hook-policy.test.ts` vì hai ca trong
+  đó dựng message giả ("thiếu anchor", "thiếu bằng chứng") không theo định dạng
+  mà `issuesToDiagnostics` thật sự sinh ra (`<path>: <message>`), nên chúng
+  không còn kiểm được điều đang khẳng định. Nhưng `taskBoundary()` chỉ gộp
+  `module.paths` với đường dẫn CÓ TRONG `exit_contract`, và probe của
+  `V-hook-policy-pure` — vốn chạy đúng file test đó — KHÔNG được quét. Hệ quả:
+  `ganas commit` bỏ file ấy lại working tree, và `npm test` trên HEAD sẽ đỏ vì
+  test cũ chạy với code mới. Thêm tiêu chí `command` chạy chính file đó vừa kéo
+  nó vào ranh giới, vừa bắt nó phải xanh.
+done_at: 2026-08-29T15:47:11.471Z

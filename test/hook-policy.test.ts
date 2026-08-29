@@ -133,8 +133,8 @@ test("enforce thì chặn, warn thì chỉ nhắc — dự án cũ hạ được
 test("chỉ cần MỘT lỗi dạng anchor là cả lượt tính theo knowledge_anchor", () => {
   const d = (message: string) => ({ severity: "error" as const, code: "x", message, file: "f" });
   assert.equal(ruleForDiagnostics([d("sai schema")]), "schema");
-  assert.equal(ruleForDiagnostics([d("sai schema"), d("thiếu anchor")]), "knowledge_anchor");
-  assert.equal(ruleForDiagnostics([d("thiếu bằng chứng")]), "knowledge_anchor");
+  assert.equal(ruleForDiagnostics([d("sai schema"), d("anchors: phải có bằng chứng")]), "knowledge_anchor");
+  assert.equal(ruleForDiagnostics([d("anchors.0: anchor không nhận dạng được")]), "knowledge_anchor");
 });
 
 test("applyEnforcement: enforce → block, warn → systemMessage", () => {
