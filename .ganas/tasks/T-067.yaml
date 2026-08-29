@@ -1,17 +1,20 @@
 id: T-067
-title: "taskBoundary quét cả đường dẫn probe của verification mà exit_contract trỏ tới"
+title: "taskBoundary quét cả đường dẫn probe của verification mà exit_contract
+  trỏ tới"
 serves:
   - G-001
 implements: D-009
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
 model: verifier
 
 context_contract:
   must_read:
     - path: "src/boundary.ts"
-      why: "`taskBoundary()` dòng 68-76 gộp `module.paths` với `contractPaths(task)`; `looksLikePath`/`contractPaths` ngay trên đó đã là bộ rút đường dẫn từ chuỗi lệnh, dùng lại chứ đừng viết bộ thứ hai"
+      why: "`taskBoundary()` dòng 68-76 gộp `module.paths` với `contractPaths(task)`;
+        `looksLikePath`/`contractPaths` ngay trên đó đã là bộ rút đường dẫn từ
+        chuỗi lệnh, dùng lại chứ đừng viết bộ thứ hai"
     - path: ".ganas/icebox/2026-08.yaml"
       why: "ICE-017 ghi đủ hiện tượng và ba lần vấp; task này là mức chữa gốc của nó"
   facts: []
@@ -35,14 +38,14 @@ notes: >-
   tức chỉ những đường dẫn XUẤT HIỆN TRONG `exit_contract`. Probe của
   `verification` target thì không được quét, dù nó là lệnh chạy thật. Hệ quả:
   sửa test của một khối là việc bình thường khi sửa khối đó, nhưng file test ấy
-  bị xem là ngoài ranh giới, `ganas commit` để nó lại working tree, và `npm test`
-  trên HEAD đỏ vì test cũ chạy với code mới. Cảnh báo "ngoài ranh giới" không
-  đổi mã thoát nên không ai bị chặn — nó chỉ trôi qua.
+  bị xem là ngoài ranh giới, `ganas commit` để nó lại working tree, và `npm
+  test` trên HEAD đỏ vì test cũ chạy với code mới. Cảnh báo "ngoài ranh giới"
+  không đổi mã thoát nên không ai bị chặn — nó chỉ trôi qua.
 
-  Ba lần đã trả giá, đều trong cùng một phiên:
-  - T-065 với `test/hook-policy.test.ts` (probe của V-hook-policy-pure)
-  - T-061 với `docs/COMMANDS.md` (test/cli-help.test.ts đối chiếu docs với CLI)
-  - T-062 với `test/debt.test.ts` (khoá cứng số mã luật tĩnh)
+  Ba lần đã trả giá, đều trong cùng một phiên: - T-065 với
+  `test/hook-policy.test.ts` (probe của V-hook-policy-pure) - T-061 với
+  `docs/COMMANDS.md` (test/cli-help.test.ts đối chiếu docs với CLI) - T-062 với
+  `test/debt.test.ts` (khoá cứng số mã luật tĩnh)
 
   VIỆC: `taskBoundary` đọc thêm `verification.run` của những verification mà
   `exit_contract` trỏ tới, rồi rút đường dẫn bằng CHÍNH `looksLikePath` /
@@ -57,3 +60,4 @@ notes: >-
   Test phải ĐỎ trước: dựng task khai `touches: [M-x]` với `exit_contract` có
   `kind: verification` trỏ `M-x/V-y`, mà probe của `V-y` chạy một file ngoài
   `module.paths`; `taskBoundary` phải trả về đường dẫn đó.
+done_at: 2026-08-29T16:23:50.374Z

@@ -16,6 +16,18 @@ export interface ContractPathRef {
   from: string;
 }
 
+/** Đường dẫn mà một lệnh shell chạm tới — dùng chung cho tiêu chí `command`
+ * lẫn cho `run` của verification mà tiêu chí `verification` trỏ tới, để chỉ
+ * có MỘT bộ rút đường dẫn từ chuỗi lệnh trong cả file. */
+function pathsFromCommand(run: string): string[] {
+  const out: string[] = [];
+  for (const token of tokenizeShell(run)) {
+    const cleaned = stripOperators(token);
+    if (looksLikePath(cleaned)) out.push(cleaned);
+  }
+  return out;
+}
+
 /**
  * Đường dẫn mà `exit_contract` của task nhắc tới.
  *
@@ -37,10 +49,7 @@ export function contractPathRefs(task: Task): ContractPathRef[] {
 
   for (const c of task.exit_contract) {
     if (c.kind === "command") {
-      for (const token of tokenizeShell(c.run)) {
-        const cleaned = stripOperators(token);
-        if (looksLikePath(cleaned)) add(cleaned, `lệnh \`${c.run}\``);
-      }
+      for (const p of pathsFromCommand(c.run)) add(p, `lệnh \`${c.run}\``);
     } else if (c.kind === "artifact") {
       add(c.path, `file \`${c.path}\``);
     }
@@ -54,12 +63,84 @@ export function contractPaths(task: Task): string[] {
 }
 
 /* ------------------------------------------------------------------------- *
+ * Đường dẫn mà PROBE của verification mà exit_contract trỏ tới chạy
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Đường dẫn mà `run` của verification (hoặc fact) mà tiêu chí
+ * `kind: verification` trỏ tới thật sự chạy.
+ *
+ * Đây là lỗ hổng thứ hai, khác lỗ hổng của `contractPathRefs`: tiêu chí
+ * `{ kind: "verification", target: "M-a/V-a-probe" }` không tự mang lệnh — nó
+ * TRỎ tới một bằng chứng đã khai sẵn trong `graph.modules`/`graph.facts`, và
+ * chính bằng chứng đó mới có `run`. Ba lần vấp thật (T-065, T-061, T-062) đều
+ * là dạng này: sửa test của khối là việc bình thường khi sửa khối, nhưng
+ * `taskBoundary` chưa từng đọc `verify.run` nên không biết file test đó tồn
+ * tại.
+ *
+ * `target` có ba dạng, phân biệt bằng tiền tố (không thể lẫn — `M-`, `F-` là
+ * hai bảng chữ cái ID rời nhau, xem `ID_PATTERNS` ở `model/common.ts`):
+ *
+ *  - `M-x`      — MỌI verification của khối `M-x`.
+ *  - `M-x/V-y`  — đúng một verification, khớp bằng `moduleTargets()`
+ *    (`src/verify/run.ts`) dựng id theo khuôn `${module.id}/${v.id}`.
+ *  - `F-xxx`    — fact; probe của fact cũng là một lệnh chạy thật (`f.verify`
+ *    là `zProbe`), gộp luôn cho nhất quán — không có gì phân biệt fact với
+ *    module ở khía cạnh "lệnh này có thể chạm file ngoài `paths`" cả.
+ *
+ * Target không khớp gì trong graph (khối/fact/verification không tồn tại) thì
+ * bỏ qua lặng lẽ — đó là việc của `ganas validate` (spine), không phải của
+ * ranh giới code.
+ */
+export function verificationPathRefs(task: Task, graph: Graph): ContractPathRef[] {
+  const refs: ContractPathRef[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: string, from: string): void => {
+    const path = raw.replace(/^\.\//, "");
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    refs.push({ path, from });
+  };
+
+  const addFromRun = (run: string | undefined, label: string): void => {
+    if (!run) return;
+    for (const p of pathsFromCommand(run)) add(p, `bằng chứng \`${label}\``);
+  };
+
+  for (const c of task.exit_contract) {
+    if (c.kind !== "verification") continue;
+    const target = c.target;
+
+    if (target.startsWith("F-")) {
+      addFromRun(graph.facts.get(target)?.value.verify.run, target);
+      continue;
+    }
+
+    const slash = target.indexOf("/");
+    const moduleId = slash === -1 ? target : target.slice(0, slash);
+    const mod = graph.modules.get(moduleId)?.value;
+    if (!mod) continue;
+
+    if (slash === -1) {
+      for (const v of mod.verify) addFromRun(v.run, `${moduleId}/${v.id}`);
+    } else {
+      const v = mod.verify.find((v) => `${moduleId}/${v.id}` === target);
+      if (v) addFromRun(v.run, target);
+    }
+  }
+  return refs;
+}
+
+/* ------------------------------------------------------------------------- *
  * Ranh giới code của task
  * ------------------------------------------------------------------------- */
 
 /**
  * Ranh giới CODE của một task: code của mọi khối task chạm tới, cộng đường dẫn
- * mà chính `exit_contract` chạy.
+ * mà chính `exit_contract` chạy — TRỰC TIẾP (tiêu chí `command`/`artifact`) lẫn
+ * GIÁN TIẾP qua một bằng chứng đã khai sẵn (tiêu chí `verification`, xem
+ * `verificationPathRefs`).
  *
  * KHÔNG trả về `.ganas` — xem `ownsGanasFile`. Stage cả thư mục là lý do commit
  * mang nhãn một task lại chứa graph của task khác, và lịch sử graph chính là
@@ -72,6 +153,7 @@ export function taskBoundary(task: Task, graph: Graph): string[] {
     for (const p of mod?.paths ?? []) patterns.add(p);
   }
   for (const p of contractPaths(task)) patterns.add(p);
+  for (const r of verificationPathRefs(task, graph)) patterns.add(r.path);
   return [...patterns];
 }
 
