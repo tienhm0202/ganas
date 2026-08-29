@@ -69,6 +69,14 @@ const SCORES: Record<string, DebtScore> = {
   // không sai lệch gì, chỉ nhắc một trạng thái đang chờ.
   "spine/design-serves-draft-goal": { weight: 1, ease: 3 },
   "spine/design-orphaned": { weight: 1, ease: 5 },
+  // Chặng bỏ dở: bảng còn báo "đang chạy" trong khi không bước nào chạy — đúng
+  // nghĩa sinh kết luận sai, và ca T-039 cho thấy nó im lặng nhiều tuần. Không
+  // sửa bằng một dòng YAML: phải QUYẾT là đóng chặng hay dựng nốt task còn thiếu.
+  "spine/design-stalled": { weight: 3, ease: 3 },
+  // Chặng chưa có hợp đồng ra: không sai dữ liệu gì, nhưng không ai chấm được
+  // "đóng được chưa" — cùng hạng `scope/module-missing-guide`. ease thấp hơn vì
+  // phải nghĩ ra tiêu chí kiểm chứng được, không phải chép một dòng.
+  "spine/design-missing-exit-contract": { weight: 2, ease: 3 },
 
   /* --- spine: task -------------------------------------------------------- */
   "spine/task-missing-goal": { weight: 3, ease: 5 },

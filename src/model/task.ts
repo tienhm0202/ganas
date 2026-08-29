@@ -13,7 +13,19 @@ import {
 } from "./common.js";
 import { MODEL_TIER } from "./config.js";
 
-export const TASK_STATUS = ["todo", "in_progress", "blocked", "done"] as const;
+/**
+ * KHÔNG có `blocked`: "bị chặn" là điều SUY RA từ `blocked_by`, không phải điều
+ * khai tay. `openBlockers()` (`src/graph/select.ts`) đã là người quyết duy nhất
+ * của câu hỏi đó; một trạng thái khai song song là câu trả lời thứ hai cho cùng
+ * một câu hỏi, và câu trả lời thứ hai luôn trôi — task khai `blocked` mà mọi
+ * blocker đã done thì `ganas next` không bao giờ đánh dấu nó `in_progress` nữa
+ * (nó chỉ đổi từ `todo`), mà không lỗi nào nổi lên.
+ *
+ * Giá trị này chưa từng được ghi bởi bất kỳ dòng code nào kể từ khi enum ra
+ * đời — đúng lớp "khai rồi không nối dây" mà `test/no-dead-ends.test.ts` sinh
+ * ra để chặn.
+ */
+export const TASK_STATUS = ["todo", "in_progress", "done"] as const;
 
 /** Ước lượng context. `large` bị validator cảnh báo — task phải vừa một phiên. */
 export const ESTIMATED_CONTEXT = ["small", "medium", "large"] as const;

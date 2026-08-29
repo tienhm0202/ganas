@@ -278,7 +278,7 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
     for (const m of src.matchAll(/code:\s*"([a-zA-Z0-9/_-]+)"/g)) codes.add(m[1]!);
   }
 
-  // Đối chiếu chính con số đã tự grep xác nhận: 53 mã DUY NHẤT trong
+  // Đối chiếu chính con số đã tự grep xác nhận: 59 mã DUY NHẤT trong
   // validate.ts (43 gốc + 3 mã icebox: icebox/promoted-missing-task,
   // icebox/review-overdue, icebox/without-scope + 7 mã proposal:
   // scope/proposal-scope-not-found, spine/proposal-missing-target,
@@ -287,13 +287,15 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
   // knowledge/proposal-problem-equals-change + 2 mã bản đồ code:
   // scope/module-missing-guide, scope/module-paths-overlap + 1 mã anchor:
   // knowledge/url-anchor-without-quote + 1 mã bản đồ code suy từ import thật:
-  // spine/module-cycle-code), cộng 3 mã DUY NHẤT trong load.ts (spine/config-unknown-key, load/yaml, load/duplicate-id
+  // spine/module-cycle-code + 2 mã chặng dữ liệu: spine/design-stalled,
+  // spine/design-missing-exit-contract), cộng 3 mã DUY NHẤT trong load.ts
+  // (spine/config-unknown-key, load/yaml, load/duplicate-id
   // — hai mã sau xuất hiện hai lần trong file nhưng cùng literal nên `Set` chỉ
-  // giữ một) → tổng 60.
+  // giữ một) → tổng 62.
   assert.equal(
     codes.size,
-    60,
-    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 60 (57 + 3) — kiểm lại pattern grep hoặc số đếm`,
+    62,
+    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 62 (59 + 3) — kiểm lại pattern grep hoặc số đếm`,
   );
 
   const missing = [...codes].filter((c) => !isExplicitlyScored(c));

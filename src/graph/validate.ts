@@ -158,7 +158,24 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
   const now = opts.now ?? Date.now();
   const diags: Diagnostic[] = [...graph.loadDiagnostics];
 
-  /* --- Design: liên kết goal, mồ côi ---------------------------------- */
+  /* --- Design: liên kết goal, mồ côi, chặng bỏ dở ---------------------- */
+
+  /**
+   * Số task TỔNG và số task CHƯA done của từng design. `implements` là cạnh duy
+   * nhất từ một bước về chặng chứa nó, nên map này là toàn bộ nguồn của câu hỏi
+   * "chặng đã bắt đầu chưa, và còn việc đang chạy không".
+   *
+   * Phải đếm CẢ HAI, không chỉ số chưa done: `total === 0` và `open === 0` cho
+   * cùng một con số nhưng là hai trạng thái ngược nhau — chưa bắt đầu và đã
+   * xong hết.
+   */
+  const taskCountOf = new Map<string, { total: number; open: number }>();
+  for (const t of graph.tasks.values()) {
+    const c = taskCountOf.get(t.value.implements) ?? { total: 0, open: 0 };
+    c.total += 1;
+    if (t.value.status !== "done") c.open += 1;
+    taskCountOf.set(t.value.implements, c);
+  }
 
   for (const design of graph.designs.values()) {
     const d = design.value;
@@ -226,6 +243,48 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
         });
       }
     });
+
+    if (d.status === "active") {
+      // Chặng BỎ DỞ: đã bắt đầu rồi dừng giữa chừng — không còn bước nào chạy,
+      // mà chặng cũng chưa đóng. Ca gốc là T-039: `.ganas/tasks/T-048.yaml` ghi
+      // trong `notes` rằng còn "task cuối" phải làm, task đó chưa bao giờ được
+      // tạo, và `ganas validate` sạch suốt nhiều tuần. Nợ tiếp nối sống trong
+      // văn xuôi thì sống hay chết là ngẫu nhiên; đây là chỗ bắt nó bằng cấu trúc.
+      //
+      // `total > 0` là vế BẮT BUỘC, không phải chi tiết: design chưa có task nào
+      // là chặng CHƯA BẮT ĐẦU, trạng thái ngược hẳn với bỏ dở. Thiếu vế đó thì
+      // `fix-graph` (src/flow.ts) — đứng TRƯỚC chặng `task` và chỉ qua khi graph
+      // sạch lỗi — kẹt vĩnh viễn ngay sau khi repo trống tạo design đầu tiên,
+      // vì thuốc chữa nằm ở chặng phía sau.
+      const tasks = taskCountOf.get(d.id) ?? { total: 0, open: 0 };
+      if (tasks.total > 0 && tasks.open === 0) {
+        diags.push({
+          severity: "error",
+          code: "spine/design-stalled",
+          message:
+            `design ${d.id} còn active nhưng cả ${tasks.total} task trỏ vào nó đều done — ` +
+            `chặng bỏ dở`,
+          file: design.file,
+          line: at(graph, design, "status"),
+          hint:
+            `Đóng chặng: đặt status: done + done_at sau khi exit_contract thoả. ` +
+            `Còn thiếu bước thì dựng nốt task và cho nó implements: ${d.id}.`,
+        });
+      }
+
+      if (d.exit_contract.length === 0) {
+        diags.push({
+          severity: "warning",
+          code: "spine/design-missing-exit-contract",
+          message: `design ${d.id} chưa khai exit_contract — không có gì chấm "chặng đóng được chưa"`,
+          file: design.file,
+          line: at(graph, design, "id"),
+          hint:
+            `Thêm exit_contract vào ${design.file}, dùng đúng khuôn tiêu chí của task ` +
+            `(kind: command / artifact / handoff / manual / verification).`,
+        });
+      }
+    }
   }
 
   /* --- Task: liên kết + nhất quán spine -------------------------------- */
