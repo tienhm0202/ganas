@@ -1,0 +1,44 @@
+id: D-008
+title: "Chặng dữ liệu đóng được: Design có hợp đồng, việc dở có trạng thái thật"
+serves:
+  - G-001
+summary: >-
+  Ganas đang trộn hai thứ khác nhau cùng tên "chặng". Chặng QUY TRÌNH là 12 bước
+  cố định trong `src/flow.ts:73` (`init → … → close`), giống nhau ở mọi dự án.
+  Chặng DỮ LIỆU — thứ công việc thật có dạng `V1 --(3 bước)--> V2 --(5 bước)-->
+  V3` — không tồn tại trong mô hình. Hệ quả: `work`, chặng mà toàn bộ việc thật
+  diễn ra, là một hộp đen; điều kiện qua của nó chỉ là `c.boundTask ===
+  c.task.id` (`src/flow.ts:187`), tức "đã mở brief".
+
+  Chỗ trống nằm đúng ở Design. Goal có `acceptance` chạy bằng lệnh
+  (`src/model/goal.ts:9`), Scope có `acceptance` (`src/model/scope.ts:56`), Task
+  có `exit_contract` (`src/model/task.ts:128`). Design — tầng giữa, đúng tầng của
+  một chặng — chỉ có `summary` văn xuôi và bốn trạng thái không có `done`. Trong
+  57 mã luật của `src/graph/validate.ts`, không mã nào chấm tiến độ một design.
+
+  Cái giá đã trả bằng dữ liệu thật: `.ganas/tasks/T-048.yaml` ghi trong `notes`
+  rằng T-036/T-038 nói "chờ task cuối", nhưng T-039 chưa bao giờ được tạo — và
+  đúng thế, T-039 không tồn tại ở `tasks/` lẫn `tasks/done/`, trong khi
+  T-049/T-050 (nợ cùng loại, cùng đợt) thì có. Nợ tiếp nối sống trong `notes`:
+  văn xuôi tự do, không schema, không validator, không gate. Sống hay chết là
+  ngẫu nhiên.
+
+  Cách chữa: cho Design một `exit_contract` dùng lại nguyên `zExitCriterion` của
+  Task, thêm `status: done`, và một luật `spine/design-stalled` bắt đúng ca
+  T-039 — design `active` mà không còn task nào chưa xong và bản thân nó chưa
+  đóng. Nợ tiếp nối khi đó KHÔNG cần trường mới: nó là một tiêu chí của chặng.
+  Vế thứ hai là làm sống `status: in_progress`, hiện là enum chết — `select.ts:52`
+  cho nó ưu tiên -1000 và `brief.ts:382` in "việc đang dở", nhưng không dòng code
+  nào GHI giá trị đó.
+
+  Ràng buộc chi phối: THÊM TRƯỜNG vào file đã có, KHÔNG thêm file. Không có thực
+  thể thứ mười, không có `Stage` riêng.
+
+  Biết trước hệ quả: đo trên HEAD, cả 7/7 design hiện có đều sẽ đỏ với
+  `spine/design-stalled` — không design nào từng được đóng. Đó là trạng thái thật
+  mà v1.0.0 đã phát hành cùng, không phải luật quá tay.
+
+  Chính D-008 và D-009 sẽ là hai design ĐẦU TIÊN khai `exit_contract` — bổ sung
+  ngay sau khi T-062 mở đường ở schema.
+status: active
+created_at: 2026-08-29T00:00:00Z

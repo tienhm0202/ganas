@@ -1,0 +1,69 @@
+id: T-062
+title: "Design có `exit_contract` và `status: done`; luật `spine/design-stalled` bắt chặng bỏ dở"
+serves:
+  - G-001
+implements: D-008
+scope: P-graph-core
+status: todo
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/model/task.ts"
+      why: "`zExitCriterion` (dòng 81-89) tái dùng nguyên vẹn cho Design; `superRefine` dòng 151-157 là khuôn ràng buộc `done` phải kèm `done_at`"
+    - path: "src/model/design.ts"
+      why: "File sẽ sửa — hiện chỉ có `summary` và bốn trạng thái không có `done`"
+    - path: "src/graph/validate.ts"
+      why: "Khuôn luật spine và hàm `at()` (dòng 100-109); mọi `diags.push` BẮT BUỘC kèm `hint` — xem CONTRIBUTING.md mục 4"
+    - path: ".ganas/tasks/T-048.yaml"
+      why: "Ca T-039 nguyên bản: notes của nó ghi nợ tiếp nối rồi nợ đó bay hơi — đây là ca mà luật mới phải bắt được"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-validate
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/design-stage.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Ba việc, cùng một mô hình dữ liệu:
+
+  (1) `zDesign` thêm `exit_contract: z.array(zExitCriterion).default([])`, thêm
+  `"done"` vào `DESIGN_STATUS`, và `superRefine` bắt `done_at` khi
+  `status === "done"` — cùng khuôn `zTask` đã dùng. TÁI DÙNG `zExitCriterion`,
+  không phát minh loại tiêu chí thứ hai. Nhớ `.strict()` (CONTRIBUTING mục 2).
+
+  (2) Luật `spine/design-stalled`, severity ERROR: design `status: active` mà
+  không còn task nào chưa `done` trỏ vào nó, và bản thân design chưa `done`. Đây
+  chính là ca T-039 — chặng bỏ dở, im lặng nhiều tuần dưới một `ganas validate`
+  sạch. Luật thuần cấu trúc, không chạy lệnh.
+
+  BIẾT TRƯỚC: đo trên HEAD, cả 7/7 design hiện có sẽ đỏ ngay — D-001 (0 task),
+  D-002 (4 task, 0 mở), D-003 (1/0), D-004 (11/0), D-005 (3/0), D-006 (11/0),
+  D-007 (28 task, 0 mở). Đó là trạng thái THẬT, không phải luật quá tay. Đừng hạ
+  severity để bảng cho đẹp; việc phải làm là đóng bảy chặng đó — hoặc `done` thật,
+  hoặc thừa nhận còn thiếu bước và dựng nốt task.
+
+  (3) Luật `spine/design-missing-exit-contract`, severity WARNING: design
+  `active` mà `exit_contract` rỗng. Warning chứ không error để bảy design đang có
+  adopt được — enforce áp cho luật MỚI, không hồi tố dữ liệu cũ.
+
+  Kèm theo, cùng file `src/model/task.ts`: xử lý `status: "blocked"`. Nó xuất
+  hiện ĐÚNG MỘT LẦN trong toàn repo, ở chính dòng khai enum — không ai ghi, không
+  ai đọc. Hoặc nối dây (ghi khi `openBlockers()` không rỗng), hoặc gỡ khỏi
+  `TASK_STATUS`. Một enum không ai ghi là lời hứa suông, đúng lớp lỗi mà
+  `test/no-dead-ends.test.ts` sinh ra để chặn.
+
+  KHÔNG thêm trường `follow_up` vào Task: nợ tiếp nối là một tiêu chí của CHẶNG,
+  không phải ghi chú của một bước. Đó là điểm hợp nhất của design này.
+
+  Không đụng `src/gate.ts` hay `src/render/**` — chúng thuộc P-cli, là T-063.

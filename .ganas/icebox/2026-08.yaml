@@ -362,3 +362,37 @@
     - src/commands/proposal.ts:6
   scope: P-cli
   status: open
+- id: ICE-016
+  title: "Gom task/design vào file mảng theo khuôn icebox: 6 chỗ vỡ, 5 vỡ câm lặng"
+  found_at: 2026-08-29T15:10:31.390Z
+  review_after_days: 30
+  weight: 3
+  ease: 1
+  why_deferred: "Lớp NẠP đã tổng quát sẵn (collectArray + Sourced.index + at()
+    không cần sửa dòng nào), và icebox đã chứng minh tỉ lệ gộp 15:1 trong một
+    file. Nhưng mọi thứ định danh bản ghi bằng TÊN FILE thì chưa: (1)
+    ownsGanasFile boundary.ts:258-266 so chuỗi stem==='tasks/T-048', file tháng
+    không khớp nên task file rơi vào foreign va status:done ghi ra dia nhung
+    khong vao commit nao; (2) va chieu do thi git add stage ca file, commit task
+    A nuot thay doi chua commit cua task B; (3) applyPrune prune.ts:302 goi
+    archive() mot lan MOI TASK, ba task done chung file thi lan hai git mv fail
+    roi rename nem ENOENT, keo theo loi task chua xong ra khoi graph; (4)
+    scopeIndex debt.ts:376 map file->scope nen ban ghi sau de ban ghi truoc,
+    ganas debt gan sai scope hang loat; (5) PostToolUse loc d.file===rel
+    handlers.ts:311 nen agent sua task A bi chan vi loi schema cua task B cung
+    file; (6) hook ENTITY_DIRS chan moi Write len file thang da ton tai ke ca
+    khi them task moi hop le, va thong diep huong dan noi sai. Nam trong sau cho
+    tren VO CAM LANG. Phan thuong lai nho hon ve ngoai: gom 41 task con ~3 file
+    tiet kiem 38 file nhung KHONG giam mot dong nao, trong khi modules/ 2800
+    dong moi la cho nang nhat ve dong. Doi lai T-064 xoa duoc ~101 file lock chi
+    bang mot lan don dung. Lam thi phai lam ca sau cho cung luc, va can mot lenh
+    'ganas task add' kieu appendIceboxRecord truoc da."
+  anchors:
+    - src/boundary.ts:258-266
+    - src/prune.ts:302
+    - src/debt.ts:376
+    - src/hooks/io/handlers.ts:311
+    - src/hooks/policy/index.ts:92-106
+    - src/commands/commit.ts:187
+  scope: P-cli
+  status: open

@@ -1,0 +1,66 @@
+id: T-063
+title: "`ganas gate --design` chấm hợp đồng của chặng, brief nói chặng đang ở đâu"
+serves:
+  - G-001
+implements: D-008
+scope: P-cli
+status: todo
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/gate.ts"
+      why: "`evaluateTreeCriteria` (dòng 218) đã là khuôn hàm nhận `readonly ExitCriterion[]` — tách lõi `evaluateGate` theo đúng khuôn đó, một đường chấm dùng chung"
+    - path: "src/render/brief.ts"
+      why: "Mục 'Design đang hiện thực' ở dòng 485 là chỗ thêm dòng tiến độ chặng; đọc CLAUDE.md cùng thư mục về bất biến phần ổn định / phần biến động"
+    - path: "src/commands/gate.ts"
+      why: "Điểm vào CLI — thêm cờ `--design`, KHÔNG thêm lệnh mới (lệnh mới phải sửa bốn chỗ, xem src/commands/CLAUDE.md)"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-workflow
+  - M-commands
+  - M-render
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/design-gate.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-render/V-render-brief"
+
+blocked_by:
+  - T-062
+
+notes: >-
+  Nửa sau của T-062: schema đã có `exit_contract` cho Design thì phải có đường
+  CHẤM nó và đường TRÌNH nó, nếu không trường mới chỉ là chữ trong YAML —
+  `test/no-dead-ends.test.ts` sẽ đỏ vì không ai đọc.
+
+  (1) `evaluateGate` hiện nhận `task: Task`. Tách phần lõi thành hàm nhận
+  `readonly ExitCriterion[]` để `ganas gate --design D-007` và `ganas gate <task>`
+  đi chung một đường. Khuôn đã có sẵn ở `evaluateTreeCriteria` — đừng dựng đường
+  chấm thứ hai, hai nguồn sự thật cho cùng một câu hỏi là đúng thứ ganas chống.
+
+  (2) Brief thêm một dòng vào mục "Design đang hiện thực": chặng này còn mấy task
+  mở, `exit_contract` của chặng đạt mấy phần. Đây là câu trả lời cho "tôi đang ở
+  đâu trong chuỗi V1→V2→V3", và nó được bơm vào MỌI phiên qua SessionStart — chỗ
+  duy nhất chắc chắn agent đọc.
+
+  Cạm bẫy phải biết trước, từ `src/render/CLAUDE.md`: bố cục phần ỔN ĐỊNH của
+  brief phải tất định, mọi thứ biến động nằm sau `---` ở cuối. Dòng tiến độ chặng
+  là dữ liệu graph, KHÔNG phải `volatile` — nhưng đừng nhét mốc thời gian hay
+  `git status` vào nó, làm thế là phá prompt cache của mọi phiên sau.
+
+  `blocked_by: T-062` là thật, không phải thứ tự cho đẹp: không có `exit_contract`
+  trong `zDesign` thì không có gì để chấm.
+
+  Task này và T-064 cùng chạm M-workflow + M-commands nên `parallelCandidates()`
+  sẽ KHÔNG cho giao song song — đúng, vì cả hai sửa `src/prune.ts`/`src/gate.ts`
+  và `src/commands/**`.

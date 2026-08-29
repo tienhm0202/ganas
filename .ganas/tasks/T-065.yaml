@@ -1,0 +1,53 @@
+id: T-065
+title: "`isAnchorIssue` phân loại bằng mã lỗi có cấu trúc, không bằng chuỗi tiếng Việt"
+serves:
+  - G-001
+implements: D-009
+scope: P-hook
+status: todo
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: "src/hooks/policy/index.ts"
+      why: "`isAnchorIssue` dòng 34-36 và `ruleForDiagnostics` dòng 281-283 — chỗ một lỗi anchor kéo cả lượt sang luật `knowledge_anchor`"
+    - path: "src/model/anchor.ts"
+      why: "`NEED_ANCHOR` (dòng 106-110) là chuỗi đang bị khớp — đổi câu chữ ở đây là luật im lặng tụt hạng"
+    - path: "src/graph/types.ts"
+      why: "`Diagnostic` có `code` sẵn — mã lỗi có cấu trúc là thứ nên khớp thay cho `message`"
+  facts: []
+  open_questions:
+    - "Lỗi anchor đến từ schema zod (`load/…` hoặc `schema/…`) chứ không mang mã `knowledge/…` — cần quyết khớp theo `issue.path` chứa 'anchors', hay gắn một mã riêng lúc dựng diagnostic ở `issuesToDiagnostics`."
+
+touches:
+  - M-hook-policy
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/anchor-issue-code.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-hook-policy/V-hook-policy-pure"
+
+notes: >-
+  `isAnchorIssue` hiện là:
+
+      return d.message.includes("anchor") || d.message.includes("bằng chứng");
+
+  Khớp chuỗi trên thông điệp lỗi TIẾNG VIỆT. Hệ quả: sửa câu chữ `NEED_ANCHOR`,
+  dịch thông điệp, hay thêm dấu — luật anchor lặng lẽ tụt hạng xuống `schema` và
+  hook không còn chặn theo `knowledge_anchor` nữa. Không test nào bắt được, vì
+  test hiện truyền thẳng diagnostic đã có sẵn chữ "anchor" vào hàm.
+
+  Đây là luật cưỡng chế QUAN TRỌNG NHẤT của ganas (`.claude/rules/ganas-knowledge.md`:
+  "luật duy nhất có hook chặn"), đang được phân loại bằng thứ dễ vỡ nhất.
+
+  Test mới phải khoá đúng lỗ đó: dựng một diagnostic anchor mà THÔNG ĐIỆP không
+  chứa chữ "anchor" lẫn "bằng chứng" — nó vẫn phải được phân loại là
+  `knowledge_anchor`. Test đó đỏ với code hiện tại.
+
+  Việc nhỏ, ranh giới rõ, có test dẫn đường → tier `scribe`. Chỉ sửa
+  `src/hooks/policy/**`; khối này là `nature: code` thuần, KHÔNG được import gì
+  chạm đĩa (`test/module-nature.test.ts` sẽ đỏ) và không import gì từ `../io/`,
+  kể cả kiểu.

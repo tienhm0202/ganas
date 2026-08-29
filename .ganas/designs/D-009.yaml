@@ -1,0 +1,41 @@
+id: D-009
+title: "Ngừng rò file, và ngừng khai những luật cưỡng chế không tồn tại"
+serves:
+  - G-001
+summary: >-
+  Hai lớp hỏng khác nhau nhưng cùng một hình dạng: ganas đang nói nó làm một việc
+  mà thật ra không làm.
+
+  Lớp một — `.ganas/` rò file. Đo trên HEAD: 223 file trên đĩa, và 103 trong số
+  đó nằm ở `.ganas/.locks/`. Đo tiếp nội dung: 94 file `.id` và 7 file `.claim`
+  mang `"session_id":"cli"`, chỉ 2 file mang UUID phiên thật. Nguyên nhân ở
+  `releaseClaimsForSession` (`src/graph/claim.ts:187`) — nó chỉ xoá lock có
+  `session_id` khớp phiên đang kết thúc, nhưng `ganas id` gọi từ CLI rơi vào
+  fallback `"cli"`, một danh tính không bao giờ có `SessionEnd`. File cũ nhất tồn
+  từ 2026-08-18. `ganas prune` tầng 1 tự khai dọn "ephemeral, local"
+  (`src/prune.ts:34-36`) nhưng không đụng `.locks/`.
+
+  Cùng lớp đó: 14 proposal đã quyết (12 approved, 2 rejected, 0 pending) vẫn được
+  `loadGraph` parse ở mọi lần chạy hook, trong khi đường ra duy nhất của proposal
+  trong brief đòi `status === "pending"` (`src/render/brief.ts:240`).
+  `src/prune.ts:46` tự thú nhận proposal chưa có tầng archive — và lý do nó nêu
+  ("chưa có model nào được nạp vào graph") đã sai từ v1.0.0, khi `zProposal` có
+  schema, loader và sáu luật validate.
+
+  Lớp hai — hai luật cưỡng chế tự nói dối. `task_link` được khai trong
+  `ENFORCEMENT_RULES` (`src/model/config.ts:25`), tài liệu hoá ở
+  `docs/START.md:136` và `docs/CONCEPTS.md:203`, in trong template
+  `src/templates/project.ts:37` — nhưng không code nào gọi
+  `enforcementFor(config, "task_link")`. Bật nó trong `config.yaml` không có gì
+  xảy ra. Và `isAnchorIssue` (`src/hooks/policy/index.ts:35`) phân loại luật bằng
+  cách tìm chuỗi `"anchor"` / `"bằng chứng"` trong thông điệp lỗi tiếng Việt: sửa
+  câu chữ của `NEED_ANCHOR` là luật anchor lặng lẽ tụt hạng xuống `schema`, không
+  test nào bắt.
+
+  Cả hai lớp đều là thứ ganas sinh ra để chống, chỉ khác là lần này do chính nó
+  gây ra: một lời hứa được trình cho phiên sau như sự thật.
+
+  Không nằm trong design này, đã cân nhắc và gác lại (xem icebox): gom task/design
+  vào file mảng theo khuôn icebox — sáu chỗ vỡ, năm trong số đó vỡ câm lặng.
+status: active
+created_at: 2026-08-29T00:00:00Z

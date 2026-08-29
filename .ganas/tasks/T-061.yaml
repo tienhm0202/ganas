@@ -1,0 +1,57 @@
+id: T-061
+title: "`ganas next` ghi `in_progress` vào YAML và từ chối nhảy việc khi task cũ chưa xong"
+serves:
+  - G-001
+implements: D-008
+scope: P-cli
+status: todo
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/commands/commit.ts"
+      why: "`closeTaskFile()` (dòng 70-81) là khuôn ghi status vào YAML đã giữ comment và đã xử lý `sourced.index` — tách hàm chung từ đây, đừng chép lần hai"
+    - path: "src/graph/select.ts"
+      why: "`rankedCandidates` đã cho `in_progress` ưu tiên -1000 (dòng 52); task này chỉ làm cho giá trị đó tồn tại, KHÔNG sửa hàm xếp hạng"
+    - path: "src/state.ts"
+      why: "`bindSession` (dòng 143) thay cả SessionRecord và đè binding cũ không hỏi — đây chính là chỗ nhảy việc lọt qua"
+  facts: []
+  open_questions:
+    - "Ghi lại `todo` lúc SessionEnd hay giữ `in_progress` cho phiên sau nối tiếp? Giữ thì một phiên chết giữa chừng để lại `in_progress` vĩnh viễn; ghi lại thì mất tín hiệu việc dở. Nghiêng về ghi lại `todo` vì `state.json` đã giữ binding riêng."
+
+touches:
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/next-status.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  `status: in_progress` là enum CHẾT. `grep -rn "in_progress" src/` ra đúng ba
+  chỗ — `model/task.ts:16` (khai enum), `graph/select.ts:52` (đọc, cho -1000),
+  `render/brief.ts:382` (đọc, in "việc đang dở") — cả ba đều là chỗ ĐỌC. Không
+  dòng code nào GHI, và 0 bản ghi trong `.ganas/` mang giá trị đó. Nguồn ghi
+  `status` tự động duy nhất là `closeTaskFile()`, và nó chỉ ghi `"done"`.
+
+  Hai phần, làm cả hai mới có tác dụng:
+
+  (1) `ganas next` ghi `status: in_progress` vào chính file YAML lúc claim.
+  Không chỉ `state.json` — `state.json` là LOCAL_ONLY, không commit, nên máy thứ
+  hai và clone mới không thấy gì. Test phải kiểm file YAML thật sự đổi.
+
+  (2) `ganas next` từ chối chuyển sang task khác khi phiên đang bind vào một
+  task chưa `done`, trừ khi có `--switch`. Không có cờ thì in task đang dở kèm
+  kết quả `ganas gate` của nó. Đây là chỗ "đóng luồng trước khi mở luồng" thành
+  hàng rào thật, thay vì một điểm cộng trong hàm xếp hạng mà không ai kích hoạt.
+
+  CHỈ sửa `src/commands/**` (khối M-commands). `select.ts` thuộc M-graph-read,
+  scope P-graph-core — đụng vào là vi phạm `scope/task-touches-outside-scope`, và
+  nó cũng không cần sửa. Việc gỡ hay nối dây `blocked` thuộc T-062 vì nó nằm ở
+  `src/model/task.ts`.
+
+  Tiêu chí `test/next-status.test.ts` ĐỎ ngay lúc viết task này (file chưa tồn
+  tại, `npx tsx --test` trả exit 1 — đã chạy thử). Viết test trước, đỏ trước.

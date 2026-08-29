@@ -1,0 +1,69 @@
+id: T-064
+title: "`ganas prune` dọn `.locks/` mồ côi và archive proposal đã quyết"
+serves:
+  - G-001
+implements: D-009
+scope: P-cli
+status: todo
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/prune.ts"
+      why: "Docstring dòng 32-49 khai ba tầng dọn — tầng 1 nói 'ephemeral, local' nhưng bỏ sót `.locks/`, và dòng 46 nêu lý do proposal chưa archive được đã lỗi thời từ v1.0.0"
+    - path: "src/graph/claim.ts"
+      why: "`releaseClaimsForSession` (dòng 187) chỉ xoá lock khớp session — ĐỌC để hiểu nguyên nhân rò, KHÔNG sửa: file này thuộc M-claim / P-hook"
+    - path: "src/model/proposal.ts"
+      why: "`status` và `decided_at` của proposal — căn cứ tuổi để archive, giống `closed_at` mà icebox dùng"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-workflow
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/prune-locks.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Số đo lúc viết task, để so lại sau khi xong: `.ganas/` có 223 file trên đĩa,
+  103 trong số đó ở `.ganas/.locks/`. Đếm nội dung: 94 file `.id` và 7 file
+  `.claim` mang `"session_id":"cli"`, chỉ 2 file mang UUID phiên thật. File cũ
+  nhất từ 2026-08-18.
+
+  Nguyên nhân: `releaseClaimsForSession` chỉ xoá lock có `session_id` khớp phiên
+  đang kết thúc, nhưng `ganas id` gọi từ CLI rơi vào fallback `"cli"`
+  (`src/commands/id.ts:264`) — một danh tính không bao giờ có `SessionEnd`. Lock
+  hết TTL vẫn nằm đó vì file chỉ bị chiếm lại khi ai đó xin ĐÚNG id ấy, mà id đã
+  cấp thì không ai xin lại.
+
+  (1) Thêm dọn `.locks/` vào TẦNG 1 (`prune.ts:34-36`): xoá lock quá TTL, và lock
+  của session không còn trong `state.json`. Lock `"cli"` quá TTL rơi vào cả hai.
+  Cập nhật docstring tầng 1 — hiện nó liệt kê `runs/` và session mồ côi mà bỏ sót
+  `.locks/`.
+
+  RANH GIỚI: đặt logic trong `src/prune.ts`. KHÔNG sửa `src/util/lock.ts`
+  (M-lock) hay `src/graph/claim.ts` (M-claim) — chúng thuộc P-graph-core và
+  P-hook, sửa vào là `scope/task-touches-outside-scope`. `prune.ts` đã import sẵn
+  `readState` và `listDir`/`mtimeMs`, đủ dùng.
+
+  (2) Thêm `proposals/` vào TẦNG 2: archive proposal `approved`/`rejected` đủ tuổi
+  sang `proposals/closed/`, đúng khuôn `collectClosedIceboxFiles` (dòng 198). Sửa
+  luôn docstring dòng 46 — lý do nó nêu ("chưa có model nào được nạp vào graph")
+  sai từ v1.0.0, khi `zProposal` đã có schema, loader và sáu luật validate. Hiện
+  14/14 proposal đã ở trạng thái cuối (12 approved, 2 rejected, 0 pending) nhưng
+  vẫn được `loadGraph` parse ở MỌI lần chạy hook, trong khi đường ra duy nhất của
+  chúng trong brief đòi `pending` (`render/brief.ts:240`).
+
+  (3) `ganas prune --dry-run` in rõ số file SẼ archive và ngày đủ tuổi. Hiện 41
+  task đã `done` vẫn nằm trong graph vì ngưỡng `DEFAULT_OLDER_THAN_DAYS = 7`
+  (`src/commands/prune.ts:6`) và người dùng không có cách nào biết vì sao.
+
+  Đo lại khi xong: `find .ganas -type f | wc -l` phải giảm khoảng 100.
