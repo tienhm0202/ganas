@@ -1,24 +1,31 @@
 id: T-061
-title: "`ganas next` ghi `in_progress` vào YAML và từ chối nhảy việc khi task cũ chưa xong"
+title: "`ganas next` ghi `in_progress` vào YAML và từ chối nhảy việc khi task cũ
+  chưa xong"
 serves:
   - G-001
 implements: D-008
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: main
 
 context_contract:
   must_read:
     - path: "src/commands/commit.ts"
-      why: "`closeTaskFile()` (dòng 70-81) là khuôn ghi status vào YAML đã giữ comment và đã xử lý `sourced.index` — tách hàm chung từ đây, đừng chép lần hai"
+      why: "`closeTaskFile()` (dòng 70-81) là khuôn ghi status vào YAML đã giữ comment
+        và đã xử lý `sourced.index` — tách hàm chung từ đây, đừng chép lần hai"
     - path: "src/graph/select.ts"
-      why: "`rankedCandidates` đã cho `in_progress` ưu tiên -1000 (dòng 52); task này chỉ làm cho giá trị đó tồn tại, KHÔNG sửa hàm xếp hạng"
+      why: "`rankedCandidates` đã cho `in_progress` ưu tiên -1000 (dòng 52); task này
+        chỉ làm cho giá trị đó tồn tại, KHÔNG sửa hàm xếp hạng"
     - path: "src/state.ts"
-      why: "`bindSession` (dòng 143) thay cả SessionRecord và đè binding cũ không hỏi — đây chính là chỗ nhảy việc lọt qua"
+      why: "`bindSession` (dòng 143) thay cả SessionRecord và đè binding cũ không hỏi
+        — đây chính là chỗ nhảy việc lọt qua"
   facts: []
   open_questions:
-    - "Ghi lại `todo` lúc SessionEnd hay giữ `in_progress` cho phiên sau nối tiếp? Giữ thì một phiên chết giữa chừng để lại `in_progress` vĩnh viễn; ghi lại thì mất tín hiệu việc dở. Nghiêng về ghi lại `todo` vì `state.json` đã giữ binding riêng."
+    - "Ghi lại `todo` lúc SessionEnd hay giữ `in_progress` cho phiên sau nối
+      tiếp? Giữ thì một phiên chết giữa chừng để lại `in_progress` vĩnh viễn;
+      ghi lại thì mất tín hiệu việc dở. Nghiêng về ghi lại `todo` vì
+      `state.json` đã giữ binding riêng."
 
 touches:
   - M-commands
@@ -27,6 +34,9 @@ exit_contract:
   - kind: command
     run: "npx tsx --test 'test/next-status.test.ts'"
     expect: exit_zero
+  - kind: artifact
+    path: "docs/COMMANDS.md"
+    must_contain: "--switch"
   - kind: verification
     target: "M-commands/V-commands-smoke"
 
@@ -49,9 +59,17 @@ notes: >-
   hàng rào thật, thay vì một điểm cộng trong hàm xếp hạng mà không ai kích hoạt.
 
   CHỈ sửa `src/commands/**` (khối M-commands). `select.ts` thuộc M-graph-read,
-  scope P-graph-core — đụng vào là vi phạm `scope/task-touches-outside-scope`, và
-  nó cũng không cần sửa. Việc gỡ hay nối dây `blocked` thuộc T-062 vì nó nằm ở
-  `src/model/task.ts`.
+  scope P-graph-core — đụng vào là vi phạm `scope/task-touches-outside-scope`,
+  và nó cũng không cần sửa. Việc gỡ hay nối dây `blocked` thuộc T-062 vì nó nằm
+  ở `src/model/task.ts`.
 
   Tiêu chí `test/next-status.test.ts` ĐỎ ngay lúc viết task này (file chưa tồn
   tại, `npx tsx --test` trả exit 1 — đã chạy thử). Viết test trước, đỏ trước.
+
+  BỔ SUNG exit_contract sau khi làm (2026-08-29): thêm cờ `--switch` cho lệnh
+  `next` buộc phải cập nhật `docs/COMMANDS.md` — `test/cli-help.test.ts` đối
+  chiếu bảng lệnh trong docs với `cli.ts` nên bỏ sót là test đỏ. Nhưng docs
+  không thuộc `paths` của khối nào, nên `taskBoundary()` xem nó là ngoài ranh
+  giới và `ganas commit` sẽ để nó lại working tree. Tiêu chí `artifact` này kéo
+  file vào ranh giới VÀ bắt nó thật sự chứa cờ mới. Cùng họ với ICE-017.
+done_at: 2026-08-29T15:47:25.112Z

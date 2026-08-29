@@ -1,8 +1,6 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { parseDocument } from "yaml";
 
 import {
   contractPathRefs,
@@ -31,6 +29,7 @@ import { runShell } from "../util/exec.js";
 import { exists } from "../util/fsprobe.js";
 import { verifyChain } from "../verify/ledger.js";
 import { openProject } from "./_common.js";
+import { setTaskStatus } from "./_task-status.js";
 import { commitDebtSummary } from "./debt.js";
 
 /** Bọc pathspec cho `git add`: đủ để chống một dấu nháy đơn trong path lạ. */
@@ -58,26 +57,16 @@ function foreignPaths(task: Task, entries: readonly PorcelainEntry[]): string[] 
 }
 
 /**
- * Ghi `status: done` + `done_at` vào file task, giữ nguyên comment.
+ * Ghi `status: done` + `done_at` vào file task.
  *
- * Dùng `Document` của `yaml` như `writeBackFact` (src/verify/run.ts): serialize
- * lại từ object JS sẽ xoá sạch chú thích, mà chú thích trong file spine thường
- * là phần giải thích quan trọng nhất.
+ * Phép ghi thật nằm ở `setTaskStatus` — `ganas next` cũng ghi `in_progress` vào
+ * đúng file đó, và hai bản sao của cùng một phép ghi là chỗ chúng lệch nhau.
  *
  * Trả về nội dung CŨ để khôi phục nếu `git commit` fail — đánh dấu done cho một
  * commit không bao giờ tồn tại là nói dối lịch sử.
  */
 async function closeTaskFile(root: string, sourced: Sourced<Task>): Promise<string> {
-  const file = join(root, sourced.file);
-  const original = await readFile(file, "utf8");
-  const doc = parseDocument(original);
-  const base = sourced.index === undefined ? [] : [sourced.index];
-
-  doc.setIn([...base, "status"], "done");
-  doc.setIn([...base, "done_at"], new Date().toISOString());
-
-  await writeFile(file, doc.toString(), "utf8");
-  return original;
+  return setTaskStatus(root, sourced, "done", { done_at: new Date().toISOString() });
 }
 
 function reportBaseline(gate: GateResult, baseline: Record<string, boolean> | undefined): string {

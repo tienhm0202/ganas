@@ -321,21 +321,35 @@ phạm vi đang `active`; task không còn `blocked_by` mở nào mới được
 lại lựa chọn vào `state.json` (hoặc gắn với `--session` nếu có) để `ganas
 brief`/`gate`/hook sau đó biết đang làm task nào.
 
+Ngoài `state.json`, lệnh còn ghi `status: in_progress` vào **chính file YAML
+của task** (chỉ khi task đang là `todo`; `blocked` giữ nguyên). `state.json`
+là file cục bộ không commit, nên nếu trạng thái chỉ nằm ở đó thì máy thứ hai
+và clone mới không thấy việc nào đang dở. `ganas commit` đóng lại bằng
+`status: done` trên đúng file đó.
+
+Đóng luồng trước khi mở luồng: nếu phiên đang gắn với một task **chưa
+`done`**, lệnh **từ chối** chọn task mới — nó in task đang dở kèm kết quả
+`exit_contract` của task đó và thoát `1`. `--switch` là đường thoát có chủ ý.
+
 Không có đối số định vị.
 
 | Tuỳ chọn | Ý nghĩa |
 |---|---|
 | `--session <id>` | Gắn lựa chọn task với phiên này thay vì `state.json` chung của dự án. |
+| `--switch` | Bỏ dở task đang gắn với phiên và chọn task khác. Task cũ **giữ nguyên** `status: in_progress` — nó chưa xong thật, và ưu tiên "việc dở đứng trước" sẽ đưa nó quay lại đầu hàng ở lần `ganas next` sau. |
 | `--no-volatile` | Bỏ phần "trạng thái lúc mở phiên" (nhánh git, file đang sửa dở, timestamp) ở cuối brief — dùng khi cần brief thuần xác định để so sánh/kiểm thử, hoặc để tối ưu prompt cache (phần biến động luôn ở cuối). |
-| `--json` | Xuất `{ task, brief }` khi chọn được task; nếu không còn task nào (hết việc, hoặc mọi task còn lại đều bị chặn) xuất `{ task: null, blocked: [...] }`. |
+| `--no-baseline` | Không chấm `exit_contract` làm mốc lúc nhận task. |
+| `--json` | Xuất `{ task, brief, marked_in_progress }` khi chọn được task; nếu không còn task nào (hết việc, hoặc mọi task còn lại đều bị chặn) xuất `{ task: null, blocked: [...] }`; khi từ chối nhảy việc xuất `{ task: null, current_task, needs_switch: true, gate }`. |
 
-**Mã thoát:** luôn `0` — kể cả khi không còn task nào để chọn (đó là trạng
-thái hợp lệ, không phải lỗi).
+**Mã thoát:** `0` khi chọn được task, và cả khi không còn task nào để chọn (đó
+là trạng thái hợp lệ, không phải lỗi); `1` khi từ chối nhảy việc vì phiên còn
+một task chưa `done`.
 
 **Ví dụ:**
 ```
 ganas next --no-volatile
 ganas next --session sess-42 --json
+ganas next --session sess-42 --switch
 ```
 
 ### `ganas brief [task]`

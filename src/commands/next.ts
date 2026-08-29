@@ -1,22 +1,98 @@
-import { criterionKey, evaluateGate, isAutoCriterion } from "../gate.js";
+import { criterionKey, evaluateGate, formatGate, isAutoCriterion } from "../gate.js";
 import { claimNextTask } from "../graph/claim.js";
 import type { VerificationState } from "../graph/freshness.js";
 import { blockedTasks, rankedCandidates } from "../graph/select.js";
-import type { Graph } from "../graph/types.js";
+import type { Graph, Sourced } from "../graph/types.js";
 import type { Task } from "../model/index.js";
 import { renderBrief } from "../render/brief.js";
 import { renderGroupedByScope } from "../render/group.js";
-import { bindSession, setBaseline, updateState } from "../state.js";
+import { bindSession, setBaseline, taskForSession, updateState } from "../state.js";
 import { type Argv, enabled, flag, option } from "../util/args.js";
 import { openProject, volatileStatus } from "./_common.js";
+import { setTaskStatus } from "./_task-status.js";
+
+/**
+ * Graph y hệt nhưng KHÔNG có một task — dùng cho `--switch`, để lượt chọn kế
+ * tiếp không trả lại đúng cái task vừa bỏ dở.
+ *
+ * Bỏ hẳn khỏi `tasks` chứ không lọc ở tầng trên vì `rankedCandidates` cho
+ * `in_progress` ưu tiên -1000: task đang dở LUÔN đứng đầu, nên `--switch` mà
+ * không loại nó ra thì không chuyển đi đâu cả. Xoá một task CHƯA done khỏi map
+ * không đổi kết quả của `openBlockers` — nó vốn đã coi blocker chưa done là
+ * đang mở.
+ */
+function withoutTask(graph: Graph, taskId: string): Graph {
+  const tasks = new Map(graph.tasks);
+  tasks.delete(taskId);
+  return { ...graph, tasks };
+}
+
+/**
+ * Từ chối mở luồng thứ hai khi luồng cũ còn dở — kèm gate của chính nó, vì câu
+ * hỏi tiếp theo của người đọc luôn là "còn thiếu gì".
+ */
+async function refuseSwitch(
+  graph: Graph,
+  open: Sourced<Task>,
+  freshness: Map<string, VerificationState>,
+  sessionId: string | undefined,
+  argv: Argv,
+): Promise<number> {
+  const task = open.value;
+  const gate = await evaluateGate(graph, task, freshness, sessionId);
+
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          task: null,
+          current_task: task.id,
+          needs_switch: true,
+          gate: {
+            ok: gate.ok,
+            results: gate.results.map((r) => ({ label: r.label, status: r.status })),
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    return 1;
+  }
+
+  process.stdout.write(
+    `Chưa mở task mới được — phiên này đang làm ${task.id} (\`${task.status}\`), chưa done:\n\n` +
+      `  ${task.id} — ${task.title}\n\n` +
+      `${formatGate(gate)}\n\n` +
+      (gate.ok
+        ? `  Gate đã xanh: \`ganas commit ${task.id}\` để đóng lại, rồi \`ganas next\`.\n`
+        : `  Đóng luồng trước khi mở luồng: làm nốt ${task.id}, rồi \`ganas commit\`.\n`) +
+      `  Thật sự cần bỏ dở để làm việc khác: \`ganas next --switch\` — ${task.id} vẫn giữ\n` +
+      `  \`status: in_progress\` và sẽ được chọn lại trước tiên.\n`,
+  );
+  return 1;
+}
 
 export async function run(argv: Argv): Promise<number> {
   const { root, graph, freshness } = await openProject(argv);
 
-  const ranked = rankedCandidates(graph);
+  const sessionId = option(argv, "session");
+  const switching = flag(argv, "switch");
+
+  // "Đóng luồng trước khi mở luồng" là hàng rào, không phải điểm cộng trong hàm
+  // xếp hạng: `rankedCandidates` chỉ ƯU TIÊN việc dở, nó không ngăn được ai mở
+  // mặt trận thứ hai.
+  const boundId = await taskForSession(root, sessionId);
+  const boundTask = boundId ? graph.tasks.get(boundId) : undefined;
+  const stillOpen = boundTask && boundTask.value.status !== "done" ? boundTask : undefined;
+
+  if (stillOpen && !switching) return refuseSwitch(graph, stillOpen, freshness, sessionId, argv);
+
+  const pool = stillOpen ? withoutTask(graph, stillOpen.value.id) : graph;
+  const ranked = rankedCandidates(pool);
 
   if (ranked.length === 0) {
-    const blocked = blockedTasks(graph);
+    const blocked = blockedTasks(pool);
     if (flag(argv, "json")) {
       process.stdout.write(
         JSON.stringify(
@@ -32,6 +108,14 @@ export async function run(argv: Argv): Promise<number> {
     }
 
     if (blocked.length === 0) {
+      if (stillOpen) {
+        process.stdout.write(
+          `Không còn task nào KHÁC ngoài ${stillOpen.value.id} đang dở — không có chỗ nào ` +
+            `để chuyển sang.\n`,
+        );
+        return 0;
+      }
+
       // Phân biệt "đã xong hết" với "chưa có gì": dự án vừa init có 0 task, mà
       // báo "không còn task nào chưa xong" là nói ngược sự thật — và đó lại là
       // câu đầu tiên người mới nhìn thấy.
@@ -60,11 +144,10 @@ export async function run(argv: Argv): Promise<number> {
     return 0;
   }
 
-  const sessionId = option(argv, "session");
   // Không có --session (gọi tay từ CLI) vẫn cần một danh tính để tham gia
   // đúng giao thức claim — nếu không, nó có thể giành lại task một phiên
   // Claude Code khác đang thật sự giữ.
-  const picked = await claimNextTask(graph, root, sessionId ?? "cli");
+  const picked = await claimNextTask(pool, root, sessionId ?? "cli");
 
   if (!picked) {
     if (flag(argv, "json")) {
@@ -92,13 +175,30 @@ export async function run(argv: Argv): Promise<number> {
   if (sessionId) await bindSession(root, sessionId, taskId);
   else await updateState(root, (s) => void (s.current_task = taskId));
 
+  // Trạng thái "đang làm" phải nằm trong chính file task, không chỉ trong
+  // `state.json`: state.json là LOCAL_ONLY (graph/paths.ts), không vào git —
+  // máy thứ hai và clone mới không thấy gì ở đó.
+  //
+  // Chỉ đổi từ `todo`: `blocked` là điều người đã khai, đè lên là xoá thông tin.
+  // Và KHÔNG đụng `picked.task.value` — brief in "Đây là việc đang dở" theo
+  // status trong bộ nhớ, nói câu đó cho một task vừa mới nhận là sai.
+  const marked = picked.task.value.status === "todo";
+  if (marked) await setTaskStatus(root, picked.task, "in_progress");
+
+  const markedNote = marked
+    ? `\n${taskId} đã đánh dấu \`status: in_progress\` trong ${picked.task.file} — ` +
+      `\`ganas commit\` sẽ đem theo file đó.\n`
+    : "";
+
   const baselineGreen = sessionId
     ? await recordBaseline(root, graph, picked.task.value, freshness, argv)
     : [];
 
   if (flag(argv, "json")) {
     const brief = renderBrief({ graph, task: picked.task, freshness });
-    process.stdout.write(JSON.stringify({ task: taskId, brief }, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify({ task: taskId, brief, marked_in_progress: marked }, null, 2) + "\n",
+    );
     return 0;
   }
 
@@ -115,6 +215,8 @@ export async function run(argv: Argv): Promise<number> {
         `  đúng thứ task này phải tạo ra, trước khi bắt đầu.\n`,
     );
   }
+
+  process.stdout.write(markedNote);
   return 0;
 }
 
