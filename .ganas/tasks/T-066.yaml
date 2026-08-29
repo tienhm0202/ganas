@@ -1,21 +1,27 @@
 id: T-066
-title: "Nối dây `task_link` — luật cưỡng chế khai trong config nhưng không code nào gọi"
+title: "Nối dây `task_link` — luật cưỡng chế khai trong config nhưng không code
+  nào gọi"
 serves:
   - G-001
 implements: D-009
 scope: P-hook
-status: todo
+status: done
 estimated_context: small
 model: scribe
 
 context_contract:
   must_read:
     - path: "src/hooks/policy/index.ts"
-      why: "`ruleForDiagnostics` (dòng 281-283) chỉ trả `knowledge_anchor` hoặc `schema` — hai trong năm luật; đây là chỗ `task_link` phải được nối vào"
+      why: "`ruleForDiagnostics` (dòng 281-283) chỉ trả `knowledge_anchor` hoặc
+        `schema` — hai trong năm luật; đây là chỗ `task_link` phải được nối vào"
     - path: "src/model/config.ts"
-      why: "`ENFORCEMENT_RULES` dòng 17-28 — ĐỌC để biết `task_link` được định nghĩa là gì ('tạo/đóng task không neo được vào phạm vi/goal'); KHÔNG sửa, file này thuộc M-model / P-graph-core"
+      why: "`ENFORCEMENT_RULES` dòng 17-28 — ĐỌC để biết `task_link` được định nghĩa
+        là gì ('tạo/đóng task không neo được vào phạm vi/goal'); KHÔNG sửa, file
+        này thuộc M-model / P-graph-core"
     - path: "src/graph/validate.ts"
-      why: "Nguồn mã lỗi sẽ ánh xạ sang `task_link`: `spine/task-missing-goal`, `spine/task-missing-design`, `spine/task-goal-not-in-design`, `scope/task-scope-not-found`, `scope/task-touches-outside-scope`"
+      why: "Nguồn mã lỗi sẽ ánh xạ sang `task_link`: `spine/task-missing-goal`,
+        `spine/task-missing-design`, `spine/task-goal-not-in-design`,
+        `scope/task-scope-not-found`, `scope/task-touches-outside-scope`"
   facts: []
   open_questions: []
 
@@ -44,9 +50,9 @@ notes: >-
   hai nhánh; thêm nhánh thứ ba: diagnostic mang mã liên kết task
   (`spine/task-missing-goal`, `spine/task-missing-design`,
   `spine/task-goal-not-in-design`, `scope/task-scope-not-found`,
-  `scope/task-touches-outside-scope`) thì cả lượt tính theo `task_link`. Giữ đúng
-  nguyên tắc đã ghi trong docstring hàm đó: luật NẶNG hơn thắng — `knowledge_anchor`
-  vẫn đứng trước.
+  `scope/task-touches-outside-scope`) thì cả lượt tính theo `task_link`. Giữ
+  đúng nguyên tắc đã ghi trong docstring hàm đó: luật NẶNG hơn thắng —
+  `knowledge_anchor` vẫn đứng trước.
 
   Vì sao không gỡ: gỡ phải sửa `src/model/config.ts` (M-model, P-graph-core),
   `src/templates/project.ts` (M-templates, P-cli) và hai file docs — ba scope
@@ -57,3 +63,4 @@ notes: >-
   Test mới phải khẳng định `ruleForDiagnostics` trả `"task_link"` cho một
   diagnostic mã `spine/task-missing-design`, và vẫn trả `"knowledge_anchor"` khi
   lượt đó có lẫn một lỗi anchor. Đỏ với code hiện tại.
+done_at: 2026-08-29T16:04:19.174Z

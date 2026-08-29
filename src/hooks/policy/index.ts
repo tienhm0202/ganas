@@ -35,6 +35,25 @@ export function isAnchorIssue(d: Diagnostic): boolean {
   return /^(?:\d+\.)?anchors(?:\.\d+)?:/.test(d.message);
 }
 
+/**
+ * Mã lỗi nói rằng task không neo được vào phạm vi/goal — đúng định nghĩa
+ * `task_link` trong `ENFORCEMENT_RULES`. Khớp CHÍNH XÁC, không phải tiền tố:
+ * `spine/task-too-large` cũng bắt đầu bằng `spine/task-` nhưng nó nói về kích
+ * thước, không phải liên kết, và hạ nó xuống luật này là nới sai chỗ.
+ */
+const TASK_LINK_CODES = new Set([
+  "spine/task-missing-goal",
+  "spine/task-missing-design",
+  "spine/task-goal-not-in-design",
+  "scope/task-scope-not-found",
+  "scope/task-touches-outside-scope",
+]);
+
+/** Diagnostic liên quan tới liên kết task — luật `task_link`. */
+export function isTaskLinkIssue(d: Diagnostic): boolean {
+  return TASK_LINK_CODES.has(d.code);
+}
+
 export function formatDiagnostics(diags: readonly Diagnostic[]): string {
   return diags
     .map((d) => {
@@ -272,14 +291,46 @@ export function shellLooksLikeWrite(command: string): boolean {
  * ------------------------------------------------------------------------- */
 
 /**
- * Lỗi của file vừa ghi thuộc luật nào: thiếu bằng chứng, hay sai schema.
+ * Lỗi của file vừa ghi thuộc luật nào: thiếu bằng chứng, liên kết task, hay sai schema.
  *
- * Chỉ cần MỘT lỗi dạng anchor là cả lượt tính theo `knowledge_anchor` — luật
- * nặng hơn thắng, vì hạ xuống `schema` sẽ cho một dự án đang bật
- * `knowledge_anchor: enforce` ghi lọt phát biểu không bằng chứng.
+ * Luật NẶNG hơn thắng — thứ tự ưu tiên:
+ * 1. `knowledge_anchor` — chỉ cần MỘT lỗi dạng anchor là cả lượt tính theo này,
+ *    vì hạ xuống luật khác sẽ cho ghi lọt phát biểu không bằng chứng.
+ * 2. `task_link` — diagnostic mã liên kết task (spine/task-*, scope/task-*).
+ * 3. `schema` — phần còn lại.
  */
 export function ruleForDiagnostics(diags: readonly Diagnostic[]): EnforcementRule {
-  return diags.some(isAnchorIssue) ? "knowledge_anchor" : "schema";
+  if (diags.some(isAnchorIssue)) return "knowledge_anchor";
+  if (diags.some(isTaskLinkIssue)) return "task_link";
+  return "schema";
+}
+
+/**
+ * Lời khuyên đi kèm, theo ĐÚNG luật đã phân loại.
+ *
+ * Mỗi luật hỏng theo một kiểu nên phải chỉ một đường sửa khác nhau: bảo người
+ * đang khai `implements: D-999` không tồn tại đi "sửa cho đúng schema" là chỉ
+ * sai đường — schema của họ vốn đúng, thứ sai là liên kết. Chuỗi này được hook
+ * trả lại cho Claude qua `reason`, nên nó quyết định model có tự sửa được không.
+ */
+function ruleAdvice(rule: EnforcementRule): string {
+  switch (rule) {
+    case "knowledge_anchor":
+      return (
+        "Kho tri thức chỉ nhận phát biểu có bằng chứng. Thêm anchor (`file:line`, " +
+        "`commit:sha`, hoặc URL kèm `fetched_at`), hoặc bỏ hẳn phát biểu đó ra " +
+        "và ghi vào `open_questions` của task."
+      );
+    case "task_link":
+      return (
+        "Task phải neo được vào phạm vi và goal: `serves` trỏ goal có thật, " +
+        "`implements` trỏ design có thật, `scope` tồn tại, và mọi khối trong " +
+        "`touches` phải nằm trong `scope.modules`. Cấp id bằng `ganas id`, và " +
+        "`ganas scope` để xem phạm vi nào đang có."
+      );
+    default:
+      return "Sửa lại cho đúng schema rồi ghi lại. Xem `.claude/rules/ganas-knowledge.md`.";
+  }
 }
 
 /** Chữ trả lại cho Claude khi file vừa ghi vào `.ganas/` không hợp lệ. */
@@ -291,11 +342,7 @@ export function knowledgeWriteBody(
 ): string {
   return (
     `Ghi vào \`${rel}\` chưa hợp lệ:\n\n${formatDiagnostics(diags)}\n\n` +
-    (rule === "knowledge_anchor"
-      ? `Kho tri thức chỉ nhận phát biểu có bằng chứng. Thêm anchor (\`file:line\`, ` +
-        `\`commit:sha\`, hoặc URL kèm \`fetched_at\`), hoặc bỏ hẳn phát biểu đó ra ` +
-        `và ghi vào \`open_questions\` của task.`
-      : `Sửa lại cho đúng schema rồi ghi lại. Xem \`.claude/rules/ganas-knowledge.md\`.`) +
+    ruleAdvice(rule) +
     nudgeTail
   );
 }
