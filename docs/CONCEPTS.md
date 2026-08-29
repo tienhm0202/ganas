@@ -190,8 +190,10 @@ Các field khác của Task:
   và đó là lúc tri thức bị mất hoặc bị bóp méo.
 - `blocked_by`: mảng Task ID chặn task này; validator phát hiện chu trình
   (`spine/task-cycle`).
-- `status`: `todo`/`in_progress`/`blocked`/`done` (`done` bắt buộc kèm
-  `done_at`).
+- `status`: `todo`/`in_progress`/`done` (`done` bắt buộc kèm `done_at`).
+  **Không** có `blocked`: `blocked_by` cộng `openBlockers()` đã trả lời đúng
+  câu đó bằng dữ liệu suy được, còn một status khai tay là câu trả lời thứ hai
+  cho cùng một câu hỏi — và hai câu trả lời thì có ngày lệch nhau.
 
 ## 3. Cưỡng chế (enforcement) — tóm tắt cấu hình
 

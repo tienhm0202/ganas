@@ -322,7 +322,7 @@ lại lựa chọn vào `state.json` (hoặc gắn với `--session` nếu có) 
 brief`/`gate`/hook sau đó biết đang làm task nào.
 
 Ngoài `state.json`, lệnh còn ghi `status: in_progress` vào **chính file YAML
-của task** (chỉ khi task đang là `todo`; `blocked` giữ nguyên). `state.json`
+của task** (chỉ khi task đang là `todo`). `state.json`
 là file cục bộ không commit, nên nếu trạng thái chỉ nằm ở đó thì máy thứ hai
 và clone mới không thấy việc nào đang dở. `ganas commit` đóng lại bằng
 `status: done` trên đúng file đó.
@@ -385,14 +385,21 @@ tiêu chí có thể chấm tự động (lệnh, kiểm chứng đã ghi sổ) 
 `✓` đạt, `✗` chưa đạt, và mục nào `…` cần người xác nhận (không chặn việc
 làm tiếp, nhưng chặn đánh dấu task `done`).
 
+Với `--design <id>` thì chấm hợp đồng ra của một **chặng** (`Design.exit_contract`)
+thay vì của một task. Cùng một lõi chấm, chỉ khác chỗ lấy mảng tiêu chí —
+task trả lời "bước này xong chưa", design trả lời "chặng này đóng được chưa".
+Chặng chưa khai `exit_contract` **không** được tính là đạt: lệnh báo thiếu và
+thoát `1`, vì một gate tự xanh vì rỗng là gate không tồn tại.
+
 **Đối số định vị:** `[task]` — cùng quy tắc suy ra như `brief`: đối số định
 vị → `--task` → task gắn với `--session` → lỗi nếu vẫn không có.
 
 | Tuỳ chọn | Ý nghĩa |
 |---|---|
 | `--task <id>` | Chỉ định task tường minh. |
+| `--design <id>` | Chấm `exit_contract` của chặng đó thay vì của task; kèm cảnh báo nếu chặng còn task chưa xong. |
 | `--session <id>` | Tra task đang gắn với phiên, và gắn phiên vào kết quả chấm. |
-| `--json` | Xuất `{ task, ok, unmet: [{label, reason}], pending_human: [label] }`. |
+| `--json` | Xuất `{ subject, ok, unmet: [{label, reason}], pending_human: [label] }`; thêm `open_tasks` khi chấm chặng. |
 
 **Mã thoát:** `0` nếu mọi tiêu chí chấm tự động đều đạt (dù còn tiêu chí chờ
 người xác nhận); `1` nếu còn tiêu chí chưa đạt.
@@ -401,6 +408,7 @@ người xác nhận); `1` nếu còn tiêu chí chưa đạt.
 ```
 ganas gate
 ganas gate T-014 --json
+ganas gate --design D-008
 ```
 
 ### `ganas verify [target...]`

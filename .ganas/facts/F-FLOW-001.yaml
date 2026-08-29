@@ -1,0 +1,34 @@
+- id: F-FLOW-001
+  statement: >-
+    Chặng `fix-graph` của dòng chảy (src/flow.ts) đòi graph KHÔNG còn diagnostic
+    nào ở mức `error`, và nó đứng TRƯỚC hai chặng `design` và `task`. Hệ quả là
+    một hợp đồng ngầm với mọi luật validate mới ở mức error: luật đó phải sửa
+    được bằng thứ có sẵn tại hoặc trước `fix-graph`. Luật error nào chỉ hết bằng
+    cách TẠO THÊM design/task sẽ làm dòng chảy quay đầu vô hạn ở một dự án mới,
+    và `test/flow.test.ts` (đi trọn dòng chảy từ repo trống) là chỗ DUY NHẤT bắt
+    được ca đó — `ganas validate` trên repo này thì không, vì repo này đã có sẵn
+    design và task.
+  scope: P-cli
+  verify:
+    run: "grep -q 'đi trọn dòng chảy từ repo trống' test/flow.test.ts && grep -q
+      'id: \"fix-graph\"' src/flow.ts && npx tsx --test 'test/flow.test.ts'"
+    expect: exit_zero
+  depends_on:
+    - "src/flow.ts"
+    - "src/graph/validate.ts"
+    - "test/flow.test.ts"
+  ttl_days: 0
+  anchors:
+    - "src/flow.ts#L82"
+    - "src/flow.ts#L84"
+    - "src/flow.ts#L157"
+  notes: >-
+    Ghi ở T-063 sau khi T-062 trả giá đúng bằng ca này: bản đầu của luật
+    `spine/design-stalled` làm `test/flow.test.ts` đỏ với chính thông điệp nó
+    sinh ra ('chặng "fix-graph" lặp lại trước khi commit') — một design vừa tạo,
+    chưa task nào, làm luật bắn ở `fix-graph` trong khi phương thuốc nằm ở chặng
+    `task` phía sau. Đã chữa ở tầng LUẬT (chỉ stalled khi design đã có ít nhất
+    một task), không ở flow.ts.
+  last_verified_at: 2026-08-29T16:24:19.837Z
+  last_result: pass
+  verified_by: cli

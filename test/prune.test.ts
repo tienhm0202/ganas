@@ -125,10 +125,28 @@ ${opts.blockedBy ? `blocked_by:\n${opts.blockedBy.map((b) => `  - ${b}`).join("\
 `;
 }
 
+/**
+ * Design đã đóng chặng — `design()` ở helpers.ts hardcode `status: active`
+ * (khuôn dùng chung cho mọi test khác), nên viết tay ở đây khi một test cần
+ * chứng minh archive diễn ra bình thường (planPrune chỉ archive task khi
+ * design nó `implements` đã `status: done` — xem docstring `planPrune`, guard
+ * thêm ở T-064 né đúng ca D-003/T-005).
+ */
+function doneDesign(id = "D-001", doneAt = daysAgo(1)): string {
+  return `id: ${id}
+title: "Design đã đóng"
+serves:
+  - G-001
+summary: "Cách tiếp cận"
+status: done
+done_at: ${doneAt}
+`;
+}
+
 test("task done đủ tuổi, không ai blocked_by tới → vào kế hoạch archive", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/designs/D-001.yaml": doneDesign(),
     ".ganas/scopes/P-thu.yaml": scope(),
     ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
@@ -253,7 +271,7 @@ test("task done đủ tuổi mà là promoted_to của một mục icebox → KH
 test("cùng task đó, khi không còn mục icebox nào trỏ tới → archive bình thường", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/designs/D-001.yaml": doneDesign(),
     ".ganas/scopes/P-thu.yaml": scope(),
     ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
@@ -392,7 +410,7 @@ test("applyPrune: file icebox đóng hết đủ tuổi được dời sang iceb
 test("applyPrune: xoá run cũ, gỡ session mồ côi, archive task — graph sau đó sạch", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/designs/D-001.yaml": doneDesign(),
     ".ganas/scopes/P-thu.yaml": scope(),
     ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneDays: 10 }),
@@ -440,7 +458,7 @@ function realDaysAgo(n: number): string {
 test("ganas prune: mặc định dry-run, KHÔNG đụng đĩa", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/designs/D-001.yaml": doneDesign("D-001", realDaysAgo(10)),
     ".ganas/scopes/P-thu.yaml": scope(),
     ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneAt: realDaysAgo(10) }),
@@ -466,7 +484,7 @@ test("ganas prune: mặc định dry-run, KHÔNG đụng đĩa", async () => {
 test("ganas prune --yes: thực thi thật", async () => {
   const root = await makeProject({
     ".ganas/goals/G-001.yaml": goal(),
-    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/designs/D-001.yaml": doneDesign("D-001", realDaysAgo(10)),
     ".ganas/scopes/P-thu.yaml": scope(),
     ".ganas/modules/M-a.yaml": moduleYaml(),
     ".ganas/tasks/T-001.yaml": doneTask("T-001", { doneAt: realDaysAgo(10) }),
