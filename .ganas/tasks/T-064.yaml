@@ -4,18 +4,22 @@ serves:
   - G-001
 implements: D-009
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: verifier
 
 context_contract:
   must_read:
     - path: "src/prune.ts"
-      why: "Docstring dòng 32-49 khai ba tầng dọn — tầng 1 nói 'ephemeral, local' nhưng bỏ sót `.locks/`, và dòng 46 nêu lý do proposal chưa archive được đã lỗi thời từ v1.0.0"
+      why: "Docstring dòng 32-49 khai ba tầng dọn — tầng 1 nói 'ephemeral, local'
+        nhưng bỏ sót `.locks/`, và dòng 46 nêu lý do proposal chưa archive được
+        đã lỗi thời từ v1.0.0"
     - path: "src/graph/claim.ts"
-      why: "`releaseClaimsForSession` (dòng 187) chỉ xoá lock khớp session — ĐỌC để hiểu nguyên nhân rò, KHÔNG sửa: file này thuộc M-claim / P-hook"
+      why: "`releaseClaimsForSession` (dòng 187) chỉ xoá lock khớp session — ĐỌC để
+        hiểu nguyên nhân rò, KHÔNG sửa: file này thuộc M-claim / P-hook"
     - path: "src/model/proposal.ts"
-      why: "`status` và `decided_at` của proposal — căn cứ tuổi để archive, giống `closed_at` mà icebox dùng"
+      why: "`status` và `decided_at` của proposal — căn cứ tuổi để archive, giống
+        `closed_at` mà icebox dùng"
   facts: []
   open_questions: []
 
@@ -44,23 +48,23 @@ notes: >-
   hết TTL vẫn nằm đó vì file chỉ bị chiếm lại khi ai đó xin ĐÚNG id ấy, mà id đã
   cấp thì không ai xin lại.
 
-  (1) Thêm dọn `.locks/` vào TẦNG 1 (`prune.ts:34-36`): xoá lock quá TTL, và lock
-  của session không còn trong `state.json`. Lock `"cli"` quá TTL rơi vào cả hai.
-  Cập nhật docstring tầng 1 — hiện nó liệt kê `runs/` và session mồ côi mà bỏ sót
-  `.locks/`.
+  (1) Thêm dọn `.locks/` vào TẦNG 1 (`prune.ts:34-36`): xoá lock quá TTL, và
+  lock của session không còn trong `state.json`. Lock `"cli"` quá TTL rơi vào cả
+  hai. Cập nhật docstring tầng 1 — hiện nó liệt kê `runs/` và session mồ côi mà
+  bỏ sót `.locks/`.
 
   RANH GIỚI: đặt logic trong `src/prune.ts`. KHÔNG sửa `src/util/lock.ts`
   (M-lock) hay `src/graph/claim.ts` (M-claim) — chúng thuộc P-graph-core và
-  P-hook, sửa vào là `scope/task-touches-outside-scope`. `prune.ts` đã import sẵn
-  `readState` và `listDir`/`mtimeMs`, đủ dùng.
+  P-hook, sửa vào là `scope/task-touches-outside-scope`. `prune.ts` đã import
+  sẵn `readState` và `listDir`/`mtimeMs`, đủ dùng.
 
-  (2) Thêm `proposals/` vào TẦNG 2: archive proposal `approved`/`rejected` đủ tuổi
-  sang `proposals/closed/`, đúng khuôn `collectClosedIceboxFiles` (dòng 198). Sửa
-  luôn docstring dòng 46 — lý do nó nêu ("chưa có model nào được nạp vào graph")
-  sai từ v1.0.0, khi `zProposal` đã có schema, loader và sáu luật validate. Hiện
-  14/14 proposal đã ở trạng thái cuối (12 approved, 2 rejected, 0 pending) nhưng
-  vẫn được `loadGraph` parse ở MỌI lần chạy hook, trong khi đường ra duy nhất của
-  chúng trong brief đòi `pending` (`render/brief.ts:240`).
+  (2) Thêm `proposals/` vào TẦNG 2: archive proposal `approved`/`rejected` đủ
+  tuổi sang `proposals/closed/`, đúng khuôn `collectClosedIceboxFiles` (dòng
+  198). Sửa luôn docstring dòng 46 — lý do nó nêu ("chưa có model nào được nạp
+  vào graph") sai từ v1.0.0, khi `zProposal` đã có schema, loader và sáu luật
+  validate. Hiện 14/14 proposal đã ở trạng thái cuối (12 approved, 2 rejected, 0
+  pending) nhưng vẫn được `loadGraph` parse ở MỌI lần chạy hook, trong khi đường
+  ra duy nhất của chúng trong brief đòi `pending` (`render/brief.ts:240`).
 
   (3) `ganas prune --dry-run` in rõ số file SẼ archive và ngày đủ tuổi. Hiện 41
   task đã `done` vẫn nằm trong graph vì ngưỡng `DEFAULT_OLDER_THAN_DAYS = 7`
@@ -76,20 +80,21 @@ notes: >-
   task nào cũng bị bắt, và dòng chảy kẹt vĩnh viễn ở chặng `fix-graph`
   (`test/flow.test.ts` đã đỏ đúng thế). Nhưng `listYaml`
   (`src/graph/load.ts:93-100`) không đệ quy, còn `prune` cố ý archive task
-  `done` sang `tasks/done/` để chúng rời khỏi graph. Ghép lại: một chặng đã
-  xong hết task nhưng task bị archive sẽ có `total = 0` trong graph, không phân
-  biệt được với chặng chưa bắt đầu.
+  `done` sang `tasks/done/` để chúng rời khỏi graph. Ghép lại: một chặng đã xong
+  hết task nhưng task bị archive sẽ có `total = 0` trong graph, không phân biệt
+  được với chặng chưa bắt đầu.
 
   Đã có ca bỏ sót THẬT trên HEAD: D-003 có đúng một task T-005 (`status: done`,
   `implements: D-003`) nhưng T-005 nằm ở `.ganas/tasks/done/`, nên D-003 không
-  bị bắt dù nó đúng là chặng bỏ dở. Và nó lớn dần: 41 task trong
-  `.ganas/tasks/` đều đã `done`, tới ngày đủ tuổi prune sẽ archive hết.
+  bị bắt dù nó đúng là chặng bỏ dở. Và nó lớn dần: 41 task trong `.ganas/tasks/`
+  đều đã `done`, tới ngày đủ tuổi prune sẽ archive hết.
 
-  VIỆC: `planPrune` KHÔNG được archive task mà design của nó (`implements`)
-  chưa `done`. Khuôn bảo vệ đã có sẵn ngay cạnh — `prune.ts:171-172` đã giữ lại
-  task còn bị `blocked_by` trỏ tới và task bị `promoted_to` trỏ tới; thêm một
-  điều kiện cùng chỗ là xong. Ngữ nghĩa cũng đúng hơn: task của một chặng chưa
-  đóng vẫn là bằng chứng sống, chưa phải đồ lưu trữ.
+  VIỆC: `planPrune` KHÔNG được archive task mà design của nó (`implements`) chưa
+  `done`. Khuôn bảo vệ đã có sẵn ngay cạnh — `prune.ts:171-172` đã giữ lại task
+  còn bị `blocked_by` trỏ tới và task bị `promoted_to` trỏ tới; thêm một điều
+  kiện cùng chỗ là xong. Ngữ nghĩa cũng đúng hơn: task của một chặng chưa đóng
+  vẫn là bằng chứng sống, chưa phải đồ lưu trữ.
 
   Mức chữa GỐC (cho loader đệ quy vào `tasks/done/`) nằm ở `src/graph/load.ts`,
   khối M-load, phạm vi P-graph-core — ngoài task này. Đã ghi ICE-021.
+done_at: 2026-08-29T16:30:21.304Z

@@ -37,5 +37,31 @@ summary: >-
 
   Không nằm trong design này, đã cân nhắc và gác lại (xem icebox): gom task/design
   vào file mảng theo khuôn icebox — sáu chỗ vỡ, năm trong số đó vỡ câm lặng.
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/task-link-wired.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/anchor-issue-code.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/boundary-verification-paths.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/prune-locks.test.ts'"
+    expect: exit_zero
+  # Vế "ngừng rò" phải đo được trên đĩa, không chỉ bằng test: 101/103 file lock
+  # mang session_id "cli" lúc mở chặng. Dưới 20 file là đã dọn thật.
+  - kind: command
+    run: "test $(find .ganas/.locks -type f 2>/dev/null | wc -l) -lt 20"
+    expect: exit_zero
 status: active
 created_at: 2026-08-29T00:00:00Z
+
+notes: >-
+  HỢP ĐỒNG CHẶNG viết 2026-08-29. Bốn bộ test cho bốn việc, cộng MỘT phép đo
+  trên đĩa: `find .ganas/.locks -type f | wc -l` phải dưới 20. Lý do có tiêu chí
+  đếm file thô này — bốn test kia chứng minh CƠ CHẾ dọn hoạt động trên thư mục
+  tạm, không chứng minh repo NÀY đã sạch. Chặng tên là "ngừng rò file" thì phải
+  đo được rằng file đã hết rò, chứ không phải rằng hàm dọn có tồn tại. Lúc mở
+  chặng: 103 file, trong đó 101 mang `session_id: "cli"`.
