@@ -43,5 +43,19 @@ summary: >-
   Lớp cưỡng chế cuối: một test đọc `.ganas/modules/*.yaml`, phân loại lại bằng
   chính phép đếm của bản rà, và đỏ khi nhãn `nature` lệch với thực tế. Không có
   nó thì bản đồ trôi lại đúng chỗ cũ sau vài tháng, im lặng như lần này.
-status: active
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/module-nature.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts'"
+    expect: exit_zero
+status: done
+done_at: 2026-08-29T00:00:00Z
 created_at: 2026-08-23T00:00:00Z
+notes: >-
+  ĐÓNG CHẶNG 2026-08-29. Mười một task T-018..T-030 phủ trọn `summary`: luật
+  công cụ io dùng chung được viết ra và phát kèm, `fsprobe` thay cho `existsSync`
+  rải rác, và bản đồ được chẻ theo ranh giới lõi/vỏ ở cả ba phạm vi. Bằng chứng
+  đóng là `test/module-nature.test.ts` — nó đối chiếu nhãn `nature` với I/O THẬT
+  của từng khối, tức là chính điều `summary` khẳng định.

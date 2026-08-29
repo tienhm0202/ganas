@@ -424,7 +424,9 @@
     - src/boundary.ts:250-267
     - .ganas/tasks/T-065.yaml
   scope: P-cli
-  status: open
+  status: promoted
+  promoted_to: T-067
+  closed_at: 2026-08-29T16:14:57.665Z
 - id: ICE-018
   title: readState trả bản sao NÔNG của EMPTY nên mọi dự án chưa có state.json
     dùng chung một object sessions

@@ -32,5 +32,18 @@ summary: >-
 
   Tiêu chí `kind: verification` KHÔNG chạy lại: nó hỏi sổ cái bằng chứng, không
   hỏi cây file, nên bung cây ra cũng không đổi câu trả lời.
-status: active
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/commit-staged-tree.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/commit-build-check.test.ts'"
+    expect: exit_zero
+status: done
+done_at: 2026-08-29T00:00:00Z
 created_at: 2026-08-23T00:00:00Z
+notes: >-
+  ĐÓNG CHẶNG 2026-08-29. Ba task T-016/T-027/T-028 phủ trọn `summary`: chấm lại
+  `exit_contract` trên cây ĐÃ STAGE chứ không phải working tree, `config.build_check`
+  trong schema, và build_check chạy trên cây stage so với mốc. Bằng chứng đóng là
+  chính hai bộ test của hai cơ chế đó.

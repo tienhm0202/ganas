@@ -36,5 +36,26 @@ summary: >-
 
   (3) Cạnh này KHÔNG thay thế test. Nó trả lời một câu khác hẳn: "hai khối còn
   khớp nhau không", chứ không phải "khối chạy có đúng không".
-status: active
+exit_contract:
+  - kind: command
+    run: "npx tsx src/cli.ts trace"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/module-deps.test.ts' 'test/module-cycle-code.test.ts'"
+    expect: exit_zero
+status: done
+done_at: 2026-08-29T00:00:00Z
 created_at: 2026-08-23T00:00:00Z
+notes: >-
+  ĐÓNG CHẶNG 2026-08-29. Hai mươi tám task T-031..T-060 phủ trọn `summary`: mọi
+  cạnh trong sơ đồ có bằng chứng `kind: contract`, cổng khai bằng chữ ký thật do
+  máy sinh, hai chu trình bị cắt, và các cạnh tái xuất được dọn.
+
+  Bằng chứng đóng là `ganas trace` thoát 0 — nó chỉ thoát 0 khi KHÔNG còn nợ
+  kiểm chứng nào và không cạnh nào trượt, tức đúng điều `summary` khẳng định.
+
+  Ghi lại vì nó là lý do D-008 tồn tại: `notes` của T-036/T-038 từng ghi "chờ
+  task cuối", task đó (T-039) chưa bao giờ được tạo, và không luật nào bắt được.
+  Nợ ấy sau cùng được trả bởi T-048/T-049/T-050 dưới tên khác — tức là may, chứ
+  không phải nhờ cơ chế. Từ nay `spine/design-stalled` không cho một chặng đứng
+  ở `active` sau khi task cuối cùng của nó xong.

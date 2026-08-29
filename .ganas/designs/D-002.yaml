@@ -10,4 +10,17 @@ summary: >-
   Việt). Kèm theo: tên file hướng dẫn KHÔNG được đóng cứng là CLAUDE.md, vì
   mỗi harness đọc một tên khác nhau và cơ chế nạp cũng khác nhau — suy từ
   `config.harness`, một bảng duy nhất trong code.
-status: active
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/init.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/module-guide.test.ts'"
+    expect: exit_zero
+status: done
+done_at: 2026-08-29T00:00:00Z
+notes: >-
+  ĐÓNG CHẶNG 2026-08-29. Bốn task T-001..T-004 phủ hết nội dung `summary`: luật
+  đặt tên và luật viết file hướng dẫn được `ganas init` phát ra, bảng harness →
+  tên file, và cờ `--harness`. Bằng chứng đóng là `test/init.test.ts` (init sinh
+  đúng file cho từng harness) cộng `test/module-guide.test.ts`.

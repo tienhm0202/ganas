@@ -47,5 +47,18 @@ summary: >-
   `src/`). `taskBoundary()` dựng ranh giới từ `touches`, nên task sửa
   `src/render/brief.ts` hôm nay có ranh giới RỖNG và `ganas commit` không stage
   nó. Vá bản đồ là task đầu tiên, trước mọi thứ khác.
-status: active
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/proposal-model.test.ts' 'test/proposal-cli.test.ts' 'test/proposal-brief.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/validate-module-guide.test.ts'"
+    expect: exit_zero
+status: done
+done_at: 2026-08-29T00:00:00Z
 created_at: 2026-08-21T00:00:00Z
+notes: >-
+  ĐÓNG CHẶNG 2026-08-29. Mười một task T-006..T-017 phủ cả ba vế của `summary`:
+  proposal thành thực thể có schema/loader/lệnh/hook/brief, tài liệu vùng nằm
+  cạnh code cho mọi khối, và bản đồ code không còn file mồ côi. Bằng chứng đóng
+  chạy trên cả ba tầng của proposal cộng luật tài liệu vùng.

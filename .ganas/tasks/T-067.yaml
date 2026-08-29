@@ -1,0 +1,59 @@
+id: T-067
+title: "taskBoundary quét cả đường dẫn probe của verification mà exit_contract trỏ tới"
+serves:
+  - G-001
+implements: D-009
+scope: P-cli
+status: todo
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/boundary.ts"
+      why: "`taskBoundary()` dòng 68-76 gộp `module.paths` với `contractPaths(task)`; `looksLikePath`/`contractPaths` ngay trên đó đã là bộ rút đường dẫn từ chuỗi lệnh, dùng lại chứ đừng viết bộ thứ hai"
+    - path: ".ganas/icebox/2026-08.yaml"
+      why: "ICE-017 ghi đủ hiện tượng và ba lần vấp; task này là mức chữa gốc của nó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli-core
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/boundary-verification-paths.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+
+notes: >-
+  Nâng từ ICE-017 sau khi nó vấp BA TRÊN BA task liên tiếp — không còn là ngẫu
+  nhiên, và mỗi lần đều phải vá tay.
+
+  Hiện tượng: `taskBoundary()` gộp `module.paths` với `contractPaths(task)` —
+  tức chỉ những đường dẫn XUẤT HIỆN TRONG `exit_contract`. Probe của
+  `verification` target thì không được quét, dù nó là lệnh chạy thật. Hệ quả:
+  sửa test của một khối là việc bình thường khi sửa khối đó, nhưng file test ấy
+  bị xem là ngoài ranh giới, `ganas commit` để nó lại working tree, và `npm test`
+  trên HEAD đỏ vì test cũ chạy với code mới. Cảnh báo "ngoài ranh giới" không
+  đổi mã thoát nên không ai bị chặn — nó chỉ trôi qua.
+
+  Ba lần đã trả giá, đều trong cùng một phiên:
+  - T-065 với `test/hook-policy.test.ts` (probe của V-hook-policy-pure)
+  - T-061 với `docs/COMMANDS.md` (test/cli-help.test.ts đối chiếu docs với CLI)
+  - T-062 với `test/debt.test.ts` (khoá cứng số mã luật tĩnh)
+
+  VIỆC: `taskBoundary` đọc thêm `verification.run` của những verification mà
+  `exit_contract` trỏ tới, rồi rút đường dẫn bằng CHÍNH `looksLikePath` /
+  `contractPaths` đã có. Target có hai dạng — `M-x` và `M-x/V-y` — phải xử lý cả
+  hai; dạng `F-xxx` trỏ fact thì probe nằm ở fact, cân nhắc gộp luôn.
+
+  CẠM BẪY: `matchPatterns` phân biệt pathspec của git với pattern của
+  `matchesAny`, và docstring ở `src/boundary.ts:85-98` liệt kê ba ca lệch đã đo
+  được. Đường dẫn rút từ probe đi qua đúng chỗ đó, nên đừng bỏ qua bước chuẩn
+  hoá — bỏ qua thì file nằm gọn trong ranh giới vẫn bị báo là ra ngoài.
+
+  Test phải ĐỎ trước: dựng task khai `touches: [M-x]` với `exit_contract` có
+  `kind: verification` trỏ `M-x/V-y`, mà probe của `V-y` chạy một file ngoài
+  `module.paths`; `taskBoundary` phải trả về đường dẫn đó.
