@@ -40,5 +40,30 @@ summary: >-
 
   Chính D-008 và D-009 sẽ là hai design ĐẦU TIÊN khai `exit_contract` — bổ sung
   ngay sau khi T-062 mở đường ở schema.
+exit_contract:
+  # Chặng dữ liệu đóng được = ba cơ chế phải cùng chạy, không phải một.
+  - kind: command
+    run: "npx tsx --test 'test/design-stage.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/design-gate.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/next-status.test.ts'"
+    expect: exit_zero
+  # Luật mới không được làm dự án mới kẹt ở fix-graph — ca T-062 đã trả giá.
+  - kind: command
+    run: "npx tsx --test 'test/flow.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "F-FLOW-001"
 status: active
 created_at: 2026-08-29T00:00:00Z
+
+notes: >-
+  HỢP ĐỒNG CHẶNG viết 2026-08-29, khi chặng còn đang chạy — cố ý viết TRƯỚC khi
+  đóng, vì hợp đồng viết sau khi xong chỉ là mô tả việc đã làm, không phải phép
+  đo. Bốn lệnh cộng một fact: luật `spine/design-stalled` chạy
+  (`design-stage`), chặng chấm được (`design-gate`), việc dở có trạng thái thật
+  (`next-status`), và dòng chảy không kẹt (`flow`) — vế cuối là cái T-062 đã trả
+  giá bằng một test đỏ. `F-FLOW-001` giữ chính bài học đó dưới dạng có probe.

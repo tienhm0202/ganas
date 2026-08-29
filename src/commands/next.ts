@@ -179,9 +179,10 @@ export async function run(argv: Argv): Promise<number> {
   // `state.json`: state.json là LOCAL_ONLY (graph/paths.ts), không vào git —
   // máy thứ hai và clone mới không thấy gì ở đó.
   //
-  // Chỉ đổi từ `todo`: `blocked` là điều người đã khai, đè lên là xoá thông tin.
-  // Và KHÔNG đụng `picked.task.value` — brief in "Đây là việc đang dở" theo
-  // status trong bộ nhớ, nói câu đó cho một task vừa mới nhận là sai.
+  // Chỉ đổi từ `todo`: task đang `in_progress` thì ghi lại cũng vô nghĩa, còn
+  // `done` thì đè lên là xoá mất một sự thật. Và KHÔNG đụng `picked.task.value`
+  // — brief in "Đây là việc đang dở" theo status trong bộ nhớ, nói câu đó cho
+  // một task vừa mới nhận là sai.
   const marked = picked.task.value.status === "todo";
   if (marked) await setTaskStatus(root, picked.task, "in_progress");
 

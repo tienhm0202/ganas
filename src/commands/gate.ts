@@ -1,6 +1,8 @@
 import { formatBoundaryWarning, formatDispatchWarning, outsideBoundary, taskBoundary } from "../boundary.js";
 import { gitTouchedPaths } from "../commit.js";
-import { alreadyGreen, evaluateGate, formatGate } from "../gate.js";
+import { alreadyGreen, evaluateExitContract, evaluateGate, formatGate } from "../gate.js";
+import type { FactFreshness } from "../graph/freshness.js";
+import type { Graph } from "../graph/types.js";
 import { baselineFor, subagentTouchedFor, taskForSession } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
@@ -10,6 +12,10 @@ export async function run(argv: Argv): Promise<number> {
   const { root, graph, freshness } = await openProject(argv);
 
   const sessionId = option(argv, "session");
+
+  const designId = option(argv, "design");
+  if (designId) return gateDesign({ root, graph, freshness, designId, argv });
+
   const taskId =
     argv.positional[0] ?? option(argv, "task") ?? (await taskForSession(root, sessionId));
 
@@ -31,7 +37,7 @@ export async function run(argv: Argv): Promise<number> {
     process.stdout.write(
       JSON.stringify(
         {
-          task: result.task,
+          subject: result.subject,
           ok: result.ok,
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
           pending_human: result.pendingHuman.map((p) => p.label),
@@ -45,7 +51,7 @@ export async function run(argv: Argv): Promise<number> {
     return result.ok ? 0 : 1;
   }
 
-  process.stdout.write(`Điều kiện hoàn thành của ${result.task}:\n${formatGate(result)}\n\n`);
+  process.stdout.write(`Điều kiện hoàn thành của ${result.subject}:\n${formatGate(result)}\n\n`);
 
   if (green.length > 0) {
     process.stdout.write(
@@ -81,4 +87,99 @@ export async function run(argv: Argv): Promise<number> {
 
   process.stdout.write(`✗ Còn ${result.unmet.length} tiêu chí chưa đạt.\n`);
   return 1;
+}
+
+/**
+ * Chấm hợp đồng ra của một CHẶNG (`Design.exit_contract`).
+ *
+ * Nhánh riêng chứ không nhánh chung với task, vì ba cảnh báo của lối task
+ * (`alreadyGreen`, ranh giới code, giao sub-agent) đều là khái niệm của TASK:
+ * chặng không có baseline phiên, không có `touches`, không có `model`. Phần
+ * duy nhất dùng chung — chấm tiêu chí — đã dùng chung thật, qua
+ * `evaluateExitContract`.
+ */
+async function gateDesign(ctx: {
+  root: string;
+  graph: Graph;
+  freshness: Map<string, FactFreshness>;
+  designId: string;
+  argv: Argv;
+}): Promise<number> {
+  const { root, graph, freshness, designId, argv } = ctx;
+
+  const sourced = graph.designs.get(designId);
+  if (!sourced) throw new GanasError(`không có design ${designId}`);
+  const design = sourced.value;
+
+  // Hợp đồng rỗng KHÔNG được tính là đạt. Một gate tự xanh vì không có gì để
+  // chấm là gate không tồn tại — và đó đúng là ca `spine/design-missing-exit-contract`
+  // cảnh báo, nên câu trả lời ở đây phải trùng hướng với luật đó.
+  if (design.exit_contract.length === 0) {
+    const message =
+      `${designId} chưa khai \`exit_contract\` — không có gì để chấm.\n` +
+      `Chặng không có hợp đồng ra thì "đóng được chưa" là ý kiến, không phải kết quả đo.\n`;
+    if (flag(argv, "json")) {
+      process.stdout.write(
+        JSON.stringify({ subject: designId, ok: false, unmet: [], pending_human: [] }, null, 2) +
+          "\n",
+      );
+      return 1;
+    }
+    process.stdout.write(message);
+    return 1;
+  }
+
+  const result = await evaluateExitContract(designId, design.exit_contract, { root, freshness });
+
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          subject: result.subject,
+          ok: result.ok,
+          unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
+          pending_human: result.pendingHuman.map((p) => p.label),
+          open_tasks: openTaskIds(graph, designId),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    return result.ok ? 0 : 1;
+  }
+
+  process.stdout.write(
+    `Hợp đồng của chặng ${design.id} — ${design.title}:\n${formatGate(result)}\n\n`,
+  );
+
+  const open = openTaskIds(graph, designId);
+  if (open.length > 0) {
+    process.stdout.write(
+      `⚠ Chặng còn ${open.length} task chưa xong: ${open.join(", ")}\n` +
+        `  Hợp đồng chặng xanh trong khi task còn mở nghĩa là hợp đồng đo thiếu.\n\n`,
+    );
+  }
+
+  if (result.ok) {
+    process.stdout.write(`✓ Mọi tiêu chí chấm tự động của chặng đều đạt.\n`);
+    if (result.pendingHuman.length > 0) {
+      process.stdout.write(
+        `\nCòn ${result.pendingHuman.length} tiêu chí cần người xác nhận trước khi ` +
+          `đóng chặng:\n` +
+          result.pendingHuman.map((p) => `  … ${p.label}`).join("\n") +
+          "\n",
+      );
+    }
+    return 0;
+  }
+
+  process.stdout.write(`✗ Còn ${result.unmet.length} tiêu chí chưa đạt — chặng chưa đóng được.\n`);
+  return 1;
+}
+
+function openTaskIds(graph: Graph, designId: string): string[] {
+  return [...graph.tasks.values()]
+    .filter((t) => t.value.implements === designId && t.value.status !== "done")
+    .map((t) => t.value.id)
+    .sort((a, b) => a.localeCompare(b));
 }

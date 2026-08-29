@@ -51,6 +51,8 @@ contract:
       shape: "(harness: Harness) => boolean"
     - name: Claim
       shape: "z.infer<typeof zClaim>"
+    - name: Design
+      shape: "z.infer<typeof zDesign>"
     - name: enforcementFor
       shape: "(config: Config, rule: EnforcementRule) => Enforcement"
     - name: formatAnchor

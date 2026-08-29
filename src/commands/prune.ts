@@ -5,6 +5,11 @@ import { openProject } from "./_common.js";
 
 const DEFAULT_OLDER_THAN_DAYS = 7;
 
+/** Phần ngày, bỏ giờ/phút — đủ cho người đọc quyết định, khỏi bận tâm múi giờ. */
+function cutoffDate(cutoffAt: string): string {
+  return cutoffAt.slice(0, 10);
+}
+
 function summarize(plan: PrunePlan): string {
   const lines: string[] = [];
 
@@ -18,6 +23,11 @@ function summarize(plan: PrunePlan): string {
     for (const d of plan.deadSessions)
       lines.push(`  - ${d.sessionId} (${d.ageDays} ngày, chưa từng release)`);
   }
+  if (plan.staleLocks.length > 0) {
+    lines.push(`${plan.staleLocks.length} lock mồ côi trong .locks/ sẽ bị XOÁ:`);
+    for (const l of plan.staleLocks)
+      lines.push(`  - ${l.file} (${l.ageDays} ngày, session ${l.sessionId}, lý do: ${l.reason})`);
+  }
   if (plan.doneTasks.length > 0) {
     lines.push(`${plan.doneTasks.length} task done sẽ chuyển sang tasks/done/:`);
     for (const t of plan.doneTasks) lines.push(`  - ${t.id} (${t.file})`);
@@ -25,6 +35,19 @@ function summarize(plan: PrunePlan): string {
   if (plan.iceboxFiles.length > 0) {
     lines.push(`${plan.iceboxFiles.length} file icebox đã đóng hết sẽ chuyển sang icebox/closed/:`);
     for (const f of plan.iceboxFiles) lines.push(`  - ${f.month} (${f.ageDays} ngày, ${f.file})`);
+  }
+  if (plan.closedProposals.length > 0) {
+    lines.push(`${plan.closedProposals.length} đề xuất đã quyết sẽ chuyển sang proposals/closed/:`);
+    for (const p of plan.closedProposals) lines.push(`  - ${p.id} (${p.file})`);
+  }
+
+  const archivable =
+    plan.doneTasks.length + plan.iceboxFiles.length + plan.closedProposals.length;
+  if (archivable > 0) {
+    lines.push(
+      `\n${archivable} mục sẽ ARCHIVE — đủ tuổi tính tới mốc ${cutoffDate(plan.cutoffAt)} ` +
+        `(ngưỡng --older-than). Mục trẻ hơn mốc này chưa hiện ở trên, không phải bị bỏ sót.`,
+    );
   }
 
   return lines.join("\n");
@@ -41,14 +64,21 @@ export async function run(argv: Argv): Promise<number> {
 
   const plan = await planPrune(root, graph, { olderThanDays });
   const total =
-    plan.staleRuns.length + plan.deadSessions.length + plan.doneTasks.length + plan.iceboxFiles.length;
+    plan.staleRuns.length +
+    plan.deadSessions.length +
+    plan.staleLocks.length +
+    plan.doneTasks.length +
+    plan.iceboxFiles.length +
+    plan.closedProposals.length;
 
   const apply = flag(argv, "yes", "y");
 
   if (flag(argv, "json")) {
     process.stdout.write(JSON.stringify({ ...plan, applied: apply && total > 0 }, null, 2) + "\n");
   } else if (total === 0) {
-    process.stdout.write(`Không có gì cần dọn (ngưỡng ${olderThanDays} ngày).\n`);
+    process.stdout.write(
+      `Không có gì cần dọn (ngưỡng --older-than ${olderThanDays} ngày, mốc ${cutoffDate(plan.cutoffAt)}).\n`,
+    );
   } else {
     process.stdout.write(`${summarize(plan)}\n`);
   }

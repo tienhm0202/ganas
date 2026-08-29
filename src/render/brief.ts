@@ -7,6 +7,7 @@ import {
   agentModelAlias,
   canDispatchSubagent,
   type Claim,
+  type Design,
   enforcementFor,
   formatAnchor,
   type Task,
@@ -252,6 +253,59 @@ function pendingProposalsSection(graph: Graph, t: Task): string {
 }
 
 /**
+ * Dòng "tôi đang ở đâu trong chuỗi V1 → V2 → V3" của CHẶNG đang hiện thực.
+ *
+ * Chỉ dựng từ graph và sổ cái bằng chứng: không chạy lệnh, không đọc đồng hồ,
+ * không hỏi git. Dòng này nằm trong phần ỔN ĐỊNH của brief — brief bơm vào
+ * context ở `SessionStart` — nên bất cứ thứ gì đổi giữa hai lần chạy trên cùng
+ * một graph sẽ phá prompt cache của MỌI phiên sau, không riêng phiên đang chạy.
+ *
+ * Chỉ tiêu chí `verification` được chấm ngay tại đây, vì câu trả lời của nó nằm
+ * trong SỔ CÁI chứ không nằm trong cây file — đúng lý do ngược với
+ * `evaluateTreeCriteria` (src/gate.ts). Ba loại còn lại phải chạy thật; brief
+ * nói thẳng là chưa biết và chỉ tới `ganas gate --design`, không đoán hộ.
+ */
+function stageProgressLine(graph: Graph, d: Design, freshness: Map<string, FactFreshness>): string {
+  const tasks = [...graph.tasks.values()].filter((s) => s.value.implements === d.id);
+  const open = tasks
+    .filter((s) => s.value.status !== "done")
+    .map((s) => s.value.id)
+    .sort((a, b) => a.localeCompare(b));
+
+  const parts: string[] = [
+    tasks.length === 0
+      ? "chưa task nào khai `implements` chặng này"
+      : `còn ${open.length}/${tasks.length} task mở` +
+        (open.length > 0 ? ` — ${open.map((id) => `\`${id}\``).join(", ")}` : ""),
+  ];
+
+  const contract = d.exit_contract;
+  if (contract.length === 0) {
+    parts.push("chặng CHƯA khai `exit_contract` — đóng chặng sẽ là ý kiến, không phải phép đo");
+  } else {
+    const fromLedger = contract.filter((c) => c.kind === "verification");
+    const met = fromLedger.filter(
+      (c) => c.kind === "verification" && freshness.get(c.target)?.freshness === "fresh",
+    ).length;
+    const mustRun = contract.length - fromLedger.length;
+    parts.push(
+      `hợp đồng chặng ${contract.length} tiêu chí` +
+        (fromLedger.length > 0 ? `, ${met}/${fromLedger.length} bằng chứng đang fresh` : "") +
+        (mustRun > 0
+          ? `, ${mustRun} tiêu chí phải chạy \`ganas gate --design ${d.id}\` mới biết`
+          : ` (chấm lại: \`ganas gate --design ${d.id}\`)`),
+    );
+  }
+
+  const closed =
+    d.status === "done" && d.done_at
+      ? ` **Chặng đã ĐÓNG** ngày ${d.done_at.slice(0, 10)} — việc còn mở dưới nó là nợ tiếp nối, không phải việc của chặng này.`
+      : "";
+
+  return `**Tiến độ chặng:** ${parts.join(" · ")}.${closed}`;
+}
+
+/**
  * Design nào khai `supersedes` chứa `designId`? Model không có cạnh ngược
  * `superseded_by` — phải quét toàn bộ `graph.designs` mỗi lần hỏi. Trả về
  * `undefined` nếu không design nào thay thế nó (dữ liệu thiếu, không phải lỗi).
@@ -482,7 +536,10 @@ export function renderBrief(input: BriefInput): string {
         `đã lưu kho thì nhiều khả năng bản thân task cũng lỗi thời — xác nhận lại trước ` +
         `khi làm, đừng mặc định nó còn đúng.`;
     }
-    parts.push(`## Design đang hiện thực\n\n### ${d.id} — ${d.title}\n\n${d.summary}${warning}`);
+    parts.push(
+      `## Design đang hiện thực\n\n### ${d.id} — ${d.title}\n\n${d.summary}${warning}\n\n` +
+        stageProgressLine(graph, d, freshness),
+    );
   }
 
   /* --- Quyết định đã chốt ------------------------------------------------ *

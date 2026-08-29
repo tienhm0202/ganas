@@ -16,7 +16,8 @@ export interface CriterionResult {
 }
 
 export interface GateResult {
-  task: string;
+  /** Id của thứ đang được chấm — task, hoặc design khi chấm hợp đồng của chặng. */
+  subject: string;
   /** Mọi tiêu chí chấm tự động được đều đạt. Tiêu chí cần người không tính vào đây. */
   ok: boolean;
   results: CriterionResult[];
@@ -170,26 +171,50 @@ async function checkCriterion(
 }
 
 /**
- * Chấm exit_contract của một task.
+ * Chấm một hợp đồng ra bất kỳ — LÕI dùng chung của mọi lối chấm.
+ *
+ * Nhận thẳng `readonly ExitCriterion[]` chứ không nhận `Task`: task trả lời
+ * "bước này xong chưa", design trả lời "chặng này đóng được chưa", nhưng cả hai
+ * dùng chung `zExitCriterion` nên chỉ được có MỘT đường chấm. Hai đường là hai
+ * nguồn sự thật cho cùng một câu hỏi, và chúng sẽ trôi khỏi nhau.
  *
  * Tách "chấm được tự động" khỏi "cần người": tiêu chí thủ công mà chặn phiên thì
- * phiên không bao giờ kết thúc được. Chúng chặn việc đánh dấu task `done`, chứ
- * không chặn Stop.
+ * phiên không bao giờ kết thúc được. Chúng chặn việc đánh dấu `done`, chứ không
+ * chặn Stop.
  */
+export async function evaluateExitContract(
+  subject: string,
+  criteria: readonly ExitCriterion[],
+  ctx: {
+    root: string;
+    freshness: Map<string, VerificationState>;
+    sessionId?: string | undefined;
+  },
+): Promise<GateResult> {
+  const results = await Promise.all(
+    criteria.map((c) =>
+      checkCriterion(c, { root: ctx.root, sessionId: ctx.sessionId, freshness: ctx.freshness }),
+    ),
+  );
+
+  const unmet = results.filter((r) => r.status === "fail");
+  const pendingHuman = results.filter((r) => r.status === "pending_human");
+
+  return { subject, ok: unmet.length === 0, results, unmet, pendingHuman };
+}
+
+/** Chấm exit_contract của một task. Vỏ mỏng quanh `evaluateExitContract`. */
 export async function evaluateGate(
   graph: Graph,
   task: Task,
   freshness: Map<string, VerificationState>,
   sessionId?: string,
 ): Promise<GateResult> {
-  const results = await Promise.all(
-    task.exit_contract.map((c) => checkCriterion(c, { root: graph.root, sessionId, freshness })),
-  );
-
-  const unmet = results.filter((r) => r.status === "fail");
-  const pendingHuman = results.filter((r) => r.status === "pending_human");
-
-  return { task: task.id, ok: unmet.length === 0, results, unmet, pendingHuman };
+  return evaluateExitContract(task.id, task.exit_contract, {
+    root: graph.root,
+    freshness,
+    sessionId,
+  });
 }
 
 /** Diễn giải kết quả gate thành văn bản đưa lại cho Claude. */

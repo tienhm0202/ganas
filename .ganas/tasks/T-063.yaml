@@ -4,18 +4,22 @@ serves:
   - G-001
 implements: D-008
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: verifier
 
 context_contract:
   must_read:
     - path: "src/gate.ts"
-      why: "`evaluateTreeCriteria` (dòng 218) đã là khuôn hàm nhận `readonly ExitCriterion[]` — tách lõi `evaluateGate` theo đúng khuôn đó, một đường chấm dùng chung"
+      why: "`evaluateTreeCriteria` (dòng 218) đã là khuôn hàm nhận `readonly
+        ExitCriterion[]` — tách lõi `evaluateGate` theo đúng khuôn đó, một đường
+        chấm dùng chung"
     - path: "src/render/brief.ts"
-      why: "Mục 'Design đang hiện thực' ở dòng 485 là chỗ thêm dòng tiến độ chặng; đọc CLAUDE.md cùng thư mục về bất biến phần ổn định / phần biến động"
+      why: "Mục 'Design đang hiện thực' ở dòng 485 là chỗ thêm dòng tiến độ chặng; đọc
+        CLAUDE.md cùng thư mục về bất biến phần ổn định / phần biến động"
     - path: "src/commands/gate.ts"
-      why: "Điểm vào CLI — thêm cờ `--design`, KHÔNG thêm lệnh mới (lệnh mới phải sửa bốn chỗ, xem src/commands/CLAUDE.md)"
+      why: "Điểm vào CLI — thêm cờ `--design`, KHÔNG thêm lệnh mới (lệnh mới phải sửa
+        bốn chỗ, xem src/commands/CLAUDE.md)"
   facts: []
   open_questions: []
 
@@ -44,32 +48,33 @@ notes: >-
   `test/no-dead-ends.test.ts` sẽ đỏ vì không ai đọc.
 
   (1) `evaluateGate` hiện nhận `task: Task`. Tách phần lõi thành hàm nhận
-  `readonly ExitCriterion[]` để `ganas gate --design D-007` và `ganas gate <task>`
-  đi chung một đường. Khuôn đã có sẵn ở `evaluateTreeCriteria` — đừng dựng đường
-  chấm thứ hai, hai nguồn sự thật cho cùng một câu hỏi là đúng thứ ganas chống.
+  `readonly ExitCriterion[]` để `ganas gate --design D-007` và `ganas gate
+  <task>` đi chung một đường. Khuôn đã có sẵn ở `evaluateTreeCriteria` — đừng
+  dựng đường chấm thứ hai, hai nguồn sự thật cho cùng một câu hỏi là đúng thứ
+  ganas chống.
 
-  (2) Brief thêm một dòng vào mục "Design đang hiện thực": chặng này còn mấy task
-  mở, `exit_contract` của chặng đạt mấy phần. Đây là câu trả lời cho "tôi đang ở
-  đâu trong chuỗi V1→V2→V3", và nó được bơm vào MỌI phiên qua SessionStart — chỗ
-  duy nhất chắc chắn agent đọc.
+  (2) Brief thêm một dòng vào mục "Design đang hiện thực": chặng này còn mấy
+  task mở, `exit_contract` của chặng đạt mấy phần. Đây là câu trả lời cho "tôi
+  đang ở đâu trong chuỗi V1→V2→V3", và nó được bơm vào MỌI phiên qua
+  SessionStart — chỗ duy nhất chắc chắn agent đọc.
 
   Cạm bẫy phải biết trước, từ `src/render/CLAUDE.md`: bố cục phần ỔN ĐỊNH của
-  brief phải tất định, mọi thứ biến động nằm sau `---` ở cuối. Dòng tiến độ chặng
-  là dữ liệu graph, KHÔNG phải `volatile` — nhưng đừng nhét mốc thời gian hay
-  `git status` vào nó, làm thế là phá prompt cache của mọi phiên sau.
+  brief phải tất định, mọi thứ biến động nằm sau `---` ở cuối. Dòng tiến độ
+  chặng là dữ liệu graph, KHÔNG phải `volatile` — nhưng đừng nhét mốc thời gian
+  hay `git status` vào nó, làm thế là phá prompt cache của mọi phiên sau.
 
-  `blocked_by: T-062` là thật, không phải thứ tự cho đẹp: không có `exit_contract`
-  trong `zDesign` thì không có gì để chấm.
+  `blocked_by: T-062` là thật, không phải thứ tự cho đẹp: không có
+  `exit_contract` trong `zDesign` thì không có gì để chấm.
 
   Task này và T-064 cùng chạm M-workflow + M-commands nên `parallelCandidates()`
   sẽ KHÔNG cho giao song song — đúng, vì cả hai sửa `src/prune.ts`/`src/gate.ts`
   và `src/commands/**`.
 
-  BA VIỆC PHÁT SINH từ T-062, nhận vào task này (2026-08-29) — ghi ở đây thay
-  vì để trong báo cáo của sub-agent, vì báo cáo bay hơi còn task thì không:
+  BA VIỆC PHÁT SINH từ T-062, nhận vào task này (2026-08-29) — ghi ở đây thay vì
+  để trong báo cáo của sub-agent, vì báo cáo bay hơi còn task thì không:
 
-  (1) `Design.done_at` CHƯA CÓ AI ĐỌC. `test/no-dead-ends.test.ts` khớp theo
-  TÊN trường nên nó xanh nhờ `Task.done_at` được đọc ở chỗ khác — tức guard này
+  (1) `Design.done_at` CHƯA CÓ AI ĐỌC. `test/no-dead-ends.test.ts` khớp theo TÊN
+  trường nên nó xanh nhờ `Task.done_at` được đọc ở chỗ khác — tức guard này
   không bắt được ca đó. Việc trình một chặng đã đóng là việc của gate/brief,
   đúng task này. Không làm thì `done_at` của design là một trường trang trí.
 
@@ -80,14 +85,15 @@ notes: >-
   comment ở `src/commands/next.ts:182` đã lỗi thời. Người đọc docs hôm nay mà
   làm theo sẽ ăn lỗi schema.
 
-  (3) Kiểm lại `src/flow.ts` sau khi luật `spine/design-stalled` đổi định
-  nghĩa. Bản đầu của luật làm `test/flow.test.ts` ĐỎ với đúng thông điệp mà nó
-  sinh ra để nói: 'chặng "fix-graph" lặp lại trước khi commit'. Nguyên nhân:
-  `fix-graph` đứng TRƯỚC `design`/`task` và đòi 0 lỗi, nên một design vừa tạo
-  (chưa task nào) làm luật bắn và dòng chảy quay đầu — phương thuốc lại nằm ở
-  chặng `task` phía sau. Đã chữa ở tầng LUẬT (chỉ stalled khi đã có ít nhất một
-  task), không ở `flow.ts`. Task này phải XÁC NHẬN `test/flow.test.ts` xanh và
-  cân nhắc: `fix-graph.done` đòi "không lỗi nào" là một hợp đồng ngầm rằng MỌI
-  luật error phải sửa được ngay tại chặng đó hoặc trước nó. Luật mới nào phá
-  giả định đó sẽ làm dự án mới kẹt vĩnh viễn, và chỉ `test/flow.test.ts` bắt
-  được. Đáng ghi thành fact có probe.
+  (3) Kiểm lại `src/flow.ts` sau khi luật `spine/design-stalled` đổi định nghĩa.
+  Bản đầu của luật làm `test/flow.test.ts` ĐỎ với đúng thông điệp mà nó sinh ra
+  để nói: 'chặng "fix-graph" lặp lại trước khi commit'. Nguyên nhân: `fix-graph`
+  đứng TRƯỚC `design`/`task` và đòi 0 lỗi, nên một design vừa tạo (chưa task
+  nào) làm luật bắn và dòng chảy quay đầu — phương thuốc lại nằm ở chặng `task`
+  phía sau. Đã chữa ở tầng LUẬT (chỉ stalled khi đã có ít nhất một task), không
+  ở `flow.ts`. Task này phải XÁC NHẬN `test/flow.test.ts` xanh và cân nhắc:
+  `fix-graph.done` đòi "không lỗi nào" là một hợp đồng ngầm rằng MỌI luật error
+  phải sửa được ngay tại chặng đó hoặc trước nó. Luật mới nào phá giả định đó sẽ
+  làm dự án mới kẹt vĩnh viễn, và chỉ `test/flow.test.ts` bắt được. Đáng ghi
+  thành fact có probe.
+done_at: 2026-08-29T16:30:18.906Z

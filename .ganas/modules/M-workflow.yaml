@@ -96,6 +96,8 @@ contract:
       shape: "(root: string, task: Task, buildCheck?: string) => Promise<StagedTreeCheck>"
     - name: criterionKey
       shape: "(c: ExitCriterion) => string"
+    - name: evaluateExitContract
+      shape: "(subject: string, criteria: readonly ExitCriterion[], ctx: { root: string; freshness: Map<string, VerificationState>; sessionId?: string | undefined; }) => Promise<GateResult>"
     - name: evaluateGate
       shape: "(graph: Graph, task: Task, freshness: Map<string, VerificationState>, sessionId?: string) => Promise<GateResult>"
     - name: flowContext
