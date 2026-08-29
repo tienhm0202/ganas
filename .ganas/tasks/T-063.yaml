@@ -64,3 +64,30 @@ notes: >-
   Task này và T-064 cùng chạm M-workflow + M-commands nên `parallelCandidates()`
   sẽ KHÔNG cho giao song song — đúng, vì cả hai sửa `src/prune.ts`/`src/gate.ts`
   và `src/commands/**`.
+
+  BA VIỆC PHÁT SINH từ T-062, nhận vào task này (2026-08-29) — ghi ở đây thay
+  vì để trong báo cáo của sub-agent, vì báo cáo bay hơi còn task thì không:
+
+  (1) `Design.done_at` CHƯA CÓ AI ĐỌC. `test/no-dead-ends.test.ts` khớp theo
+  TÊN trường nên nó xanh nhờ `Task.done_at` được đọc ở chỗ khác — tức guard này
+  không bắt được ca đó. Việc trình một chặng đã đóng là việc của gate/brief,
+  đúng task này. Không làm thì `done_at` của design là một trường trang trí.
+
+  (2) Dọn `status: blocked` khỏi tài liệu. T-062 đã GỠ `"blocked"` khỏi
+  `TASK_STATUS` (lý do: `blocked_by` + `openBlockers()` đã trả lời câu đó rồi,
+  một status khai tay là câu trả lời thứ hai cho cùng câu hỏi). Nhưng
+  `docs/CONCEPTS.md:193` và `docs/COMMANDS.md:325` vẫn dạy nó là hợp lệ, và
+  comment ở `src/commands/next.ts:182` đã lỗi thời. Người đọc docs hôm nay mà
+  làm theo sẽ ăn lỗi schema.
+
+  (3) Kiểm lại `src/flow.ts` sau khi luật `spine/design-stalled` đổi định
+  nghĩa. Bản đầu của luật làm `test/flow.test.ts` ĐỎ với đúng thông điệp mà nó
+  sinh ra để nói: 'chặng "fix-graph" lặp lại trước khi commit'. Nguyên nhân:
+  `fix-graph` đứng TRƯỚC `design`/`task` và đòi 0 lỗi, nên một design vừa tạo
+  (chưa task nào) làm luật bắn và dòng chảy quay đầu — phương thuốc lại nằm ở
+  chặng `task` phía sau. Đã chữa ở tầng LUẬT (chỉ stalled khi đã có ít nhất một
+  task), không ở `flow.ts`. Task này phải XÁC NHẬN `test/flow.test.ts` xanh và
+  cân nhắc: `fix-graph.done` đòi "không lỗi nào" là một hợp đồng ngầm rằng MỌI
+  luật error phải sửa được ngay tại chặng đó hoặc trước nó. Luật mới nào phá
+  giả định đó sẽ làm dự án mới kẹt vĩnh viễn, và chỉ `test/flow.test.ts` bắt
+  được. Đáng ghi thành fact có probe.

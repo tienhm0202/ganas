@@ -479,3 +479,68 @@
     - .ganas/tasks/T-061.yaml
   scope: P-hook
   status: open
+- id: ICE-020
+  title: Mọi đường ghi-lại YAML dùng doc.toString() mặc định nên reformat cả file,
+    làm nhiễu git history của .ganas/
+  found_at: 2026-08-29T15:52:16.390Z
+  review_after_days: 30
+  weight: 3
+  ease: 5
+  why_deferred: "Lo ra ngay lan dau chay tinh nang cua T-061: ganas next ghi
+    status: in_progress vao .ganas/tasks/T-066.yaml, dien ra dung mot truong,
+    nhung git diff bao 14 them / 8 xoa — phan con lai la yaml package fold lai
+    moi dong dai qua 80 cot. Da do chinh xac: parseDocument + setIn + toString()
+    mac dinh cho 3 dong, con toString({lineWidth: 0}) cho 2 dong, tuc lineWidth
+    mac dinh (80) chinh la thu phinh diff. Bon duong ghi-lai deu dinh:
+    _task-status.ts:38, verify/run.ts:388, icebox.ts:99 va :123. KHONG mat du
+    lieu va comment van duoc giu — day khong phai bug du lieu, ma la bug LICH
+    SU: docstring cua taskBoundary noi thang rang lich su graph chinh la thu
+    ganas dung de tra loi 'vi sao cho nay thanh ra the', va mot diff 14 dong cho
+    mot truong lam dung kha nang do kem di. Truoc T-061 chi ganas commit moi
+    cham vao (mot lan moi task), nay ganas next cung cham nen MOI task deu bi
+    reformat ngay luc nhan viec. Cach chua: truyen { lineWidth: 0 } cho ca bon
+    cho. Chua lam vi hai trong bon cho nam o P-cli va mot o P-graph-core
+    (verify/run.ts) — hai pham vi, ma task dang chay la T-066 thuoc P-hook."
+  anchors:
+    - src/commands/_task-status.ts:38
+    - src/verify/run.ts:388
+    - src/commands/icebox.ts:99
+    - src/commands/icebox.ts:123
+  scope: P-cli
+  status: open
+- id: ICE-021
+  title: prune archive task vào tasks/done/ làm chặng đã xong trông y hệt chặng
+    chưa bắt đầu — spine/design-stalled mù dần theo thời gian
+  found_at: 2026-08-29T16:04:55.371Z
+  review_after_days: 30
+  weight: 4
+  ease: 2
+  why_deferred: "Lo ra ngay lan dau chay luat spine/design-stalled (T-062) va da
+    kiem chung doc lap. Luat chi bat khi design co total > 0 task va tat ca deu
+    done — ve total > 0 la bat buoc, neu khong thi mot design vua tao chua co
+    task nao se bi bat va dong chay ket vinh vien o chang fix-graph
+    (test/flow.test.ts do dung the). Nhung listYaml (load.ts:93-100) loc
+    e.isFile() va KHONG de quy, con ganas prune co y archive task done sang
+    tasks/done/ de chung roi khoi graph. Hai co che dung rieng thi deu dung,
+    ghep lai thi sinh diem mu: mot chang da xong het task nhung task da bi
+    archive se co total = 0 trong graph, khong phan biet duoc voi chang chua bat
+    dau. Bang chung tren HEAD: D-003 co dung mot task T-005, status done,
+    implements D-003 — nhung T-005 nam o .ganas/tasks/done/ nen graph thay D-003
+    co 0 task va KHONG bat. Do la mot ca bo sot that, hom nay. Va no lon dan: 41
+    task trong .ganas/tasks/ deu da done, khi du 7 ngay thi prune se archive
+    het, luc do gan nhu moi design deu tang hinh va luat design-stalled thanh vo
+    dung. CO HAI MUC CHUA. Muc goc: cho loader de quy vao tasks/done/
+    (src/graph/load.ts, khoi M-load) hoac cho validate doc them — nhung validate
+    la nature: code, architecture.md cam no cham dia. Muc RE va dung ngu nghia
+    hon: khong archive task cua mot design chua done — prune.ts da co san khuon
+    bao ve nay cho task con bi blocked_by tro toi (prune.ts:171-172), them mot
+    dieu kien nua la xong, va no nam trong src/prune.ts thuoc M-workflow / P-cli
+    tuc dung pham vi T-064. Da ghi muc re vao notes cua T-064. Muc goc de lai
+    day."
+  anchors:
+    - src/graph/load.ts:93-100
+    - src/prune.ts:302
+    - .ganas/tasks/done/T-005.yaml
+    - .ganas/designs/D-003.yaml
+  scope: P-graph-core
+  status: open
