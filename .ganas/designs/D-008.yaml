@@ -57,7 +57,8 @@ exit_contract:
     expect: exit_zero
   - kind: verification
     target: "F-FLOW-001"
-status: active
+status: done
+done_at: 2026-08-29T16:45:00Z
 created_at: 2026-08-29T00:00:00Z
 
 notes: >-

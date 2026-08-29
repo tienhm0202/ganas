@@ -546,3 +546,83 @@
     - .ganas/designs/D-003.yaml
   scope: P-graph-core
   status: open
+- id: ICE-022
+  title: "Ranh giới task còn hở ba nhánh: docs, fact sinh trong lúc làm, và test
+    của khối không phải probe"
+  found_at: 2026-08-29T16:33:05.887Z
+  review_after_days: 30
+  weight: 4
+  ease: 2
+  why_deferred: "T-067 chua duoc nhanh 'probe cua verification ma exit_contract
+    tro toi', nhung HEAD van do that ngay sau do: sau khi commit T-063 va T-064,
+    npm test tren HEAD la 816 pass / 4 fail — do duoc bang git stash -u roi chay
+    test. Nguyen nhan: ganas commit T-064 dem theo src/prune.ts voi guard moi
+    nhung bo lai test/prune.test.ts mang fixture cu. Ba nhanh con ho, moi nhanh
+    mot co che khac nhau: (1) test cua khoi ma KHONG phai probe — M-workflow gom
+    commit/flow/gate/handoff/prune nhung V-workflow-commit chi chay
+    test/commit-staging.test.ts, nen test/prune.test.ts khong duong nao vao ranh
+    gioi; (2) docs — khong thuoc paths cua khoi nao nen luon ngoai ranh gioi tru
+    khi co mat trong exit_contract, T-061 da va bang mot tieu chi artifact con
+    T-063 thi khong; (3) fact SINH RA trong luc lam task — ownsGanasFile chi cho
+    task so huu fact da khai trong context_contract.facts, ma fact moi thi chua
+    co o do, nen F-FLOW-001 khong task nao nhan. Da phai va tay lan thu tu bang
+    mot commit rieng (9e36155). Huong chua dang can nhac: ownsGanasFile nhan
+    fact co verified_by tro ve phien dang lam task; taskBoundary gop moi probe
+    cua MOI verification thuoc khoi trong touches, khong chi cai duoc
+    exit_contract tro toi; va canh bao 'ngoai ranh gioi' nen doi ma thoat khi
+    file do la file TEST — hien no khong doi ma thoat nen khong ai bi chan."
+  anchors:
+    - src/boundary.ts:68-76
+    - src/boundary.ts:250-267
+    - commit:9e36155
+  scope: P-cli
+  status: open
+- id: ICE-023
+  title: M-workflow có năm file mà bằng chứng chỉ kiểm một — V-workflow-commit
+    không chạm prune/flow/handoff/gate
+  found_at: 2026-08-29T16:33:06.477Z
+  review_after_days: 30
+  weight: 3
+  ease: 4
+  why_deferred: "Lo ra khi HEAD do o commit 9e36155. Khoi M-workflow khai paths
+    gom src/commit.ts, src/flow.ts, src/gate.ts, src/handoff.ts, src/prune.ts —
+    nam file, nam vung trach nhiem khac han nhau. Nhung bang chung duy nhat cua
+    khoi, V-workflow-commit, chay npx tsx --test test/commit-staging.test.ts: no
+    kiem dung mot file. Hai he qua do duoc: (a) mot task cham prune.ts van lam
+    V-workflow-commit tuoi lai va gate xanh du khong dong test nao cua prune
+    chay — dau xanh rong; (b) taskBoundary suy tu probe (T-067) khong keo duoc
+    test/prune.test.ts vao ranh gioi vi probe khong nhac toi no. Cach chua re:
+    them verification rieng cho tung vung cua khoi (V-workflow-prune,
+    V-workflow-flow...) hoac doi V-workflow-commit thanh mot lenh chay ca nhom
+    test cua khoi. Chua lam vi dang giua dot va viec nay doi doc lai tung file
+    test de ghep dung — de sang luot rieng."
+  anchors:
+    - .ganas/modules/M-workflow.yaml:148
+    - src/prune.ts:1
+  scope: P-cli
+  status: open
+- id: ICE-024
+  title: Một phiên chỉ bind được một task nhưng giao được N sub-agent — Stop hook
+    chỉ gác 1/N việc đang chạy
+  found_at: 2026-08-29T16:33:06.910Z
+  review_after_days: 30
+  weight: 3
+  ease: 2
+  why_deferred: "Quan sat truc tiep trong phien 2026-08-29: phien chinh giao ba
+    task song song cho ba sub-agent (T-063, T-064, T-067) dung nhu muc 'Giao
+    viec' cua brief huong dan, nhung ganas next chi bind duoc MOT task vao
+    state.json (bindSession thay ca SessionRecord). He qua: Stop hook doc
+    sessionRecord roi chi evaluateGate cho dung task do (handlers.ts:353-356),
+    nen hang rao 'khong ket thuc phien khi viec chua xong' chi phu 1/3 viec dang
+    chay; hai task kia phai goi tay ganas gate <id>. Khong dau hom nay vi phien
+    chinh cham tay tung cai, nhung no lam yeu dung co che duoc quang cao la manh
+    nhat. Lien quan: chinh brief khuyen giao song song (parallelCandidates,
+    brief.ts:333) nen day khong phai cach dung sai, ma la mo hinh thieu mot ve.
+    Huong: state.json giu mot TAP task cho moi phien thay vi mot chuoi, hoac
+    Stop hook cham moi task ma phien dang giu claim."
+  anchors:
+    - src/state.ts:143-148
+    - src/hooks/io/handlers.ts:353-356
+    - src/render/brief.ts:333
+  scope: P-hook
+  status: open

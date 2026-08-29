@@ -55,7 +55,8 @@ exit_contract:
   - kind: command
     run: "test $(find .ganas/.locks -type f 2>/dev/null | wc -l) -lt 20"
     expect: exit_zero
-status: active
+status: done
+done_at: 2026-08-29T16:45:00Z
 created_at: 2026-08-29T00:00:00Z
 
 notes: >-
