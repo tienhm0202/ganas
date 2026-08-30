@@ -62,5 +62,33 @@ exit_contract:
     run: "npm test"
     expect: exit_zero
 
-status: active
+status: done
+done_at: 2026-08-30T06:19:39Z
 created_at: 2026-08-30T05:40:00Z
+
+notes: |-
+  ĐÓNG CHẶNG 2026-08-30. Bốn task, bốn commit.
+
+  Điều đáng giữ: `consumes` bơm HỢP ĐỒNG chứ không bơm FILE, và có test riêng
+  chứng minh đúng vế đó — brief in `shape` của bản vẽ trong `consumes` và KHÔNG
+  in của bản vẽ khác cùng design. Nếu in hết thì nó chỉ là `must_read` viết kiểu
+  khác, và cả trường này mất lý do tồn tại.
+
+  Ràng buộc xếp thứ tự đã trả giá, đã ghi vào `plan-to-tasks/SKILL.md`: trường
+  schema mới phải ship CÙNG người đọc nó ngoài `src/model/`. Khối `agent` không
+  ship một mình được vì người đọc thật của nó là `brief.ts` (P-cli) còn schema ở
+  P-graph-core, mà một task không được chạm hai phạm vi. Giải bằng hàm thuần
+  `agentDispatchLines()` + khai `READ_VIA` — và brief gọi chính hàm đó, nên chỉ
+  có một chỗ quyết bản giao việc trông thế nào.
+
+  Sửa một quyết định sai của chính chặng này: bản vẽ `kind: doc` khai `path` là
+  tên file trần (`README.md`) thì `globsOf()` loại nó khỏi context và bản vẽ XANH
+  VĨNH VIỄN. Sub-agent phát hiện và ghim thành test khẳng định hành vi sai, để
+  người quyết. Quyết: chặn ở tầng schema — `path` phải nằm trong một thư mục.
+  Một đường ghi được ra bản vẽ nói dối là thứ ganas tồn tại để chống.
+
+  Ba lỗ ghi icebox chưa sửa: ICE-025 (cảnh báo giao việc bắn sai khi chạy không
+  có session), ICE-026 (tiêu chí trỏ file test gõ sai thì xanh vĩnh viễn),
+  ICE-027 (`npm test` thỉnh thoảng đỏ vì IPC của node test runner — đáng lo vì
+  `npm test` đang là tiêu chí gate của chính chặng này).
+

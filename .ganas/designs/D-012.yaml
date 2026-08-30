@@ -49,8 +49,9 @@ exit_contract:
     run: "npm test"
     expect: exit_zero
 
-status: draft
+status: active
 created_at: 2026-08-30T05:40:00Z
 notes: |-
-  Để `draft` cho tới khi D-011 xong: chặng này dọn thứ mà D-011 mới đẻ ra
-  (khối `agent`), nên mở sớm là mở một chặng chưa có gì để dọn.
+  Mở `active` 2026-08-30, sau khi D-011 đóng — trước đó để `draft` vì chặng này
+  dọn thứ mà D-011 mới đẻ ra (khối `agent`), mở sớm là mở một chặng chưa có gì
+  để dọn.
