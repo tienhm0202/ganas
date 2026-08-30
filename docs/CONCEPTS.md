@@ -90,6 +90,43 @@ không tồn tại; `spine/design-serves-draft-goal` cảnh báo nếu Goal đó
 `draft` (chưa duyệt); `spine/design-orphaned` cảnh báo nếu mọi Goal design
 phục vụ đã `closed` mà design chưa `archived`/`superseded`.
 
+**`artifacts`** — bản vẽ của chặng: mảng `DesignArtifact` (`zDesignArtifact`,
+`src/model/design.ts`), mỗi phần tử có `id` (cục bộ trong design, dạng
+`A-users-table`), `kind` (`schema`/`migration`/`function`/`api`/`type`/`doc`),
+`module` HOẶC `path` (đúng một trong hai — `superRefine` của `zDesignArtifact`
+ép: `kind: doc` bắt buộc `path` và cấm `module`, mọi kind khác bắt buộc
+`module` và cấm `path`), `shape` (hình dạng mà code phải khớp), `port?` (neo
+vào một cổng đã khai của khối, để `shape` không tồn tại ở hai nơi), `probe?`
+(lệnh đối chiếu bản vẽ với code thật). Đây là cạnh Design → Module mà xương
+sống trước đó thiếu: trước bản vẽ, đường duy nhất từ design xuống code là
+`task.implements` (ngược chiều, task → design) rồi mới `task.touches` (task →
+module) — design không nói được nó CHỐT hình dạng gì, chỉ biết ai đang làm
+nó. `artifactTargets()` (`src/verify/run.ts`) biến mỗi bản vẽ có `probe`
+thành một target sổ cái khoá `D-010/A-x`, nên `ganas verify`, gate, freshness
+và brief đều dùng chung được cơ chế đã có, không cần đường riêng.
+
+Bản vẽ lệch theo đúng ba lý do, nguyên văn docstring `artifactTargets()`:
+"bản vẽ không cũ đi theo đồng hồ. Nó chỉ sai khi file trong khối đổi
+(`stale`), khi chính nó bị sửa (`definition_changed`), hoặc khi probe trượt
+(`failing`)" — vì vậy `ttlDays` của target này cố định `0`. Cơ chế
+`definition_changed` rơi ra trực tiếp từ `artifactStatement()`
+(`src/model/design.ts`): câu niêm phong ghép `kind`, `module`/`path`, VÀ
+`shape` thành một chuỗi, rồi `defHash(definition, statement)` (mục 6) băm cả
+hai — nên sửa riêng `shape` trong YAML (đổi hình dạng, không đụng `probe`)
+vẫn làm freshness rơi xuống `definition_changed`, đúng bài học "vân tay phải
+gồm cả statement" mà mục 6 đã kể.
+
+`artifactIssues()` (hàm thuần, cùng file `design.ts`) đối chiếu bản vẽ với sơ
+đồ khối, sinh bốn loại lệch cấu trúc (`ARTIFACT_ISSUE_CODE`): `missing-module`
+(khối không tồn tại), `missing-probe` (chưa có gì đối chiếu với code thật),
+`port-not-found` (neo vào cổng khối không khai tên đó), `shape-drift` (shape
+bản vẽ khác shape cổng khối — so `.trim()` rồi so ký tự, đúng phép so của
+`portIssues()` ở `src/graph/trace.ts`). `src/graph/validate.ts` dịch chúng
+thành diagnostic `spine/design-artifact-<code>` (ERROR trừ `missing-probe`,
+ở mức warning và chỉ báo khi design đang `active`); `ganas design show` và
+`ganas design check` (`src/commands/design.ts`) in cùng danh sách đó cho
+người — một nơi quyết (`artifactIssues()`), hai nơi in.
+
 ### Task (`T-001`)
 
 `src/model/task.ts`. Task là đơn vị việc thực thi được trong một phiên. Các
@@ -194,6 +231,71 @@ Các field khác của Task:
   **Không** có `blocked`: `blocked_by` cộng `openBlockers()` đã trả lời đúng
   câu đó bằng dữ liệu suy được, còn một status khai tay là câu trả lời thứ hai
   cho cùng một câu hỏi — và hai câu trả lời thì có ngày lệch nhau.
+
+### Task — bản giao việc (`role`, `consumes`, `produces`, `agent`)
+
+**`role`** (`TASK_ROLE`: `design`/`build`, mặc định `build`) — vai của task:
+`design` vẽ bản thiết kế, không đụng code; `build` hiện thực code theo bản
+vẽ. Mặc định `build` chỉ vì đó là giá trị phổ biến nhất trong mọi task khai
+trước khi trường này ra đời, không phải suy luận: không tín hiệu nào (kể cả
+`touches` rỗng, vốn có nhiều lý do khác) tự động biến một task thành
+`design` — người chẻ task phải khai tay. Hai luật đi kèm:
+`spine/design-task-touches-code` (error) cấm task `role: design` khai
+`touches` khác rỗng, vì vẽ và xây trộn vào một task thì không ai chấm được
+bản vẽ TRƯỚC KHI code chạy theo nó; `spine/design-task-without-artifact-criterion`
+(warning) đòi task `role: design` có một tiêu chí `exit_contract` kiểu
+`artifact` trỏ đúng `.ganas/designs/<id>.yaml` của design nó `implements` —
+thiếu nó, ranh giới code của task (`taskBoundary()`, `src/boundary.ts`) rỗng
+và `outsideBoundary()` không báo được khi một task thiết kế lỡ tay sửa code
+thật.
+
+**`consumes`** / **`produces`** — mảng địa chỉ bản vẽ, dạng `D-010/A-x`
+(`zArtifactRef`, `src/model/task.ts`), hợp đồng vào/ra của một bước.
+`consumes` thay phần "hợp đồng" của `context_contract.must_read`: thay vì
+liệt kê đường dẫn rồi bắt agent mở cả file (một design mười bản vẽ mà task
+chỉ dùng hai thì tám cái còn lại là nhiễu, và agent vẫn suy diễn theo nhiễu
+đó), brief bơm thẳng `shape` của đúng những bản vẽ task cần. `produces` là vế
+ngược: bản vẽ nào task này sinh ra.
+
+Có cả hai chiều thì câu "bước sau là task nào" SUY ĐƯỢC: task nào `consumes`
+đúng thứ task này `produces` thì đó là bước sau — nên schema **không có**
+trường `next`. Lý lẽ giống hệt việc `TASK_STATUS` không có `blocked` (xem
+ngay trên): hai câu trả lời khai tay cho cùng một câu hỏi có ngày lệch nhau,
+mà không lỗi nào nổi lên khi chúng lệch.
+
+Cả hai địa chỉ được `resolvesTarget()` (`src/graph/validate.ts`) giải cùng cơ
+chế với tiêu chí `exit_contract` kiểu `verification` (bốn dạng target: fact,
+khối, `khối/verification`, hoặc `design/bản-vẽ`). Luật
+`spine/task-produces-unknown-artifact` (error) báo `consumes`/`produces` trỏ
+địa chỉ không có bản vẽ nào mang tên đó; `spine/task-produces-without-verification`
+(warning) đòi mỗi `produces` phải có một tiêu chí `kind: verification` trỏ
+đúng bản vẽ đó trong `exit_contract` — đúng khuôn `touches` →
+`spine/task-missing-verification`. Ở phía design, `spine/artifact-unproduced`
+(warning, chỉ báo khi design `active`) cảnh báo bản vẽ nào không task nào
+khai `produces` — chốt hình dạng rồi bỏ đó, chưa ai nhận dựng.
+
+**`agent`** (tuỳ chọn — `AgentSpec`, `zAgentSpec` trong `src/model/task.ts`)
+— bản giao việc cho một sub-agent: `persona`, `objective`, `steps`,
+`self_check`, `guardrails`, `tools` (tất cả tuỳ chọn hoặc `.default([])`).
+Đây là CHỈ THỊ cho agent, không phải PHÁT BIỂU về hệ thống, nên không rơi vào
+luật cấm "viết tổng kết văn xuôi rồi coi đó là tri thức" — nhưng ranh giới
+vẫn phải giữ: điều KIỂM CHỨNG ĐƯỢC thuộc `exit_contract` (lệnh chạy được),
+không phải một câu trong `self_check` để agent tự chấm mình; quy trình lặp
+lại ở nhiều task thì thành `skills` (đã có sẵn, brief tự nạp), `steps` chỉ
+cho các bước RIÊNG của task này; guardrail đã cưỡng chế ở nơi khác (`scope` +
+`taskBoundary()` cho "không ra ngoài phạm vi", luật ghi tri thức có hook
+chặn cho "không bịa") thì không chép lại. `tools` là KHUYẾN NGHỊ in ra cho
+người đọc, không phải hàng rào — ganas không cưỡng chế được danh sách công
+cụ một tool sinh sub-agent sẽ dùng.
+
+`agentDispatchLines()` (cùng file `task.ts`) là nơi quyết DUY NHẤT bản giao
+việc trông thế nào thành chữ — brief và validator đều gọi hàm này thay vì tự
+dựng chữ ở nơi khác, để tránh hai bản trôi khỏi nhau. Nó trả về mảng RỖNG khi
+`agent` không nói được gì, và đó chính là điều kiện luật `spine/agent-empty`
+(warning) chấm — không phải một phép đếm trường thứ hai trong validator.
+`agent` bỏ trống ở mọi task khai trước khi trường này ra đời (không suy tự
+động); điền cho đủ lệ vào mọi task đang mở là đưa văn xuôi chết vào đường
+nóng của `loadGraph`, chạy lại mỗi lần hook chạy.
 
 ## 3. Cưỡng chế (enforcement) — tóm tắt cấu hình
 
@@ -557,10 +659,15 @@ flowchart LR
   V1["Verification M-intent V-intent-eval kind=eval"]
   M1 -->|verify| V1
 
+  A1["Artifact D-001/A-intent-shape kind=function probe"]
+  D -->|artifacts| A1
+  A1 -->|module| M1
+
   T -->|scope| P
   T -->|touches| M1
   T -->|touches| M2
   T -->|exit_contract verification target| V1
+  T -->|produces| A1
 
   F["Fact F-ACC-007 scope=P-chat-core"]
   T -->|context_contract facts| F
@@ -577,10 +684,20 @@ loại `verification` trỏ đúng vào bằng chứng của Module đó
 (`spine/task-missing-verification`). Module nằm trong đúng một Part (nếu có
 khai `part`), và cạnh `depends_on` giữa các Module không được tạo chu trình.
 
+Cạnh `D -->|artifacts| A1 -->|module| M1` là cạnh Design → Module mà xương
+sống trước đó không có (mục 2, phần Design): design chốt hình dạng của
+`M-intent` ngay trong `artifacts`, không phải chỉ qua task đang hiện thực
+nó. Cạnh `T -->|produces| A1` là vế ngược của `T -->|touches| M1`: một task
+`consumes`/`produces` bản vẽ nào thì địa chỉ đó (`D-001/A-intent-shape`)
+cũng phải giải được qua `resolvesTarget()` (`spine/task-produces-unknown-artifact`
+nếu không), và một `produces` không kèm tiêu chí `verification` trỏ đúng bản
+vẽ đó bị cảnh báo `spine/task-produces-without-verification`.
+
 ## 9. Bảng tiền tố ID (tham chiếu nhanh)
 
-Từ `ID_PATTERNS` (`src/model/common.ts`) và `zVerificationId`
-(`src/model/verification.ts`):
+Từ `ID_PATTERNS` (`src/model/common.ts`), `zVerificationId`
+(`src/model/verification.ts`) và `zArtifactId`
+(`src/model/design.ts`):
 
 | Tiền tố | Loại | Ví dụ |
 | --- | --- | --- |
@@ -594,6 +711,16 @@ Từ `ID_PATTERNS` (`src/model/common.ts`) và `zVerificationId`
 | `M-` | Module | `M-intent` |
 | `P-` | Phạm vi công việc (Scope) | `P-chat-core` |
 | `V-` | Verification | `V-intent-smoke` |
+| `A-` | Bản vẽ (Artifact) — **cục bộ trong một design** | `A-users-table` |
 
 Lưu ý dễ nhầm: **Decision dùng `DEC-`, không phải `D-`** — `D-` đã là tiền
 tố của Design.
+
+`A-` **không** nằm trong `ID_PATTERNS` toàn cục như chín tiền tố còn lại —
+`zArtifactId` chỉ ép khuôn chữ (`A-[a-z0-9][a-z0-9-]*`), còn tự nó không trỏ
+tới đâu cả, đúng cách `V-` (Verification) cũng cục bộ trong một Module. Địa
+chỉ ĐẦY ĐỦ ghép cả hai vế bằng dấu gạch chéo: `D-010/A-users-table` (id
+design, gạch chéo, id bản vẽ) — cùng khuôn với `M-intent/V-intent-smoke`. Đã
+kiểm không đụng tiền tố nào khác trong `ID_PATTERNS` (`goal`/`design`/`task`/
+`fact`/`claim`/`legacyClaim`/`decision`/`module`/`scope`/`icebox`/`proposal`
+— `src/model/common.ts`), nên `A-` an toàn dùng làm tiền tố cục bộ mới.

@@ -42,6 +42,32 @@ context của phiên này.
    - `exit_contract` — mỗi khối trong `touches` phải có ít nhất một tiêu chí
      `kind: verification` kiểm nó (luật `spine/task-missing-verification`,
      đã có sẵn — không viết luật mới).
+   - `role` — `design` (chốt bản vẽ, không đụng code) hay `build` (hiện thực
+     theo bản vẽ). Mặc định `build`; khai `design` thì task đó **không được**
+     có `touches` (`spine/design-task-touches-code`, error) và phải có tiêu
+     chí `exit_contract` kiểu `artifact` trỏ `.ganas/designs/<id>.yaml`
+     (`spine/design-task-without-artifact-criterion`).
+   - `consumes` / `produces` — nếu design đã có `artifacts` (bản vẽ, địa chỉ
+     `D-010/A-x`), khai task nào SINH bản vẽ nào (`produces`) và task nào
+     CẦN bản vẽ nào (`consumes`) thay vì nhét đường dẫn vào
+     `context_contract.must_read`: brief bơm thẳng `shape` của đúng bản vẽ
+     cần, một design mười bản vẽ mà task chỉ dùng hai thì tám cái còn lại là
+     nhiễu. `produces` phải kèm một tiêu chí `exit_contract` kiểu
+     `verification` trỏ đúng bản vẽ đó, nếu không `spine/task-produces-without-verification`
+     cảnh báo. Đừng khai tay task nào là "bước sau" (không có trường `next`)
+     — nó SUY được từ việc task sau `consumes` đúng thứ task này `produces`.
+   - `agent` — CHỈ điền khi task thật sự sẽ giao cho sub-agent (xem mục 5 và
+     skill `design` cho bản vẽ nó cần). Ba ranh giới hay sai:
+     - điều **kiểm chứng được** thuộc `exit_contract` (lệnh chạy được),
+       KHÔNG phải một câu trong `agent.self_check` để agent tự chấm mình —
+       tự chấm mình không phải bằng chứng.
+     - quy trình **lặp lại ở nhiều task** thì thành `skills` (đã có sẵn,
+       brief tự nạp theo `touches`); `agent.steps` chỉ cho bước RIÊNG của
+       task này.
+     - guardrail đã cưỡng chế ở nơi khác thì **đừng chép lại**: "không ra
+       ngoài scope" đã là `scope` + `taskBoundary()`; "không bịa tri thức"
+       đã là luật ghi tri thức có hook chặn. Một `agent.guardrails` lặp lại
+       luật đã cưỡng chế sẵn chỉ làm task dài ra mà không thêm gì.
 
    Có tiêu chí thôi chưa đủ: mỗi tiêu chí phải **ĐỎ ngay lúc viết task**.
    Xanh sẵn thì nó không gác gì — task có thể "xong" mà chẳng ai phải sửa
@@ -73,6 +99,26 @@ context của phiên này.
 6. **Chạy `ganas validate`.** Validator hiện có (liên kết goal/design/scope,
    `task-missing-verification`, `estimated_context: large`...) đã đủ để bắt
    lỗi chẻ ẩu — không cần bước kiểm tra thủ công thêm.
+
+## Hai ràng buộc xếp thứ tự đã trả giá thật
+
+Hai điều dưới đây từng làm việc chẻ task phải sửa lại giữa chừng — chẻ tiếp
+theo mà biết trước thì khỏi lặp lại:
+
+- **Một task không được chạm khối của hai phạm vi.**
+  `scope/task-touches-outside-scope` (error) bắt lỗi khi `task.touches` có
+  khối không nằm trong `scope.modules` của phạm vi task thuộc về. Nếu một
+  bước công việc tự nhiên đụng khối ở hai `Scope` khác nhau, chẻ theo **ranh
+  giới phạm vi trước**, rồi mới chẻ tiếp theo việc bên trong từng phạm vi —
+  không chẻ theo việc trước rồi mới phát hiện task chạm sai phạm vi.
+- **Trường schema mới phải ship CÙNG người đọc nó ngoài `src/model/`.** Thêm
+  một field vào `zTask`/`zDesign`/... mà chưa có chỗ nào đọc nó (validator,
+  brief, lệnh CLI) thì `test/no-dead-ends.test.ts` đỏ — đây là guard test
+  chặn đúng lớp lỗi "khai rồi không nối dây" đã xảy ra nhiều lần trong repo
+  này (`zone_survey`, `part.exit`, `Fact.ttl_days`...). Đừng chẻ một task
+  "thêm field vào schema" tách rời khỏi task "dùng field đó ở đâu đó thật" —
+  hai việc đó phải chung một task hoặc task sau phải `blocked_by` ngay, nếu
+  không graph đỏ ở khoảng giữa hai task.
 
 ## Không làm gì thêm
 

@@ -4,20 +4,23 @@ serves:
   - G-001
 implements: D-011
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
-model: scribe
+model: verifier
 blocked_by:
   - T-074
 
 context_contract:
   must_read:
     - path: "docs/CONCEPTS.md"
-      why: "mục 2 (Task) và mục 8 (sơ đồ mermaid) phải có cạnh Design→Module qua artifacts và cạnh task→bản vẽ"
+      why: "mục 2 (Task) và mục 8 (sơ đồ mermaid) phải có cạnh Design→Module qua
+        artifacts và cạnh task→bản vẽ"
     - path: "plugin/skills/plan-to-tasks/SKILL.md"
-      why: "chẻ plan ra task thì phải điền luôn `agent`/`consumes`/`produces`, nếu không trường mới không ai dùng"
+      why: "chẻ plan ra task thì phải điền luôn `agent`/`consumes`/`produces`, nếu
+        không trường mới không ai dùng"
     - path: ".claude/rules/agent-guide.md"
-      why: "luật viết file hướng dẫn: ngắn ở gốc, đặt gần code, đừng chép tri thức vào"
+      why: "luật viết file hướng dẫn: ngắn ở gốc, đặt gần code, đừng chép tri thức
+        vào"
   facts: []
   open_questions: []
 
@@ -34,7 +37,8 @@ exit_contract:
     path: "plugin/skills/plan-to-tasks/SKILL.md"
     must_contain: "produces"
   - kind: command
-    run: "npx tsx --test 'test/plugin-selfcontained.test.ts' 'test/cli-help.test.ts'"
+    run: "npx tsx --test 'test/plugin-selfcontained.test.ts'
+      'test/cli-help.test.ts'"
     expect: exit_zero
   - kind: command
     run: "npm test"
@@ -53,3 +57,11 @@ notes: |-
 
   Đừng viết dài. `docs/CONCEPTS.md` là tham chiếu được phép dài; SKILL.md thì
   không — nó nạp vào context mỗi lần skill được gọi.
+
+  Tier đổi từ `scribe` sang `verifier` sau khi nhìn lại: `docs/CONCEPTS.md` tự
+  đặt tiêu chuẩn "mọi khẳng định được đối chiếu TRỰC TIẾP với source code tại
+  thời điểm viết, không suy đoán từ tool tương tự thường làm gì". Đó là việc đọc
+  code rồi kiểm từng câu, không phải việc chép. Gán `scribe` lúc chẻ task là gán
+  sai — và đây đúng lý do `task.model` là quyết định của người chứ không suy tự
+  động.
+done_at: 2026-08-30T06:18:56.182Z
