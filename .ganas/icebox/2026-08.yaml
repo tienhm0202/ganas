@@ -647,3 +647,24 @@
     - src/boundary.ts:298
   scope: P-cli
   status: open
+- id: ICE-026
+  title: Tiêu chí exit_contract trỏ file test gõ sai thì XANH VĨNH VIỄN
+  found_at: 2026-08-30T05:28:02.641Z
+  review_after_days: 30
+  weight: 4
+  ease: 4
+  why_deferred: "Đo được: `npx tsx --test test/khong-ton-tai.test.ts` một mình
+    thoát 1, nhưng TRỘN với ít nhất một file có thật thì thoát 0 — node test
+    runner bỏ qua file thiếu im lặng. Nên một tiêu chí kiểu `--test
+    'test/a.test.ts' 'test/go-sai.test.ts'` chấm XANH trong khi nửa phép kiểm
+    chưa từng chạy. Đây đúng lớp lỗi ganas sinh ra để chống: một gate tự xanh vì
+    không có gì để chấm. `lintProbe` hiện không bắt (nó soi quan hệ lệnh với
+    statement, không kiểm đường dẫn có tồn tại). Hướng sửa: thêm luật cho
+    lintProbe hoặc validate — bóc mọi token khớp \\S+\\.test\\.ts không chứa
+    glob trong `run` và kiểm existsSync. Quét hôm nay trên repo: 1 chỗ dính
+    (T-072, đang mở, đã sửa)."
+  anchors:
+    - src/verify/lint.ts:1
+    - src/model/common.ts:84
+  scope: P-graph-core
+  status: open
