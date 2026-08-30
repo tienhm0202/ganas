@@ -352,6 +352,97 @@ ganas next --session sess-42 --json
 ganas next --session sess-42 --switch
 ```
 
+### `ganas design [list|new|show|check]`
+
+Design (chặng) là bản thiết kế phục vụ một goal — `serves`, `summary`, và một
+mảng `artifacts` khai hình dạng (`shape`) mà code phải khớp, mỗi bản vẽ có
+thể kèm `probe` để đối chiếu với code thật (xem `src/model/design.ts`).
+`list`/`show` **CHỈ ĐỌC** — không đụng đĩa; `check` chạy probe thật và ghi
+sổ cái, cùng khuôn `ganas trace`.
+
+Không có lệnh con ⇒ **liệt kê** (giống gõ `list`): mỗi chặng kèm trạng thái,
+số bản vẽ, và số bản vẽ còn `fresh`.
+
+```
+D-010 — Bản vẽ chấm được...
+  active · 3 bản vẽ · 2/3 còn tươi
+```
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--json` | Xuất mảng `{ id, title, status, artifacts, fresh }`. |
+
+#### `ganas design new`
+
+Phỏng vấn **3 câu** (tiêu đề, phục vụ goal nào, tóm tắt cách tiếp cận) rồi ghi
+`designs/D-xxx.yaml` với `artifacts: []` và `exit_contract: []` rỗng — thêm
+bản vẽ và hợp đồng ra là việc làm sau, khi hình dạng đã rõ. Id gợi ý là số
+`D-xxx` kế tiếp (Enter là nhận), dùng chung khuôn `writeNewYaml()` với
+`ganas scope new` nên hai phiên chọn trùng id gần như đồng thời vẫn được
+chặn (`open(file, "wx")`).
+
+Không có TTY (hoặc có `--yes`) thì cả ba câu phải đưa qua tuỳ chọn.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--title <chuỗi>` | *Chặng này tên gì?* |
+| `--serves <G-001,...>` | *Phục vụ goal nào?* Danh sách id goal cách nhau bởi dấu phẩy, mỗi id phải khớp `^G-\d{3,}$`. |
+| `--summary <chuỗi>` | *Tóm tắt cách tiếp cận?* |
+| `--id <D-...>` | Ghi đè id tự suy. |
+| `--yes, -y` | Không hỏi, đọc hết từ tuỳ chọn. |
+
+**Mã thoát:** `0` nếu tạo được; `1` (`GanasError`) nếu thiếu một trong ba
+câu, một id goal trong `--serves` sai dạng, id design sai dạng, hoặc id đã
+tồn tại.
+
+#### `ganas design show <D-xxx>`
+
+In chi tiết một chặng: tiêu đề, trạng thái, goal phục vụ, tóm tắt, bảng bản
+vẽ (mỗi bản vẽ kèm nhãn độ tươi từ `freshnessMark()` — bản vẽ chưa có
+`probe` thì không có gì để tính, nhãn ra `⚠ [KHÔNG RÕ]` kèm ghi chú), và mọi
+lệch cấu trúc từ `artifactIssues()` (khối không tồn tại, thiếu probe, cổng
+không tồn tại, shape trôi khỏi cổng đã khai). Chặng chưa có bản vẽ nào thì in
+rõ "chưa có bản vẽ nào", không vỡ.
+
+**Đối số định vị:** `<D-xxx>` — bắt buộc.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--json` | Xuất design đầy đủ kèm `artifacts[].freshness` và `issues`. |
+
+**Mã thoát:** `0` khi in được; `1` (`GanasError`) nếu thiếu id hoặc design
+không tồn tại.
+
+#### `ganas design check [D-xxx]`
+
+Chạy `probe` của từng bản vẽ (`artifactTargets()` + `runTarget()`, đúng lõi
+`ganas verify` dùng) và ghi sổ cái, cộng báo lệch cấu trúc qua
+`artifactIssues()` — một nguồn quyết duy nhất, `design show`/`ganas
+validate` in cùng danh sách đó. Không truyền `D-xxx` thì chấm **mọi** chặng
+đang `status: active`. Chặng chưa có bản vẽ nào (hoặc bản vẽ nào cũng thiếu
+`probe`) thì nói rõ "không có gì để chấm" — không im lặng trả mã `0` như thể
+đã kiểm.
+
+| Tuỳ chọn | Ý nghĩa |
+|---|---|
+| `--dry-run` | Tính toán và in những gì SẼ chạy, không chạy shell thật và không ghi sổ cái — cùng nghĩa `--dry-run` của `runTarget()`. |
+| `--no-mutation` | Bỏ mutation test khi chạy probe thật (nhanh hơn, bằng chứng yếu hơn) — giống `ganas verify --no-mutation`. |
+| `--session <id>` | Gắn lần chạy với phiên khi ghi sổ cái. |
+| `--json` | Xuất `{ dryRun, designs: [{ id, issues, results }] }`. |
+
+**Mã thoát:** `1` nếu có ít nhất một lệch cấu trúc HOẶC ít nhất một bản vẽ
+không đạt/không tươi; `0` nếu sạch (kể cả khi không có gì để chấm).
+
+**Ví dụ:**
+```
+ganas design
+ganas design show D-010
+ganas design new --yes --title "Bản vẽ chấm được" --serves G-001 \
+  --summary "Nối design tới code qua artifacts"
+ganas design check                  # mọi chặng active
+ganas design check D-010 --dry-run  # xem trước, không ghi sổ cái
+```
+
 ### `ganas brief [task]`
 
 In brief của một task cụ thể (mục tiêu đang phục vụ, tài liệu phải đọc, tri
@@ -1036,6 +1127,7 @@ echo '{"session_id":"sess-42",...}' | ganas hook session-start
 | `init` | — | không | không |
 | `validate` | — | không | có |
 | `next` | — | ghi `state.json` | có |
+| `design [list\|new\|show\|check]` | id (`show`/`check`) | `new` ghi YAML · `check` ghi sổ (trừ `--dry-run`) · `list`/`show` không | có |
 | `brief [task]` | task | không | có |
 | `gate [task]` | task | không | có |
 | `verify [target...]` | target... | ghi | có |

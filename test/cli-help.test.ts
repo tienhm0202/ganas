@@ -28,6 +28,7 @@ const EXPECTED_COMMANDS = [
   "id",
   "brief",
   "next",
+  "design",
   "gate",
   "verify",
   "trace",

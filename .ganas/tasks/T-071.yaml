@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-010
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: verifier
 blocked_by:
@@ -13,9 +13,11 @@ blocked_by:
 context_contract:
   must_read:
     - path: "src/commands/CLAUDE.md"
-      why: "thêm một lệnh mới là sửa BỐN chỗ, không phải một — quên chỗ nào thì test đỏ ở file nghe chẳng liên quan"
+      why: "thêm một lệnh mới là sửa BỐN chỗ, không phải một — quên chỗ nào thì test
+        đỏ ở file nghe chẳng liên quan"
     - path: "src/commands/scope.ts"
-      why: "runNew:302 là khuôn phỏng vấn; writeNewYaml:23 và prompt:141 phải DÙNG LẠI, không chép"
+      why: "runNew:302 là khuôn phỏng vấn; writeNewYaml:23 và prompt:141 phải DÙNG
+        LẠI, không chép"
     - path: "src/commands/trace.ts"
       why: "khuôn cho `design check`: chạy lệnh rồi ghi sổ cái, có --dry-run"
   facts: []
@@ -33,6 +35,12 @@ exit_contract:
   - kind: command
     run: "npx tsx --test 'test/cli-help.test.ts'"
     expect: exit_zero
+  # `docs/COMMANDS.md` không thuộc `paths` của khối nào, nên không có đường nào
+  # khác kéo nó vào ranh giới — mà `cli-help.test.ts` lại ĐÒI mục trong đó. Thiếu
+  # tiêu chí này thì `ganas commit` bỏ lại file tài liệu và cây commit đỏ.
+  - kind: artifact
+    path: "docs/COMMANDS.md"
+    must_contain: "ganas design"
   - kind: verification
     target: "M-commands/V-commands-smoke"
   - kind: verification
@@ -40,7 +48,7 @@ exit_contract:
   - kind: verification
     target: "M-templates/V-templates-init"
 
-notes: >-
+notes: |-
   Bốn chỗ đăng ký: `src/commands/design.ts` → bảng `COMMANDS` VÀ khối `HELP`
   trong `src/cli.ts` → `EXPECTED_COMMANDS` trong `test/cli-help.test.ts` → mục
   `### ganas design` trong `docs/COMMANDS.md` cộng dòng ở "Bảng tra nhanh".
@@ -53,3 +61,4 @@ notes: >-
   `design`/`show` là lệnh CHỈ ĐỌC — không được ghi đĩa. Lỗi của người dùng ném
   `GanasError`, không phải `Error`. Nhánh `default` của switch phải liệt kê các
   lệnh con CÓ THẬT.
+done_at: 2026-08-30T05:20:21.408Z

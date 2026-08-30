@@ -20,7 +20,7 @@ import { openProject } from "./_common.js";
  * gần như đồng thời: kiểm `graph.scopes.has(id)` ở trên chỉ soi graph đã nạp
  * lúc lệnh bắt đầu, không thấy được file phiên kia vừa tạo xong.
  */
-async function writeNewYaml(file: string, content: string, describe: string): Promise<void> {
+export async function writeNewYaml(file: string, content: string, describe: string): Promise<void> {
   try {
     await writeFile(file, content, { encoding: "utf8", flag: "wx" });
   } catch (err) {
@@ -138,7 +138,7 @@ function formatRows(rows: ScopeRow[]): string {
  * scope new — bước dịch
  * ------------------------------------------------------------------------- */
 
-async function prompt(question: string, fallback = ""): Promise<string> {
+export async function prompt(question: string, fallback = ""): Promise<string> {
   const { createInterface } = await import("node:readline/promises");
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {

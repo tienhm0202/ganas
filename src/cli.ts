@@ -25,6 +25,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   id: () => import("./commands/id.js"),
   brief: () => import("./commands/brief.js"),
   next: () => import("./commands/next.js"),
+  design: () => import("./commands/design.js"),
   gate: () => import("./commands/gate.js"),
   verify: () => import("./commands/verify.js"),
   trace: () => import("./commands/trace.js"),
@@ -52,6 +53,9 @@ Lệnh:
   scope [new|assign]   Phạm vi công việc: liệt kê, tạo mới (phỏng vấn), vá chỗ quên khai
   id <loại>            Cấp id kế tiếp (goal/design/task/claim/decision/fact)
   next                 Chọn task kế tiếp và in brief đầy đủ
+  design [list|new|show|check]
+                       Chặng thiết kế: liệt kê, phỏng vấn tạo mới, xem chi tiết,
+                       chấm bản vẽ (artifacts) với code thật
   brief [task]         In brief của một task
   gate [task]          Chấm điều kiện hoàn thành của task
   verify [target...]   Chạy bằng chứng: probe và eval, ghi sổ cái (--scope lọc theo phạm vi)
