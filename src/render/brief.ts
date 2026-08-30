@@ -4,6 +4,7 @@ import { type FactFreshness, freshnessMark } from "../graph/freshness.js";
 import { openBlockers, parallelCandidates } from "../graph/select.js";
 import type { Graph, Sourced } from "../graph/types.js";
 import {
+  agentDispatchLines,
   agentModelAlias,
   canDispatchSubagent,
   type Claim,
@@ -347,8 +348,86 @@ function findSupersededBy(graph: Graph, designId: string): string | undefined {
 }
 
 /**
+ * Bản giao việc CHỈ THỊ từ `task.agent` (persona, objective, steps, guardrails,
+ * self_check, tools) — dựng bằng cách gọi thẳng `agentDispatchLines()`, KHÔNG
+ * tự ghép chữ lần thứ hai. `agentDispatchLines()` là NGƯỜI ĐỌC duy nhất mà
+ * `test/no-dead-ends.test.ts` khai (`READ_VIA`) cho sáu trường của
+ * `AgentSpec`; dựng lại cùng loại dòng ở đây sẽ tạo ra hai bản có thể lệch
+ * nhau, đúng lỗi mà việc gom một hàm thuần đã sinh ra để tránh.
+ *
+ * `task.agent` vắng mặt là chuyện BÌNH THƯỜNG — nó tuỳ chọn, chỉ điền khi task
+ * thật sự được giao cho sub-agent (xem docstring `Task.agent`). Trả về `""`,
+ * không in khung rỗng.
+ */
+function agentInstructionBlock(t: Task): string {
+  if (!t.agent) return "";
+  const lines = agentDispatchLines(t.agent);
+  if (lines.length === 0) return "";
+  return `**Bản giao việc chi tiết (\`task.agent\`):**\n\n${bullet(lines)}`;
+}
+
+/**
+ * `consumes`: hợp đồng VÀO — bơm thẳng `shape` của đúng những bản vẽ
+ * (`Design.artifacts`) task này khai cần, thay vì một danh sách đường dẫn
+ * (`context_contract.must_read`) bắt agent tự mở cả design để tìm.
+ *
+ * CHỈ tra và in đúng những `id` có mặt trong `consumes` — KHÔNG in mọi
+ * artifact của design đó. In hết là biến mục này thành `must_read` viết kiểu
+ * khác, đúng cái D-011 sinh ra để tránh (xem docstring `Task.consumes`).
+ *
+ * Bản vẽ không tra được (design không tồn tại, hoặc design tồn tại nhưng
+ * không có artifact id đó) thì nói thẳng — im lặng bỏ qua là giấu một hợp
+ * đồng hỏng.
+ */
+function consumesBlock(graph: Graph, t: Task): string {
+  if (t.consumes.length === 0) return "";
+
+  const items = t.consumes.map((ref) => {
+    const [designId, artifactId] = ref.split("/");
+    const artifact = graph.designs.get(designId!)?.value.artifacts.find((a) => a.id === artifactId);
+    if (!artifact) {
+      return `\`${ref}\` — ⚠ **KHÔNG TÌM THẤY** bản vẽ này (design hoặc artifact không tồn tại)`;
+    }
+    return `\`${ref}\` (${artifact.kind}) — \`${artifact.shape}\``;
+  });
+
+  return (
+    `**Bản vẽ cần dùng (hợp đồng vào — \`consumes\`):** chỉ đọc \`shape\` dưới đây, ` +
+    `không cần mở cả design:\n\n${bullet(items)}`
+  );
+}
+
+/**
+ * `produces` + bước kế SUY ĐƯỢC. Không có trường `next` khai tay (xem
+ * docstring `Task.produces`): task nào `consumes` một bản vẽ mà task NÀY
+ * `produces` thì đó là bước sau, suy bằng cách quét `graph.tasks`.
+ */
+function producesBlock(graph: Graph, t: Task): string {
+  if (t.produces.length === 0) return "";
+
+  const items = t.produces.map((ref) => `\`${ref}\``);
+
+  const next = [...graph.tasks.values()]
+    .map((s) => s.value)
+    .filter((other) => other.id !== t.id && other.consumes.some((ref) => t.produces.includes(ref)))
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((other) => `\`${other.id}\` — ${other.title}`);
+
+  return (
+    `**Bản vẽ task này sinh ra (\`produces\`):**\n\n${bullet(items)}` +
+    (next.length > 0
+      ? `\n\n**Bước kế (suy từ task khác \`consumes\` đúng bản vẽ trên, không khai tay):**\n\n${bullet(next)}`
+      : "")
+  );
+}
+
+/**
  * Mục "Giao việc": biến `task.model` (một tier) thành hành động cụ thể của
- * harness đang dùng (`config.harness`).
+ * harness đang dùng (`config.harness`), CỘNG bản giao việc đầy đủ của D-011 —
+ * chỉ thị cho agent (`agentInstructionBlock`), hợp đồng vào (`consumesBlock`)
+ * và hợp đồng ra + bước kế (`producesBlock`). Ba khối sau độc lập với việc
+ * task có `model`/dispatch được hay không, nên được ghép vào CẢ BA nhánh bên
+ * dưới, không chỉ nhánh "dispatch được".
  *
  * Tách hẳn khỏi mục kỹ năng vì đây không phải gợi ý mềm nữa: phiên chính đọc
  * brief là phiên ĐIỀU PHỐI. Trước đây brief chỉ in một dòng "Gợi ý giao việc:
@@ -358,51 +437,56 @@ function findSupersededBy(graph: Graph, designId: string): string | undefined {
 function dispatchSection(graph: Graph, t: Task): string {
   const H = `## Giao việc`;
 
+  const extra = [agentInstructionBlock(t), consumesBlock(graph, t), producesBlock(graph, t)]
+    .filter((s) => s.length > 0)
+    .join("\n\n");
+  const withExtra = (body: string): string => (extra ? `${body}\n\n${extra}` : body);
+
   if (!t.model) {
-    return (
+    return withExtra(
       `${H} — ⚠ chưa ai quyết ai làm\n\n` +
-      `Task này chưa gán \`model\`. Nghĩa là lúc chẻ task không ai quyết nó khó tới đâu, ` +
-      `nên mặc định phiên chính ôm hết bằng model mạnh nhất — kể cả việc cơ học.\n\n` +
-      `Sửa file task trong \`.ganas/tasks/\`, thêm một dòng:\n\n` +
-      `\`\`\`yaml\nmodel: main   # main = khó/mơ hồ · verifier = khoảng giữa · scribe = cơ học\n\`\`\`\n\n` +
-      `Rồi \`ganas validate\` (luật \`spine/task-missing-model\`). ` +
-      `Không đoán hộ ở đây: heuristic suy tier không đáng tin bằng người vừa chẻ task.`
+        `Task này chưa gán \`model\`. Nghĩa là lúc chẻ task không ai quyết nó khó tới đâu, ` +
+        `nên mặc định phiên chính ôm hết bằng model mạnh nhất — kể cả việc cơ học.\n\n` +
+        `Sửa file task trong \`.ganas/tasks/\`, thêm một dòng:\n\n` +
+        `\`\`\`yaml\nmodel: main   # main = khó/mơ hồ · verifier = khoảng giữa · scribe = cơ học\n\`\`\`\n\n` +
+        `Rồi \`ganas validate\` (luật \`spine/task-missing-model\`). ` +
+        `Không đoán hộ ở đây: heuristic suy tier không đáng tin bằng người vừa chẻ task.`,
     );
   }
 
   const modelId = graph.config.models[t.model];
 
   if (!canDispatchSubagent(graph.config.harness)) {
-    return (
+    return withExtra(
       `${H}\n\n` +
-      `Tier \`${t.model}\` → model \`${modelId}\`.\n\n` +
-      `Harness khai trong \`config.yaml\` là \`${graph.config.harness}\`: ganas nối vào đó qua MCP, ` +
-      `mà MCP không tạo được agent con và không đổi được model của phiên. ` +
-      `Đổi model sang \`${modelId}\` trong picker trước khi làm, hoặc mở một phiên riêng bằng model đó.\n\n` +
-      `> **Đây là khuyến nghị, không phải hàng rào** — ganas không kiểm được bạn có đổi hay không. ` +
-      `Đừng ghi vào \`.ganas/\` rằng task đã chạy đúng tier.`
+        `Tier \`${t.model}\` → model \`${modelId}\`.\n\n` +
+        `Harness khai trong \`config.yaml\` là \`${graph.config.harness}\`: ganas nối vào đó qua MCP, ` +
+        `mà MCP không tạo được agent con và không đổi được model của phiên. ` +
+        `Đổi model sang \`${modelId}\` trong picker trước khi làm, hoặc mở một phiên riêng bằng model đó.\n\n` +
+        `> **Đây là khuyến nghị, không phải hàng rào** — ganas không kiểm được bạn có đổi hay không. ` +
+        `Đừng ghi vào \`.ganas/\` rằng task đã chạy đúng tier.`,
     );
   }
 
   const alias = agentModelAlias(modelId);
   const modelArg = alias ? `\`model: "${alias}"\`` : `model \`${modelId}\``;
 
-  return (
+  return withExtra(
     `${H} — task này KHÔNG chạy thẳng ở phiên chính\n\n` +
-    `Tier \`${t.model}\` → model \`${modelId}\` (${modelArg}).\n\n` +
-    `Phiên chính là người ĐIỀU PHỐI: chọn task, đọc brief, giao việc, chấm gate, commit. ` +
-    `Phần sửa code của task này chạy trong sub-agent riêng:\n\n` +
-    bullet([
-      `Tạo sub-agent với ${modelArg}.`,
-      `Prompt mở đầu bằng \`ganas brief ${t.id}\` — để sub-agent tự lấy đúng brief này, ` +
-        `đừng chép tay lại (chép tay là chỗ brief bị bóp méo).`,
-      `Sub-agent xong thì phiên chính chạy \`ganas gate\` để chấm. ` +
-        `Chấm bằng lệnh, không bằng lời tổng kết của sub-agent.`,
-    ]) +
-    `\n\nHai lý do, không phải một: context phiên chính không bị chi tiết thực thi nuốt mất, ` +
-    `và tier thấp không nghĩ quá tay cho việc cơ học.\n\n` +
-    parallelBlock(graph, t) +
-    `> Nếu BẠN ĐANG LÀ sub-agent nhận chính task này: làm luôn, đừng giao tiếp nữa.`
+      `Tier \`${t.model}\` → model \`${modelId}\` (${modelArg}).\n\n` +
+      `Phiên chính là người ĐIỀU PHỐI: chọn task, đọc brief, giao việc, chấm gate, commit. ` +
+      `Phần sửa code của task này chạy trong sub-agent riêng:\n\n` +
+      bullet([
+        `Tạo sub-agent với ${modelArg}.`,
+        `Prompt mở đầu bằng \`ganas brief ${t.id}\` — để sub-agent tự lấy đúng brief này, ` +
+          `đừng chép tay lại (chép tay là chỗ brief bị bóp méo).`,
+        `Sub-agent xong thì phiên chính chạy \`ganas gate\` để chấm. ` +
+          `Chấm bằng lệnh, không bằng lời tổng kết của sub-agent.`,
+      ]) +
+      `\n\nHai lý do, không phải một: context phiên chính không bị chi tiết thực thi nuốt mất, ` +
+      `và tier thấp không nghĩ quá tay cho việc cơ học.\n\n` +
+      parallelBlock(graph, t) +
+      `> Nếu BẠN ĐANG LÀ sub-agent nhận chính task này: làm luôn, đừng giao tiếp nữa.`,
   );
 }
 
