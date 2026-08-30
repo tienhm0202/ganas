@@ -1,6 +1,6 @@
 import { DIRS, GANAS_DIR, LEDGER_FILE } from "./graph/paths.js";
 import type { Graph } from "./graph/types.js";
-import type { Task } from "./model/index.js";
+import type { Freshness, Task } from "./model/index.js";
 import { TOUCHED_PATHS_CAP } from "./state.js";
 import { matchesAny } from "./util/glob.js";
 import { looksLikePath, stripOperators, tokenizeShell } from "./util/shell.js";
@@ -78,8 +78,8 @@ export function contractPaths(task: Task): string[] {
  * `taskBoundary` chưa từng đọc `verify.run` nên không biết file test đó tồn
  * tại.
  *
- * `target` có ba dạng, phân biệt bằng tiền tố (không thể lẫn — `M-`, `F-` là
- * hai bảng chữ cái ID rời nhau, xem `ID_PATTERNS` ở `model/common.ts`):
+ * `target` có bốn dạng, phân biệt bằng tiền tố (không thể lẫn — `M-`, `F-`,
+ * `D-` là ba bảng chữ cái ID rời nhau, xem `ID_PATTERNS` ở `model/common.ts`):
  *
  *  - `M-x`      — MỌI verification của khối `M-x`.
  *  - `M-x/V-y`  — đúng một verification, khớp bằng `moduleTargets()`
@@ -87,6 +87,12 @@ export function contractPaths(task: Task): string[] {
  *  - `F-xxx`    — fact; probe của fact cũng là một lệnh chạy thật (`f.verify`
  *    là `zProbe`), gộp luôn cho nhất quán — không có gì phân biệt fact với
  *    module ở khía cạnh "lệnh này có thể chạm file ngoài `paths`" cả.
+ *  - `D-x/A-y` (và `D-x` trần) — BẢN VẼ của một chặng, khoá do
+ *    `artifactTargets()` (`src/verify/run.ts`) dựng theo khuôn
+ *    `${design.id}/${artifact.id}`. Probe của bản vẽ là lệnh đối chiếu bản vẽ
+ *    với code thật, nên nó cũng chạm file — thiếu nhánh này thì task khai
+ *    `{ kind: verification, target: "D-x/A-y" }` để file đó rơi ra ngoài
+ *    commit, đúng lớp lỗi mà cả hàm này sinh ra để chặn.
  *
  * Target không khớp gì trong graph (khối/fact/verification không tồn tại) thì
  * bỏ qua lặng lẽ — đó là việc của `ganas validate` (spine), không phải của
@@ -118,14 +124,27 @@ export function verificationPathRefs(task: Task, graph: Graph): ContractPathRef[
     }
 
     const slash = target.indexOf("/");
-    const moduleId = slash === -1 ? target : target.slice(0, slash);
-    const mod = graph.modules.get(moduleId)?.value;
+    const ownerId = slash === -1 ? target : target.slice(0, slash);
+
+    const design = graph.designs.get(ownerId)?.value;
+    if (design) {
+      if (slash === -1) {
+        for (const a of design.artifacts) addFromRun(a.probe?.run, `${ownerId}/${a.id}`);
+      } else {
+        const artifactId = target.slice(slash + 1);
+        const a = design.artifacts.find((a) => a.id === artifactId);
+        if (a) addFromRun(a.probe?.run, target);
+      }
+      continue;
+    }
+
+    const mod = graph.modules.get(ownerId)?.value;
     if (!mod) continue;
 
     if (slash === -1) {
-      for (const v of mod.verify) addFromRun(v.run, `${moduleId}/${v.id}`);
+      for (const v of mod.verify) addFromRun(v.run, `${ownerId}/${v.id}`);
     } else {
-      const v = mod.verify.find((v) => `${moduleId}/${v.id}` === target);
+      const v = mod.verify.find((v) => `${ownerId}/${v.id}` === target);
       if (v) addFromRun(v.run, target);
     }
   }
@@ -308,6 +327,86 @@ export function formatDispatchWarning(
     `  có vẻ phiên chính (model mạnh nhất) đã tự làm việc cơ học/kiểm chứng thay vì giao việc.\n` +
     `  Xem mục "Giao việc" trong brief để giao đúng cho sub-agent.\n`
   );
+}
+
+/**
+ * Hai trường mà cảnh báo lệch bản vẽ cần đọc từ một dòng độ tươi.
+ *
+ * Khai CẤU TRÚC chứ không nhập `VerificationState` (`graph/freshness.ts`):
+ * `VerificationState` khớp đủ để truyền thẳng vào, còn `M-cli-core` thì không
+ * phải mọc thêm một cạnh phụ thuộc lên `M-freshness` chỉ để mượn một cái tên
+ * kiểu. Khối này là tính THUẦN cho lớp lệnh — nó nhận dữ liệu, không đi lấy.
+ */
+export interface DriftState {
+  freshness: Freshness;
+  reason: string;
+}
+
+/**
+ * Cảnh báo code đã lệch BẢN VẼ của chặng mà task đang hiện thực.
+ *
+ * Cùng khuôn `formatBoundaryWarning`/`formatDispatchWarning`: hàm thuần, trả
+ * `""` khi không có gì cần nói, chuỗi khác rỗng bắt đầu và kết thúc bằng `\n`.
+ * Đặt ở ĐÂY chứ không ở chỗ gọi vì `gate` và `commit` đều phải nói CÙNG một
+ * khối chữ — hai bản chép tay sẽ trôi khỏi nhau.
+ *
+ * Hai thông điệp, KHÁC NGHĨA, cố ý không gộp:
+ *
+ * - `definition_changed` + task `role: build` — chính BẢN VẼ vừa bị sửa. Đây là
+ *   đổi hợp đồng, không phải hiện thực hợp đồng; làm việc đó trong một task xây
+ *   nghĩa là quyết định thiết kế đi qua mà không ai duyệt. Vai `design` thì đúng
+ *   việc, nên không nói gì.
+ * - `stale`/`failing` — code trong khối đã đổi (hoặc probe trượt) mà chưa ai
+ *   chứng minh nó còn khớp bản vẽ. Bắn cho MỌI vai: bản vẽ trôi khỏi code là
+ *   chuyện của cả hai vai.
+ *
+ * Độ tươi vào đây qua tham số `freshness` (kết quả `computeFreshness`), KHÔNG
+ * đọc thẳng sổ cái — xem luật "không ai đọc thẳng sổ cái để tự kết luận độ
+ * tươi" ở `test/no-dead-ends.test.ts`. Một chỗ thứ hai tự soi sổ cái là một
+ * chỗ thứ hai trả lời "còn dùng được không", và hai chỗ sẽ trôi khỏi nhau.
+ *
+ * Chỉ CẢNH BÁO, không chặn và không đổi mã thoát — cùng hạng `outsideBoundary`.
+ */
+export function formatDesignDriftWarning(
+  task: Task,
+  graph: Graph,
+  freshness: ReadonlyMap<string, DriftState>,
+): string {
+  const design = graph.designs.get(task.implements)?.value;
+  if (!design) return "";
+
+  const changed: string[] = [];
+  const drifted: { id: string; reason: string }[] = [];
+
+  for (const a of design.artifacts) {
+    const targetId = `${design.id}/${a.id}`;
+    const state = freshness.get(targetId);
+    if (!state) continue;
+    if (state.freshness === "definition_changed") {
+      if (task.role === "build") changed.push(targetId);
+    } else if (state.freshness === "stale" || state.freshness === "failing") {
+      drifted.push({ id: targetId, reason: state.reason });
+    }
+  }
+
+  let out = "";
+
+  if (changed.length > 0) {
+    out +=
+      `\n⚠ ${task.id} khai \`role: build\` nhưng đã ĐỔI BẢN VẼ ${changed.join(", ")} —\n` +
+      "  sửa hợp đồng trong một task xây là quyết định không ai duyệt.\n" +
+      `  Tách phần đổi bản vẽ ra một task \`role: design\`, hoặc đổi \`role\` của ${task.id}.\n`;
+  }
+
+  if (drifted.length > 0) {
+    out +=
+      `\n⚠ code đã lệch bản vẽ ${drifted.map((d) => d.id).join(", ")}:\n` +
+      drifted.map((d) => `    ${d.id} — ${d.reason}`).join("\n") +
+      `\n  Chạy \`ganas design check ${design.id}\` để xem lệch ở đâu, rồi \`ganas verify\`\n` +
+      "  cho bản vẽ đó khi code đã khớp lại.\n";
+  }
+
+  return out;
 }
 
 const YAML_EXT = /\.ya?ml$/;

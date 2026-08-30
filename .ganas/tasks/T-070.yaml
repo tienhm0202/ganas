@@ -1,10 +1,11 @@
 id: T-070
-title: "Ranh giới và cảnh báo lệch bản vẽ: verificationPathRefs nhận D-, gate/commit nói ra"
+title: "Ranh giới và cảnh báo lệch bản vẽ: verificationPathRefs nhận D-,
+  gate/commit nói ra"
 serves:
   - G-001
 implements: D-010
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: main
 blocked_by:
@@ -13,9 +14,11 @@ blocked_by:
 context_contract:
   must_read:
     - path: "src/boundary.ts"
-      why: "verificationPathRefs:111-131 là chỗ hở thật; formatBoundaryWarning:256-286 là khuôn cho hàm cảnh báo mới"
+      why: "verificationPathRefs:111-131 là chỗ hở thật; formatBoundaryWarning:256-286
+        là khuôn cho hàm cảnh báo mới"
     - path: ".ganas/icebox/2026-08.yaml"
-      why: "mục `Ranh giới task còn hở ba nhánh` — cùng lớp lỗi, đừng mở lại nhánh thứ tư"
+      why: "mục `Ranh giới task còn hở ba nhánh` — cùng lớp lỗi, đừng mở lại nhánh thứ
+        tư"
   facts: []
   open_questions: []
 
@@ -38,7 +41,7 @@ exit_contract:
   - kind: verification
     target: "M-commands/V-commands-smoke"
 
-notes: >-
+notes: |-
   Việc BẮT BUỘC, không phải tuỳ chọn: `verificationPathRefs` (`:111-131`) hiện
   làm `graph.modules.get("D-010")` ⇒ `undefined` ⇒ `continue` ở dòng 123. Nghĩa
   là task trỏ `{kind: verification, target: "D-010/A-x"}` thì file mà probe của
@@ -55,3 +58,4 @@ notes: >-
   Gọi ở ĐÚNG hai chỗ người thật sự đọc: `src/commands/gate.ts` và
   `src/commands/commit.ts`. KHÔNG cài vào hook Stop — thêm chữ vào đó là thêm ồn
   vào đúng chỗ người ta đã học cách bỏ qua.
+done_at: 2026-08-30T05:30:39.187Z

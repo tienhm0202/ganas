@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   contractPathRefs,
   formatBoundaryWarning,
+  formatDesignDriftWarning,
   outsideBoundary,
   ownsGanasFile,
   taskBoundary,
@@ -130,6 +131,9 @@ export async function run(argv: Argv): Promise<number> {
     outsideBoundary(task, graph, touched),
   );
 
+  // Cùng khối chữ mà `ganas gate` in — cảnh báo, không chặn.
+  const driftWarning = formatDesignDriftWarning(task, graph, freshness);
+
   // Đóng task TRƯỚC khi stage, để thay đổi đó nằm trong chính commit này chứ
   // không lơ lửng trong working tree sau đó.
   const willClose =
@@ -151,6 +155,7 @@ export async function run(argv: Argv): Promise<number> {
         (willClose ? `\n\nSẽ đánh dấu ${taskId}: status: done + done_at.` : "") +
         baselineWarning +
         outsideWarning +
+        driftWarning +
         `\n\n--- commit message ---\n${message}`,
     );
     return 0;
@@ -182,7 +187,8 @@ export async function run(argv: Argv): Promise<number> {
             foreign.map((p) => `  · ${p}`).join("\n") +
             `\nCommit chúng cùng task sở hữu, hoặc \`git add\` tay nếu muốn gộp.\n`
           : "") +
-        outsideWarning,
+        outsideWarning +
+        driftWarning,
     );
     return 0;
   }
@@ -246,6 +252,7 @@ export async function run(argv: Argv): Promise<number> {
           : "") +
         baselineWarning +
         outsideWarning +
+        driftWarning +
         commitDebtSummary(graph, task.scope),
     );
     return 0;

@@ -1,4 +1,10 @@
-import { formatBoundaryWarning, formatDispatchWarning, outsideBoundary, taskBoundary } from "../boundary.js";
+import {
+  formatBoundaryWarning,
+  formatDesignDriftWarning,
+  formatDispatchWarning,
+  outsideBoundary,
+  taskBoundary,
+} from "../boundary.js";
 import { gitTouchedPaths } from "../commit.js";
 import { alreadyGreen, evaluateExitContract, evaluateGate, formatGate } from "../gate.js";
 import type { FactFreshness } from "../graph/freshness.js";
@@ -71,6 +77,9 @@ export async function run(argv: Argv): Promise<number> {
   const subagentTouched = await subagentTouchedFor(root, sessionId, taskId);
   const dispatchWarning = formatDispatchWarning(taskId, task.value.model, subagentTouched);
   if (dispatchWarning) process.stdout.write(`${dispatchWarning}\n`);
+
+  const driftWarning = formatDesignDriftWarning(task.value, graph, freshness);
+  if (driftWarning) process.stdout.write(`${driftWarning}\n`);
 
   if (result.ok) {
     process.stdout.write(`✓ Mọi tiêu chí chấm tự động đều đạt.\n`);
