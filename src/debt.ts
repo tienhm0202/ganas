@@ -77,6 +77,10 @@ const SCORES: Record<string, DebtScore> = {
   // "đóng được chưa" — cùng hạng `scope/module-missing-guide`. ease thấp hơn vì
   // phải nghĩ ra tiêu chí kiểm chứng được, không phải chép một dòng.
   "spine/design-missing-exit-contract": { weight: 2, ease: 3 },
+  // Bản vẽ không task nào nhận dựng: chặng chốt một hình dạng rồi bỏ đó — cùng
+  // hạng `design-stalled` ở chỗ bảng vẫn trông như đang chạy. Sửa cần QUYẾT ai
+  // dựng (hoặc bỏ bản vẽ), không phải chép một dòng.
+  "spine/artifact-unproduced": { weight: 2, ease: 3 },
 
   /* --- spine: task -------------------------------------------------------- */
   "spine/task-missing-goal": { weight: 3, ease: 5 },
@@ -107,6 +111,20 @@ const SCORES: Record<string, DebtScore> = {
   // sai" bằng cách im lặng. ease thấp hơn `design-task-touches-code` vì phải
   // thêm đúng một tiêu chí trỏ đúng path, không chỉ xoá một dòng.
   "spine/design-task-without-artifact-criterion": { weight: 4, ease: 4 },
+  // Địa chỉ bản vẽ trong `consumes`/`produces` trỏ vào hư không: cùng lớp với
+  // `exit-verification-target-not-found` — brief sẽ bơm hợp đồng vào từ một
+  // bản vẽ không tồn tại, tức là bơm ra rỗng mà không ai biết. Sửa = gõ lại
+  // một chuỗi.
+  "spine/task-produces-unknown-artifact": { weight: 4, ease: 5 },
+  // Khai `produces` mà không có tiêu chí `verification` cho chính bản vẽ đó —
+  // đúng lớp `task-missing-verification` cho trục bản vẽ: task "done" được mà
+  // hình dạng nó vừa hứa dựng chưa ai chạy probe. Sửa = thêm một mục
+  // exit_contract, đôi khi phải viết probe cho bản vẽ trước.
+  "spine/task-produces-without-verification": { weight: 3, ease: 3 },
+  // `agent` khai mà rỗng ruột: không sai dữ liệu, nhưng làm người đọc tưởng
+  // task đã được giao việc tử tế trong khi bản giao việc không nói gì. Sửa
+  // bằng một dòng YAML (điền `objective`, hoặc bỏ khối `agent`).
+  "spine/agent-empty": { weight: 1, ease: 5 },
 
   /* --- scope: task/module/phạm vi ----------------------------------------- */
   "scope/task-scope-not-found": { weight: 3, ease: 5 },

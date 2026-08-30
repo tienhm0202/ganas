@@ -38,6 +38,90 @@ export const ESTIMATED_CONTEXT = ["small", "medium", "large"] as const;
 export const TASK_ROLE = ["design", "build"] as const;
 
 /**
+ * Địa chỉ một BẢN VẼ của chặng: `D-010/A-users-table` — id design, gạch chéo,
+ * id bản vẽ. Cùng khuôn địa chỉ với `M-intent/V-intent-smoke`, và đúng dạng thứ
+ * tư mà `resolvesTarget()` (`src/graph/validate.ts`) đã biết giải.
+ *
+ * Phải ghép hai vế chứ không dùng lại được một `zXxxId` sẵn có: `zArtifactId`
+ * (`src/model/design.ts`) chỉ có nghĩa CỤC BỘ trong một design, nên một mình nó
+ * không trỏ được tới đâu cả.
+ */
+export const zArtifactRef = z
+  .string()
+  .regex(
+    /^D-\d{3,}\/A-[A-Za-z0-9][A-Za-z0-9-]*$/,
+    "địa chỉ bản vẽ phải dạng `D-010/A-users-table` (id design, gạch chéo, id bản vẽ)",
+  );
+
+/**
+ * Bản giao việc cho một sub-agent.
+ *
+ * Đây là CHỈ THỊ cho agent, không phải PHÁT BIỂU về hệ thống — nên nó không rơi
+ * vào luật cấm "viết tổng kết văn xuôi rồi coi đó là tri thức"
+ * (`.claude/rules/ganas-knowledge.md`). Nhưng ranh giới phải giữ, nếu không
+ * task thành bãi văn xuôi:
+ *
+ * - điều KIỂM CHỨNG ĐƯỢC thuộc `exit_contract` (lệnh chạy được, hoặc
+ *   `kind: manual` để người ký), KHÔNG phải một câu văn agent tự chấm mình;
+ * - quy trình lặp lại ở nhiều task thì thành `skills` — đã có sẵn và brief đã
+ *   nạp; `steps` chỉ cho các bước RIÊNG của task này;
+ * - guardrail đã cưỡng chế ở nơi khác thì không chép lại: "không ra ngoài phạm
+ *   vi" đã là `scope` + `taskBoundary()`, "không bịa" đã là luật có hook chặn.
+ *
+ * Mọi trường tuỳ chọn hoặc `.default([])`: điền một nửa vẫn hợp lệ. Chỗ bắt
+ * "khai rồi không nói được gì" là luật `spine/agent-empty`, chấm bằng chính
+ * `agentDispatchLines()` ngay dưới đây.
+ */
+export const zAgentSpec = z
+  .object({
+    persona: zNonEmpty.optional().describe("agent này đóng vai gì"),
+    objective: zNonEmpty.optional().describe("một câu: xong nghĩa là gì"),
+    steps: z.array(zNonEmpty).default([]),
+    self_check: z.array(zNonEmpty).default([]),
+    guardrails: z.array(zNonEmpty).default([]),
+    /**
+     * Công cụ nên dùng. ganas KHÔNG cưỡng chế được danh sách này: tool sinh
+     * sub-agent không nhận allowlist từ ganas, nên đây là KHUYẾN NGHỊ in ra cho
+     * người đọc, không phải một hàng rào. Giả vờ cưỡng chế được là đúng lớp lỗi
+     * `test/no-dead-ends.test.ts` sinh ra để chặn — nên `agentDispatchLines()`
+     * tự khai là không kiểm được, ngay trên dòng nó in ra.
+     */
+    tools: z.array(zNonEmpty).default([]),
+  })
+  .strict();
+
+export type AgentSpec = z.infer<typeof zAgentSpec>;
+
+/**
+ * Bản giao việc thành CHỮ — nơi quyết DUY NHẤT nó trông thế nào.
+ *
+ * Đây là accessor công khai của `AgentSpec`: chỗ khác (brief in ra cho người,
+ * validator chấm luật) gọi hàm này thay vì với tay vào từng trường, nên đổi
+ * cách trình bày chỉ phải sửa một chỗ. Hai chỗ tự dựng chữ là hai bản sẽ lệch
+ * nhau.
+ *
+ * Trả về mảng RỖNG khi `agent` không nói được gì — `spine/agent-empty`
+ * (`src/graph/validate.ts`) chấm đúng điều kiện đó, và đó cũng là lý do phép
+ * "rỗng ruột" được quyết ở ĐÂY chứ không phải bằng một phép đếm trường thứ hai
+ * trong validator.
+ */
+export function agentDispatchLines(agent: AgentSpec): string[] {
+  const lines: string[] = [];
+  if (agent.persona) lines.push(`Vai: ${agent.persona}`);
+  if (agent.objective) lines.push(`Xong nghĩa là: ${agent.objective}`);
+  agent.steps.forEach((step, i) => lines.push(`Bước ${i + 1}: ${step}`));
+  for (const rail of agent.guardrails) lines.push(`Không được: ${rail}`);
+  for (const item of agent.self_check) lines.push(`Tự kiểm trước khi báo xong: ${item}`);
+  if (agent.tools.length > 0) {
+    lines.push(
+      `Công cụ nên dùng: ${agent.tools.join(", ")} — khuyến nghị thôi, ` +
+        `ganas không chặn được công cụ nằm ngoài danh sách này`,
+    );
+  }
+  return lines;
+}
+
+/**
  * context_contract — trả lời câu hỏi "phiên mới cần THÔNG TIN gì".
  * Đây là thứ SessionStart render vào brief.
  */
@@ -152,6 +236,41 @@ export const zTask = z
      * rỗng, vốn có nhiều lý do khác) tự động biến một task thành design.
      */
     role: z.enum(TASK_ROLE).default("build"),
+
+    /**
+     * Bản vẽ mà task này CẦN — hợp đồng vào (input_contract).
+     *
+     * Đây là thứ thay `context_contract.must_read` cho phần hợp đồng: brief bơm
+     * thẳng `shape` của đúng những bản vẽ này, thay vì đưa một danh sách ĐƯỜNG
+     * DẪN rồi bắt agent mở cả kho. Một design mười bản vẽ mà task chỉ dùng hai
+     * thì tám cái còn lại là nhiễu — và agent vẫn sẽ suy diễn theo nhiễu đó.
+     *
+     * `.default([])`: mọi task khai trước khi trường này ra đời phải adopt được
+     * mà không phải sửa file nào.
+     */
+    consumes: z.array(zArtifactRef).default([]),
+
+    /**
+     * Bản vẽ mà task này SINH RA — vế ngược của `consumes`.
+     *
+     * Nhờ hai trường đó, câu "bước sau là task nào" SUY ĐƯỢC: task nào
+     * `consumes` thứ task này `produces` thì đó là bước sau. Vì vậy KHÔNG có
+     * trường `next`: hai câu trả lời cho một câu hỏi thì có ngày lệch nhau —
+     * đúng lý lẽ đã dùng cho `blocked_by` so với một `status: blocked` (xem
+     * docstring `TASK_STATUS` đầu file).
+     *
+     * Khai `produces` thì `exit_contract` phải có tiêu chí `verification` trỏ
+     * vào chính bản vẽ đó — luật `spine/task-produces-without-verification`,
+     * đúng khuôn `touches` → `spine/task-missing-verification`.
+     */
+    produces: z.array(zArtifactRef).default([]),
+
+    /**
+     * Bản giao việc cho sub-agent. TUỲ CHỌN — chỉ điền khi task thật sự sẽ được
+     * giao đi. Điền cho đủ lệ vào mọi task đang mở là đưa văn xuôi chết vào
+     * đường nóng của `loadGraph`, chạy lại mỗi lần hook chạy.
+     */
+    agent: zAgentSpec.optional(),
 
     /**
      * Khối trong sơ đồ mà task này chạm tới.

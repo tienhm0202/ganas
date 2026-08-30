@@ -185,6 +185,16 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
     // thay vì với tay vào từng trường — một nơi quyết một bản vẽ có lệch không.
     port: "artifactIssues",
     side: "artifactIssues",
+    // Bản giao việc cho sub-agent: người đọc thật là brief (`src/render/**`,
+    // thuộc phạm vi khác nên không ship cùng task với schema). Cả sáu trường đi
+    // qua `agentDispatchLines()` — một nơi quyết duy nhất bản giao việc trông
+    // thế nào, và cũng là nơi luật `spine/agent-empty` chấm "khai mà rỗng ruột".
+    persona: "agentDispatchLines",
+    objective: "agentDispatchLines",
+    steps: "agentDispatchLines",
+    self_check: "agentDispatchLines",
+    guardrails: "agentDispatchLines",
+    tools: "agentDispatchLines",
   };
   const modelText = all
     .filter((x) => x.path.startsWith("src/model/"))
@@ -301,7 +311,7 @@ test("⭐ mọi accessor khai trong READ_VIA đều có thật và được gọ
 
   // Giữ ĐỒNG BỘ với READ_VIA của test trên. Hai chỗ khai vì hai test chạy độc
   // lập; lệch nhau thì test này đỏ trước, đó là chủ ý.
-  const ACCESSORS = ["enforcementFor", "formatAnchor"];
+  const ACCESSORS = ["enforcementFor", "formatAnchor", "artifactIssues", "agentDispatchLines"];
 
   const broken: string[] = [];
   for (const fn of ACCESSORS) {

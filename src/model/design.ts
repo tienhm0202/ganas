@@ -10,12 +10,13 @@ export const DESIGN_STATUS = ["draft", "active", "superseded", "archived", "done
  * Loại bản vẽ. Mỗi loại là một HÌNH DẠNG mà code phải khớp, không phải một
  * mức độ chi tiết.
  *
- * Cố ý chưa có `doc` (tài liệu, không phải code): bản vẽ loại đó lấy độ tươi từ
- * một `path` chứ không từ `module.paths`, tức là một hình dạng artifact thứ hai
- * với một bộ luật thứ hai. Chưa có ca dùng thật trong repo này thì chưa xây —
- * xem `open_questions` của T-068.
+ * `doc` là loại DUY NHẤT không mô tả code: nó mô tả một TÀI LIỆU, nên nó neo
+ * vào `path` (một file) thay vì vào `module`, và độ tươi tính từ chính file đó
+ * chứ không từ `module.paths` — xem `artifactTargets()` (`src/verify/run.ts`).
+ * Hai hình dạng neo khác nhau nên `superRefine` của `zDesignArtifact` ép ĐÚNG
+ * MỘT trong hai có mặt, theo `kind`.
  */
-export const ARTIFACT_KIND = ["schema", "migration", "function", "api", "type"] as const;
+export const ARTIFACT_KIND = ["schema", "migration", "function", "api", "type", "doc"] as const;
 export type ArtifactKind = (typeof ARTIFACT_KIND)[number];
 
 /**
@@ -46,14 +47,90 @@ export const zDesignArtifact = z
   .object({
     id: zArtifactId,
     kind: z.enum(ARTIFACT_KIND),
-    /** Khối chứa code mà bản vẽ này mô tả. Cũng là nguồn tính STALE. */
-    module: zModuleId,
+    /**
+     * Khối chứa code mà bản vẽ này mô tả. Cũng là nguồn tính STALE.
+     *
+     * `.optional()` chỉ vì `kind: doc` neo bằng `path` thay vì bằng khối — với
+     * mọi kind khác nó vẫn BẮT BUỘC, và `superRefine` bên dưới ép điều đó thành
+     * lỗi PARSE.
+     */
+    module: zModuleId.optional(),
+    /**
+     * File tài liệu mà bản vẽ `doc` mô tả — nguồn tính STALE thay cho
+     * `module.paths`.
+     *
+     * Phải là ĐƯỜNG DẪN có thư mục (`docs/CONCEPTS.md`), không phải một tên
+     * file trần: `globsOf()` (`src/graph/freshness.ts`) chỉ nhận phần tử có
+     * `*` hoặc `/`, nên một `path` trần khiến context rỗng và bản vẽ XANH VĨNH
+     * VIỄN — đúng cái bẫy mà docstring `scopeTargets()` (`src/verify/run.ts`)
+     * đã trả giá một lần.
+     */
+    path: zNonEmpty.optional(),
     shape: zNonEmpty.describe('hình dạng, vd "(userId: string) => Date | null"'),
     port: zArtifactPort.optional(),
     probe: zProbe.optional(),
     notes: z.string().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((a, ctx) => {
+    // Lỗi PARSE chứ không phải cảnh báo đọc sau: một bản vẽ không neo được vào
+    // đâu (hoặc neo vào hai chỗ) thì không có file nào để tính STALE, và nó
+    // xanh vĩnh viễn — im lặng, đúng lớp hỏng mà chặng bản vẽ sinh ra để chống.
+    if (a.kind === "doc") {
+      if (!a.path) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["path"],
+          message: `bản vẽ ${a.id} khai kind: doc nên phải có \`path\` — tài liệu neo vào một file, không vào khối`,
+        });
+      }
+      if (a.module) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["module"],
+          message: `bản vẽ ${a.id} khai kind: doc thì không được khai \`module\` — chọn một trong hai, \`path\` cho tài liệu`,
+        });
+      }
+      // `path` PHẢI nằm trong một thư mục. Đây không phải luật thẩm mỹ:
+      // `globsOf()` (`src/graph/freshness.ts`) chỉ giữ phần tử context có `*`
+      // hoặc `/` — nó tồn tại để loại `entrypoints` (tên symbol) ra khỏi phép
+      // tính độ tươi. Một `path` trần như `README.md` rơi đúng vào bộ lọc đó,
+      // nên context thành rỗng và bản vẽ KHÔNG BAO GIỜ stale: sửa tài liệu bao
+      // nhiêu lần nó vẫn xanh. Thà chặn ồn ào lúc ghi còn hơn phát hiện bằng
+      // một bản vẽ đã nói dối suốt sáu tháng.
+      if (a.path && !a.path.includes("/")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["path"],
+          message:
+            `bản vẽ ${a.id} khai \`path: ${a.path}\` — tên file trần không tính được độ tươi, ` +
+            `bản vẽ sẽ xanh vĩnh viễn dù tài liệu đã đổi. Đặt tài liệu trong một thư mục, vd \`docs/${a.path}\`.`,
+        });
+      }
+      if (a.port) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["port"],
+          message: `bản vẽ ${a.id} khai kind: doc thì không được khai \`port\` — cổng là của khối, mà bản vẽ doc không neo vào khối nào`,
+        });
+      }
+      return;
+    }
+    if (!a.module) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["module"],
+        message: `bản vẽ ${a.id} (kind: ${a.kind}) phải khai \`module\` — chỉ kind: doc mới neo bằng \`path\``,
+      });
+    }
+    if (a.path) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["path"],
+        message: `bản vẽ ${a.id} (kind: ${a.kind}) mô tả CODE nên neo bằng \`module\`, không bằng \`path\``,
+      });
+    }
+  });
 
 export type DesignArtifact = z.infer<typeof zDesignArtifact>;
 
@@ -169,7 +246,11 @@ export type Design = z.infer<typeof zDesign>;
  * câu khác.
  */
 export function artifactStatement(design: Design, artifact: DesignArtifact): string {
-  return `${design.id}/${artifact.id} (${artifact.kind}) trong ${artifact.module}: ${artifact.shape}`;
+  // `module ?? path` chứ không phải hai câu khác nhau: bản vẽ `doc` neo vào file,
+  // các kind còn lại neo vào khối, nhưng CÂU niêm phong vẫn phải là một khuôn —
+  // đổi khuôn cho kind cũ là làm `defHash()` lệch và mọi bản vẽ đã kiểm rơi về
+  // `definition_changed` mà không ai đổi gì.
+  return `${design.id}/${artifact.id} (${artifact.kind}) trong ${artifact.module ?? artifact.path}: ${artifact.shape}`;
 }
 
 export const ARTIFACT_ISSUE_CODE = [
@@ -206,6 +287,20 @@ export function artifactIssues(
     const add = (code: ArtifactIssueCode, message: string, hint: string): void => {
       issues.push({ artifactId: a.id, index, code, message, hint });
     };
+
+    // Bản vẽ `doc` không neo vào khối (`superRefine` của `zDesignArtifact` đã ép
+    // điều đó), nên mọi phép kiểm dưới đây — vốn đều cần khối — không áp dụng.
+    // Chỉ còn `probe`: tài liệu cũng phải có gì đó đối chiếu được với file thật.
+    if (!a.module) {
+      if (!a.probe) {
+        add(
+          "missing-probe",
+          `bản vẽ ${design.id}/${a.id} chưa có \`probe\` — không có gì đối chiếu nó với file thật`,
+          'Thêm `probe: { run: "...", expect: exit_zero }`. Bản vẽ không chấm được thì nó là văn xuôi, chỉ khác chỗ đặt.',
+        );
+      }
+      return;
+    }
 
     const mod = lookupModule(a.module);
     if (!mod) {

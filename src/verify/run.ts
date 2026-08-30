@@ -134,6 +134,12 @@ export function scopeTargets(sourced: Sourced<Scope>, graph: Graph): Target[] {
  *    `globsOf()` trả rỗng và bản vẽ KHÔNG BAO GIỜ stale: pass một lần rồi xanh
  *    vĩnh viễn dù code đã đổi hết. Đó là bug đã trả giá ở `scopeTargets()`.
  *
+ * Bản vẽ `kind: doc` không neo vào khối, nên `context` của nó là `[a.path]` —
+ * chính file tài liệu đó. Cùng cái bẫy, cùng mức nguy hiểm: `globsOf()` chỉ nhận
+ * phần tử có `*` hoặc `/`, nên `docs/CONCEPTS.md` thì ổn còn một tên file TRẦN
+ * (`README.md`) cho context rỗng và bản vẽ xanh vĩnh viễn. Chỗ nhắc là docstring
+ * `path` ở `src/model/design.ts`; chỗ kiểm là `test/task-agent.test.ts`.
+ *
  * Bản vẽ chưa có `probe` thì không phát ra target — không có gì để chạy. Chỗ
  * bắt việc thiếu probe là luật `spine/design-artifact-missing-probe`, không phải
  * một target rỗng ruột giả vờ kiểm được gì.
@@ -148,14 +154,14 @@ export function artifactTargets(sourced: Sourced<Design>, graph: Graph): Target[
 
   for (const a of d.artifacts) {
     if (!a.probe) continue;
-    const m = graph.modules.get(a.module)?.value;
+    const m = a.module ? graph.modules.get(a.module)?.value : undefined;
     targets.push({
       id: `${d.id}/${a.id}`,
       label: `${d.id}/${a.id}`,
       kind: "probe",
       definition: a.probe,
       statement: artifactStatement(d, a),
-      context: m ? [...m.paths, ...m.entrypoints] : [],
+      context: m ? [...m.paths, ...m.entrypoints] : a.path ? [a.path] : [],
       ttlDays: 0,
     });
   }
@@ -182,7 +188,11 @@ export function scopeOfTarget(target: Target, graph: Graph): string | undefined 
   if (design) {
     const artifactId = target.id.slice(owner.length + 1);
     const artifact = design.artifacts.find((a) => a.id === artifactId);
-    if (artifact) return graph.modules.get(artifact.module)?.value.scope;
+    // Bản vẽ `kind: doc` không neo vào khối nào, nên không suy được phạm vi —
+    // `undefined` ở đây nghĩa là "không xác định được", và khi lọc `--scope` thì
+    // coi như KHÔNG khớp, đúng hợp đồng docstring ngay trên.
+    if (artifact)
+      return artifact.module ? graph.modules.get(artifact.module)?.value.scope : undefined;
     return undefined;
   }
 

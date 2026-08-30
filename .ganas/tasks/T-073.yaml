@@ -4,18 +4,21 @@ serves:
   - G-001
 implements: D-011
 scope: P-graph-core
-status: todo
+status: done
 estimated_context: medium
 model: main
 
 context_contract:
   must_read:
     - path: "src/model/task.ts"
-      why: "chỗ đặt zAgentSpec/consumes/produces; và khuôn `model` tier cho lý lẽ 'người quyết, không suy tự động'"
+      why: "chỗ đặt zAgentSpec/consumes/produces; và khuôn `model` tier cho lý lẽ
+        'người quyết, không suy tự động'"
     - path: "src/model/design.ts"
-      why: "zDesignArtifact hiện ép `module` bắt buộc — kind `doc` cần `path` thay thế, phải sửa superRefine ở đây"
+      why: "zDesignArtifact hiện ép `module` bắt buộc — kind `doc` cần `path` thay
+        thế, phải sửa superRefine ở đây"
     - path: "src/verify/run.ts"
-      why: "artifactTargets lấy context từ module.paths; bản vẽ `doc` phải lấy từ artifact.path"
+      why: "artifactTargets lấy context từ module.paths; bản vẽ `doc` phải lấy từ
+        artifact.path"
   facts: []
   open_questions: []
 
@@ -29,7 +32,8 @@ exit_contract:
     run: "npx tsx --test 'test/task-agent.test.ts'"
     expect: exit_zero
   - kind: command
-    run: "npx tsx --test 'test/design-artifact.test.ts' 'test/design-artifact-rules.test.ts'"
+    run: "npx tsx --test 'test/design-artifact.test.ts'
+      'test/design-artifact-rules.test.ts'"
     expect: exit_zero
   - kind: command
     run: "npx tsx --test 'test/no-dead-ends.test.ts' 'test/debt.test.ts'"
@@ -72,3 +76,26 @@ notes: |-
 
   Mã chẩn đoán TĨNH mới phải có điểm trong `src/debt.ts` VÀ cập nhật số đếm cộng
   comment trong `test/debt.test.ts` (hiện 65) — guard đếm mã sẽ đỏ nếu quên.
+
+  RÀNG BUỘC XẾP THỨ TỰ, giải trước khi code kẻo mất công:
+  `test/no-dead-ends.test.ts` đòi MỌI trường schema mới có người đọc ngoài
+  `src/model/`. `consumes`/`produces` được `validate.ts` đọc nên ổn. Nhưng các
+  trường BÊN TRONG `agent` (persona, objective, steps, self_check, guardrails,
+  tools) thì người đọc thật là `brief.ts` — mà `src/render/**` thuộc P-cli còn
+  schema thuộc P-graph-core, nên KHÔNG ship cùng một task được.
+
+  Cách giải, đúng khuôn `READ_VIA` mà repo đã dùng cho `enforcementFor` và
+  `formatAnchor`: viết một hàm THUẦN trong `src/model/task.ts`
+
+      export function agentDispatchLines(agent: AgentSpec): string[]
+
+  gom toàn bộ việc đọc các trường đó thành các dòng chữ để giao việc. Rồi
+  `src/graph/validate.ts` gọi nó cho một luật THẬT:
+  `spine/agent-empty` (warning) — task khai `agent` mà hàm trả mảng rỗng thì bản
+  giao việc không nói được gì, thà bỏ trường đi. Cuối cùng khai vào `READ_VIA`
+  của `test/no-dead-ends.test.ts`: sáu trường đó → `agentDispatchLines`.
+
+  Lợi thêm, không chỉ để qua guard: brief ở T-074 sẽ gọi CHÍNH hàm đó, nên chỉ
+  có một chỗ quyết bản giao việc trông thế nào. Hai chỗ tự dựng chữ là hai bản
+  sẽ lệch nhau.
+done_at: 2026-08-30T05:58:48.311Z

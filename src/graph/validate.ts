@@ -2,6 +2,7 @@ import { join, posix } from "node:path";
 
 import type { AnchorObject, ExitCriterion, Proposal } from "../model/index.js";
 import {
+  agentDispatchLines,
   artifactIssues,
   artifactStatement,
   evalWeakness,
@@ -207,6 +208,18 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
     taskCountOf.set(t.value.implements, c);
   }
 
+  /**
+   * Địa chỉ mọi bản vẽ mà CÓ task nhận sinh ra (`D-010/A-x`).
+   *
+   * Dựng một lần ở đây vì luật `spine/artifact-unproduced` chạy trong vòng
+   * design còn dữ liệu lại nằm ở phía task — quét lại toàn bộ task cho từng bản
+   * vẽ là phép nhân không cần thiết trên đường nóng của mọi hook.
+   */
+  const producedArtifacts = new Set<string>();
+  for (const t of graph.tasks.values()) {
+    for (const ref of t.value.produces) producedArtifacts.add(ref);
+  }
+
   for (const design of graph.designs.values()) {
     const d = design.value;
 
@@ -341,16 +354,40 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
       });
     }
 
+    // Bản vẽ mà không bước nào nhận sinh ra: chặng chốt một hình dạng rồi bỏ đó.
+    // Chỉ báo khi chặng ĐANG chạy — cùng chỗ đứng với `missing-probe` ngay trên:
+    // chặng đã đóng thì bản vẽ của nó là lịch sử, và một cảnh báo không ai làm
+    // gì được là thứ người ta quen mắt rồi ngừng đọc.
+    if (d.status === "active") {
+      d.artifacts.forEach((a, i) => {
+        if (producedArtifacts.has(`${d.id}/${a.id}`)) return;
+        diags.push({
+          severity: "warning",
+          code: "spine/artifact-unproduced",
+          message: `bản vẽ ${d.id}/${a.id} không task nào khai \`produces\` — chưa ai nhận dựng nó`,
+          file: design.file,
+          line: at(graph, design, "artifacts", i),
+          hint:
+            `Thêm \`produces: ["${d.id}/${a.id}"]\` vào task sẽ dựng bản vẽ này, ` +
+            `hoặc bỏ bản vẽ nếu chặng không còn chốt hình dạng đó nữa.`,
+        });
+      });
+    }
+
     d.artifacts.forEach((a, i) => {
       if (!a.probe) return;
-      const mod = graph.modules.get(a.module)?.value;
-      if (!mod) return;
+      const mod = a.module ? graph.modules.get(a.module)?.value : undefined;
+      // Cùng công thức `context` với `artifactTargets()` (`src/verify/run.ts`),
+      // kể cả nhánh `doc` lấy `[a.path]`: lint soi một tập file còn probe stale
+      // theo một tập khác thì hai bên nói về hai thứ.
+      const context = mod ? [...mod.paths, ...mod.entrypoints] : a.path ? [a.path] : [];
+      if (context.length === 0) return;
       // Lint bằng CHÍNH `statement` mà `artifactTargets()` dùng — hai chuỗi khác
       // nhau nghĩa là lint soi một câu còn probe chạy theo câu khác.
       for (const f of lintProbe({
         run: a.probe.run,
         statement: artifactStatement(d, a),
-        context: [...mod.paths, ...mod.entrypoints],
+        context,
       })) {
         diags.push({
           severity: f.severity,
@@ -475,6 +512,66 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
           "`M-intent/V-intent-smoke` (một bằng chứng), `D-010/A-users-table` (một bản vẽ).",
       });
     });
+
+    /* --- consumes / produces: hợp đồng vào-ra của một bước --------------- */
+
+    // Cùng phép giải địa chỉ với tiêu chí `verification` — `resolvesTarget()` là
+    // nơi quyết DUY NHẤT "địa chỉ này có trỏ vào thứ có thật không". Một phép
+    // giải thứ hai ở đây là hai câu trả lời cho một câu hỏi.
+    (
+      [
+        ["consumes", t.consumes],
+        ["produces", t.produces],
+      ] as const
+    ).forEach(([field, refs]) => {
+      refs.forEach((ref, i) => {
+        if (resolvesTarget(graph, ref)) return;
+        diags.push({
+          severity: "error",
+          code: "spine/task-produces-unknown-artifact",
+          message: `task ${t.id} khai \`${field}\` trỏ bản vẽ \`${ref}\` nhưng không có bản vẽ nào mang tên đó`,
+          file: task.file,
+          line: at(graph, task, field, i),
+          hint:
+            `Địa chỉ bản vẽ có dạng \`D-010/A-users-table\`: id design, gạch chéo, id bản vẽ ` +
+            `khai trong \`artifacts\` của design đó. Kiểm lại bằng \`ganas design show <id>\`.`,
+        });
+      });
+    });
+
+    // Vế song sinh của `spine/task-missing-verification`: chạm khối thì phải để
+    // lại bằng chứng cho khối, dựng bản vẽ thì phải để lại bằng chứng cho bản
+    // vẽ. Thiếu nó, task "done" được mà chưa ai chạy probe của chính hình dạng
+    // nó vừa hứa dựng — và bản vẽ đứng ở `never_verified` mà không ai thấy.
+    t.produces.forEach((ref, i) => {
+      if (verifiedTargets.includes(ref)) return;
+      diags.push({
+        severity: "warning",
+        code: "spine/task-produces-without-verification",
+        message:
+          `task ${t.id} khai dựng bản vẽ ${ref} nhưng \`exit_contract\` không có tiêu chí ` +
+          `\`kind: verification\` nào kiểm bản vẽ đó`,
+        file: task.file,
+        line: at(graph, task, "produces", i),
+        hint: `Thêm vào exit_contract: { kind: verification, target: "${ref}" }`,
+      });
+    });
+
+    // `agentDispatchLines()` là nơi quyết DUY NHẤT bản giao việc trông thế nào,
+    // nên nó cũng là nơi duy nhất biết "bản giao việc này có nói được gì không".
+    // Đếm trường ở đây là dựng một phép đo thứ hai, và nó sẽ trôi khỏi phép đầu.
+    if (t.agent && agentDispatchLines(t.agent).length === 0) {
+      diags.push({
+        severity: "warning",
+        code: "spine/agent-empty",
+        message: `task ${t.id} khai \`agent\` nhưng không trường nào có nội dung — bản giao việc rỗng`,
+        file: task.file,
+        line: at(graph, task, "agent"),
+        hint:
+          `Điền ít nhất \`objective\` (một câu: xong nghĩa là gì), hoặc bỏ hẳn \`agent\`. ` +
+          `Một khối rỗng làm người đọc tưởng task đã được giao việc tử tế.`,
+      });
+    }
 
     t.touches.forEach((moduleId, i) => {
       const mod = graph.modules.get(moduleId);
