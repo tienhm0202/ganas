@@ -288,14 +288,17 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
   // scope/module-missing-guide, scope/module-paths-overlap + 1 mã anchor:
   // knowledge/url-anchor-without-quote + 1 mã bản đồ code suy từ import thật:
   // spine/module-cycle-code + 2 mã chặng dữ liệu: spine/design-stalled,
-  // spine/design-missing-exit-contract), cộng 3 mã DUY NHẤT trong load.ts
+  // spine/design-missing-exit-contract + 1 mã bản vẽ:
+  // spine/exit-verification-target-not-found — các mã
+  // spine/design-artifact-* KHÔNG đếm ở đây vì chúng dựng bằng template
+  // literal từ `artifactIssues()`, không phải literal tĩnh), cộng 3 mã DUY NHẤT trong load.ts
   // (spine/config-unknown-key, load/yaml, load/duplicate-id
   // — hai mã sau xuất hiện hai lần trong file nhưng cùng literal nên `Set` chỉ
-  // giữ một) → tổng 62.
+  // giữ một) → tổng 63.
   assert.equal(
     codes.size,
-    62,
-    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 62 (59 + 3) — kiểm lại pattern grep hoặc số đếm`,
+    63,
+    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 63 (60 + 3) — kiểm lại pattern grep hoặc số đếm`,
   );
 
   const missing = [...codes].filter((c) => !isExplicitlyScored(c));

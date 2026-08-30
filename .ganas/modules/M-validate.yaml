@@ -47,6 +47,10 @@ contract:
     # từ M-model (src/model/anchor.ts, src/model/common.ts, src/model/config.ts, src/model/icebox.ts, src/model/knowledge.ts, src/model/module.ts, src/model/proposal.ts, src/model/task.ts, src/model/verification.ts)
     - name: AnchorObject
       shape: "z.infer<typeof zAnchorObject>"
+    - name: artifactIssues
+      shape: "(design: Design, lookupModule: (id: string) => Module | undefined) => ArtifactIssue[]"
+    - name: artifactStatement
+      shape: "(design: Design, artifact: DesignArtifact) => string"
     - name: evalWeakness
       shape: "(v: EvalVerification) => EvalWeakness | null"
     - name: ExitCriterion

@@ -181,6 +181,10 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
     url: "formatAnchor",
     fetched_at: "formatAnchor",
     line_end: "formatAnchor",
+    // Bản vẽ: `graph/validate.ts` và `commands/design.ts` gọi `artifactIssues()`
+    // thay vì với tay vào từng trường — một nơi quyết một bản vẽ có lệch không.
+    port: "artifactIssues",
+    side: "artifactIssues",
   };
   const modelText = all
     .filter((x) => x.path.startsWith("src/model/"))

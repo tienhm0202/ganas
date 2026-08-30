@@ -212,6 +212,27 @@ export async function computeFreshness(
   const files = needsFileScan ? await listProjectFiles(graph.root) : [];
   const mtimeCache = new Map<string, number>();
 
+  /**
+   * Memo cho `depsHash` theo bộ glob.
+   *
+   * `depsHash` đọc và băm NỘI DUNG mọi file khớp glob, và vòng dưới gọi nó một
+   * lần cho MỖI target. Nhiều target cùng trỏ một khối là chuyện thường — một
+   * khối có vài verification, và từ chặng này còn thêm mọi bản vẽ khai
+   * `module: <khối đó>`. Không memo thì cùng một tập file bị đọc lại nguyên vẹn
+   * mỗi lần, trên đường nóng chạy mỗi lượt hook.
+   *
+   * Khoá là bộ glob đã sắp — cùng glob thì cùng tập file thì cùng hash, bất kể
+   * target nào hỏi.
+   */
+  const depsCache = new Map<string, string | undefined>();
+  const depsHashOf = async (context: string[]): Promise<string | undefined> => {
+    const key = [...context].sort().join("\n");
+    if (depsCache.has(key)) return depsCache.get(key);
+    const value = await depsHash(context, graph.root, files);
+    depsCache.set(key, value);
+    return value;
+  };
+
   const mtimeOf = async (rel: string): Promise<number> => {
     const cached = mtimeCache.get(rel);
     if (cached !== undefined) return cached;
@@ -240,7 +261,7 @@ export async function computeFreshness(
 
     const decision = decide({
       entry,
-      depsNow: await depsHash(target.context, graph.root, files),
+      depsNow: await depsHashOf(target.context),
       currentDef: defHash(target.definition, target.statement),
       current: await currentFingerprint(target, graph.root),
       ttlDays: target.ttlDays,

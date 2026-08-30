@@ -2,6 +2,8 @@ import { join, posix } from "node:path";
 
 import type { AnchorObject, ExitCriterion, Proposal } from "../model/index.js";
 import {
+  artifactIssues,
+  artifactStatement,
   evalWeakness,
   formatAnchor,
   freshnessOf,
@@ -94,6 +96,34 @@ export function codeModuleEdges(graph: Graph): CodeEdge[] {
     }
   }
   return [...edges.values()];
+}
+
+/**
+ * Target của tiêu chí `kind: verification` có trỏ vào thứ CÓ THẬT không.
+ *
+ * Bốn dạng, đúng bằng những dạng mà `allTargets()` (`verify/run.ts`) phát ra —
+ * hai danh sách này phải khớp nhau, nếu không validate chặn thứ gate chạy được
+ * hoặc bỏ qua thứ gate sẽ trượt.
+ */
+function resolvesTarget(graph: Graph, target: string): boolean {
+  if (graph.facts.has(target)) return true;
+  if (graph.modules.has(target)) return true;
+
+  const slash = target.indexOf("/");
+  if (slash === -1) return false;
+  const owner = target.slice(0, slash);
+  const child = target.slice(slash + 1);
+
+  const mod = graph.modules.get(owner)?.value;
+  if (mod) return mod.verify.some((v) => v.id === child);
+
+  const scope = graph.scopes.get(owner)?.value;
+  if (scope) return scope.acceptance.some((v) => v.id === child);
+
+  const design = graph.designs.get(owner)?.value;
+  if (design) return design.artifacts.some((a) => a.id === child);
+
+  return false;
 }
 
 /** Định vị dòng của một field trong file nguồn của bản ghi. */
@@ -285,6 +315,53 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
         });
       }
     }
+
+    /* --- Bản vẽ: đối chiếu với sơ đồ khối ------------------------------ */
+
+    // `artifactIssues` là nơi DUY NHẤT quyết một bản vẽ có lệch không; ở đây chỉ
+    // dịch sang diagnostic. `commands/design.ts` in cùng danh sách đó cho người.
+    for (const issue of artifactIssues(d, (id) => graph.modules.get(id)?.value)) {
+      // Thiếu probe chỉ báo khi chặng ĐANG chạy — cùng chỗ đứng với
+      // `design-missing-exit-contract`. Bắn cho cả design `done`/`archived` là
+      // tiếng ồn thường trực mà không ai làm gì được, và cảnh báo thường trực là
+      // thứ người ta quen mắt rồi ngừng đọc.
+      if (issue.code === "missing-probe" && d.status !== "active") continue;
+
+      diags.push({
+        // `shape-drift` và `port-not-found` là ERROR, không phải cảnh báo: đó là
+        // hai nguồn sự thật cho cùng một câu hỏi, đúng lớp mà
+        // `scope/module-scope-mismatch` cũng đánh error. Và cổng CI chỉ đóng khi
+        // có error — một bản vẽ lệch cổng ở mức warning là bản vẽ không ai sửa.
+        severity: issue.code === "missing-probe" ? "warning" : "error",
+        code: `spine/design-artifact-${issue.code}`,
+        message: issue.message,
+        file: design.file,
+        line: at(graph, design, "artifacts", issue.index),
+        hint: issue.hint,
+      });
+    }
+
+    d.artifacts.forEach((a, i) => {
+      if (!a.probe) return;
+      const mod = graph.modules.get(a.module)?.value;
+      if (!mod) return;
+      // Lint bằng CHÍNH `statement` mà `artifactTargets()` dùng — hai chuỗi khác
+      // nhau nghĩa là lint soi một câu còn probe chạy theo câu khác.
+      for (const f of lintProbe({
+        run: a.probe.run,
+        statement: artifactStatement(d, a),
+        context: [...mod.paths, ...mod.entrypoints],
+      })) {
+        diags.push({
+          severity: f.severity,
+          code: `verify/${f.code === "unrelated" ? "probe-unrelated" : f.code}`,
+          message: `bản vẽ ${d.id}/${a.id}: ${f.message}`,
+          file: design.file,
+          line: at(graph, design, "artifacts", i),
+          hint: f.hint,
+        });
+      }
+    });
   }
 
   /* --- Task: liên kết + nhất quán spine -------------------------------- */
@@ -381,6 +458,24 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
       )
       .map((c) => c.target);
 
+    // Target gõ sai chỉ lộ lúc CHẠY gate — `checkCriterion` trả "không tìm thấy
+    // target trong sổ cái/graph", tức là sau khi đã làm xong việc và tưởng đã
+    // xong. Từ chặng này bề mặt gõ sai còn rộng thêm một dạng (`D-010/A-x`), nên
+    // kiểm ngay lúc validate là rẻ hơn hẳn.
+    verifiedTargets.forEach((target) => {
+      if (resolvesTarget(graph, target)) return;
+      diags.push({
+        severity: "error",
+        code: "spine/exit-verification-target-not-found",
+        message: `task ${t.id} khai tiêu chí \`verification\` trỏ \`${target}\` nhưng không có bằng chứng nào mang tên đó`,
+        file: task.file,
+        line: at(graph, task, "exit_contract"),
+        hint:
+          "Target hợp lệ có bốn dạng: `F-ACC-001` (fact), `M-intent` (mọi bằng chứng của khối), " +
+          "`M-intent/V-intent-smoke` (một bằng chứng), `D-010/A-users-table` (một bản vẽ).",
+      });
+    });
+
     t.touches.forEach((moduleId, i) => {
       const mod = graph.modules.get(moduleId);
       if (!mod) {
@@ -396,9 +491,21 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
 
       // chạm khối mà không để lại tiêu chí kiểm chứng nào cho NÓ thì task
       // "done" được mà chưa ai chạy `ganas verify` lên khối đó.
-      const covered = verifiedTargets.some(
-        (target) => target === moduleId || target.startsWith(`${moduleId}/`),
-      );
+      // Một bản vẽ (`D-010/A-x`) khai `module: <khối này>` cũng PHỦ khối này: nó
+      // là một probe thật, chạy trên code thật của đúng khối đó, ghi vào cùng sổ
+      // cái, và stale theo cùng `module.paths`. Không tính nó là bắt người viết
+      // chép thêm một tiêu chí `M-x/V-y` cho vừa lòng validator — và nghĩa vụ
+      // trùng lặp là cách nhanh nhất làm người ta thôi tin luật.
+      const covered = verifiedTargets.some((target) => {
+        if (target === moduleId || target.startsWith(`${moduleId}/`)) return true;
+        const slash = target.indexOf("/");
+        if (slash === -1) return false;
+        const design = graph.designs.get(target.slice(0, slash))?.value;
+        const artifactId = target.slice(slash + 1);
+        return (
+          design?.artifacts.some((a) => a.id === artifactId && a.module === moduleId) ?? false
+        );
+      });
       if (!covered) {
         diags.push({
           severity: "error",

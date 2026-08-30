@@ -88,6 +88,9 @@ const SCORES: Record<string, DebtScore> = {
   // "done" được mà chưa ai chạy verify: đúng nghĩa "sinh kết luận sai". Sửa
   // cần thêm một mục exit_contract, đôi khi phải viết bằng chứng mới cho khối.
   "spine/task-missing-verification": { weight: 3, ease: 3 },
+  // Nặng vì nó làm gate BÁO SAI: tiêu chí trỏ vào hư không thì task không bao
+  // giờ đóng được, mà lý do chỉ lộ lúc chạy. Sửa thì chỉ là gõ lại một chuỗi.
+  "spine/exit-verification-target-not-found": { weight: 4, ease: 5 },
   // Thiếu `model`: không ai quyết tier — không sai lệch dữ liệu, chỉ là ngỏ.
   "spine/task-missing-model": { weight: 1, ease: 5 },
   // "large": rủi ro compact giữa chừng làm tri thức mất/méo — hỏng nền của

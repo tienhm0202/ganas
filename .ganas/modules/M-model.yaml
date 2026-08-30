@@ -23,6 +23,10 @@ contract:
       shape: "(modelId: string) => string | undefined"
     - name: AnchorObject
       shape: "z.infer<typeof zAnchorObject>"
+    - name: artifactIssues
+      shape: "(design: Design, lookupModule: (id: string) => Module | undefined) => ArtifactIssue[]"
+    - name: artifactStatement
+      shape: "(design: Design, artifact: DesignArtifact) => string"
     - name: canDispatchSubagent
       shape: "(harness: Harness) => boolean"
     - name: Claim

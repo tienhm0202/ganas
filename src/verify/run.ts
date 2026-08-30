@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { parseDocument } from "yaml";
 
 import type { Graph, LedgerEntry, LedgerResult, Sourced } from "../graph/types.js";
-import type { Fact, Module, Scope, Verification } from "../model/index.js";
+import type { Design, Fact, Module, Scope, Verification } from "../model/index.js";
+import { artifactStatement } from "../model/index.js";
 import { judge, runShell } from "../util/exec.js";
 import { listProjectFiles, matchesAny } from "../util/glob.js";
 import { AdapterError, readEvalResult } from "./adapters.js";
@@ -15,7 +16,7 @@ import { proveCanFail } from "./mutate.js";
 
 /** Một thứ có thể verify: fact, hoặc một bằng chứng của khối/phần. */
 export interface Target {
-  /** Khoá trong sổ cái: `F-ACC-001` hoặc `M-intent/V-intent-smoke`. */
+  /** Khoá trong sổ cái: `F-ACC-001`, `M-intent/V-intent-smoke`, hoặc `D-010/A-users-table`. */
   id: string;
   /** Nhãn ngắn cho người đọc. */
   label: string;
@@ -120,6 +121,49 @@ export function scopeTargets(sourced: Sourced<Scope>, graph: Graph): Target[] {
 }
 
 /**
+ * Target cho BẢN VẼ của một chặng — cầu nối duy nhất giữa thiết kế và code thật.
+ *
+ * Hai chỗ bắt buộc phải đúng, cả hai đều đã có tiền lệ hỏng trong repo này:
+ *
+ * 1. `definition` là `a.probe`, KHÔNG phải cả object bản vẽ. `runTarget()` đọc
+ *    lệnh bằng `(target.definition as { run: string }).run` — đặt cả object vào
+ *    thì `run` là `undefined` và `runShell` hỏng CÂM. Thứ cần niêm phong thêm
+ *    (`shape`, `kind`, `module`) đi vào `statement`, và `defHash()` băm cả hai.
+ * 2. `context` là `[...m.paths, ...m.entrypoints]` — ĐÚNG công thức của
+ *    `moduleTargets()`. Khai khác đi (vd chỉ `paths`, hay tệ hơn là id khối) thì
+ *    `globsOf()` trả rỗng và bản vẽ KHÔNG BAO GIỜ stale: pass một lần rồi xanh
+ *    vĩnh viễn dù code đã đổi hết. Đó là bug đã trả giá ở `scopeTargets()`.
+ *
+ * Bản vẽ chưa có `probe` thì không phát ra target — không có gì để chạy. Chỗ
+ * bắt việc thiếu probe là luật `spine/design-artifact-missing-probe`, không phải
+ * một target rỗng ruột giả vờ kiểm được gì.
+ *
+ * `ttlDays: 0` có chủ đích: bản vẽ không cũ đi theo đồng hồ. Nó chỉ sai khi file
+ * trong khối đổi (`stale`), khi chính nó bị sửa (`definition_changed`), hoặc khi
+ * probe trượt (`failing`) — ba điều đó đã được bắt rồi.
+ */
+export function artifactTargets(sourced: Sourced<Design>, graph: Graph): Target[] {
+  const d = sourced.value;
+  const targets: Target[] = [];
+
+  for (const a of d.artifacts) {
+    if (!a.probe) continue;
+    const m = graph.modules.get(a.module)?.value;
+    targets.push({
+      id: `${d.id}/${a.id}`,
+      label: `${d.id}/${a.id}`,
+      kind: "probe",
+      definition: a.probe,
+      statement: artifactStatement(d, a),
+      context: m ? [...m.paths, ...m.entrypoints] : [],
+      ttlDays: 0,
+    });
+  }
+
+  return targets;
+}
+
+/**
  * Phạm vi mà một target thuộc về. `undefined` = không xác định được (khối chưa
  * gán phạm vi) — khi lọc thì coi như KHÔNG khớp, để `--scope` không âm thầm
  * kéo theo thứ nằm ngoài ranh giới người dùng vừa nêu.
@@ -128,6 +172,20 @@ export function scopeOfTarget(target: Target, graph: Graph): string | undefined 
   if (target.fact) return target.fact.value.scope;
   const owner = target.id.split("/")[0]!;
   if (graph.scopes.has(owner)) return owner;
+
+  // Bản vẽ (`D-010/A-x`): design KHÔNG khai `scope` — nó neo vào goal, không vào
+  // phạm vi. Phạm vi suy qua khối mà bản vẽ mô tả. Thiếu nhánh này thì
+  // `ganas verify --scope P-x` IM LẶNG bỏ hết bản vẽ, đúng cái bẫy mà docstring
+  // ngay trên đây cảnh báo: không khớp thì coi như nằm ngoài, và người dùng
+  // tưởng đã kiểm hết phạm vi.
+  const design = graph.designs.get(owner)?.value;
+  if (design) {
+    const artifactId = target.id.slice(owner.length + 1);
+    const artifact = design.artifacts.find((a) => a.id === artifactId);
+    if (artifact) return graph.modules.get(artifact.module)?.value.scope;
+    return undefined;
+  }
+
   return graph.modules.get(owner)?.value.scope;
 }
 
@@ -136,6 +194,7 @@ export function allTargets(graph: Graph): Target[] {
     ...[...graph.facts.values()].map(factTarget),
     ...[...graph.modules.values()].flatMap(moduleTargets),
     ...[...graph.scopes.values()].flatMap((s) => scopeTargets(s, graph)),
+    ...[...graph.designs.values()].flatMap((d) => artifactTargets(d, graph)),
   ];
 }
 

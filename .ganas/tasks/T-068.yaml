@@ -5,7 +5,7 @@ serves:
   - G-001
 implements: D-010
 scope: P-graph-core
-status: in_progress
+status: done
 estimated_context: medium
 model: main
 
@@ -78,3 +78,4 @@ notes: >-
   nằm trong task này: không làm thì task đã trỏ vào một probe thật chạy trên
   code thật của đúng khối đó vẫn bị đòi thêm một tiêu chí nữa. Nghĩa vụ trùng
   lặp là cách nhanh nhất làm người ta thôi tin luật.
+done_at: 2026-08-30T05:02:11.210Z

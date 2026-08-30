@@ -44,6 +44,10 @@ contract:
     - name: withFileLock
       shape: "<T>(lockFile: string, ttlMs: number, fn: () => Promise<T>) => Promise<T>"
     # từ M-model (src/model/common.ts, src/model/knowledge.ts, src/model/module.ts, src/model/scope.ts, src/model/verification.ts)
+    - name: artifactStatement
+      shape: "(design: Design, artifact: DesignArtifact) => string"
+    - name: Design
+      shape: "z.infer<typeof zDesign>"
     - name: Expect
       shape: "z.infer<typeof zExpect>"
     - name: Fact
