@@ -16,7 +16,7 @@ import { matchesAny } from "../util/glob.js";
 import { lineOfPath } from "../util/yaml.js";
 import { defHash, entryAt, ledgerCorruption, verifyChain } from "../verify/ledger.js";
 import { lintProbe } from "../verify/lint.js";
-import { GANAS_DIR, LEDGER_FILE, LOCAL_ONLY } from "./paths.js";
+import { DIRS, GANAS_DIR, LEDGER_FILE, LOCAL_ONLY } from "./paths.js";
 import type { Diagnostic, Graph, Sourced } from "./types.js";
 
 /**
@@ -523,6 +523,54 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
         });
       }
     });
+
+    // Vai `design` không được đụng CODE: bản vẽ và bản hiện thực trộn vào
+    // cùng một task thì không ai chấm được bản vẽ TRƯỚC KHI code chạy theo
+    // nó — đúng lý do D-010 tách `Task.role` ra khỏi task ngay từ đầu.
+    if (t.role === "design" && t.touches.length > 0) {
+      diags.push({
+        severity: "error",
+        code: "spine/design-task-touches-code",
+        message:
+          `task ${t.id} khai role: design nhưng lại chạm khối ${t.touches.join(", ")} — ` +
+          `vai thiết kế không được đụng code`,
+        file: task.file,
+        line: at(graph, task, "touches"),
+        hint:
+          `Bỏ \`touches\` khỏi task thiết kế; việc hiện thực chuyển sang một task khác ` +
+          `\`role: build\`. Vẽ và xây trong cùng một task thì không ai chấm được bản vẽ ` +
+          `trước khi code chạy theo nó.`,
+      });
+    }
+
+    if (t.role === "design") {
+      const designArtifactPath = `${GANAS_DIR}/${DIRS.designs}/${t.implements}.yaml`;
+      // `contractPaths()` (src/boundary.ts) nhặt `c.path` của MỌI tiêu chí
+      // `artifact`, kể cả path nằm trong `.ganas/`, nên tiêu chí này là cách
+      // RẺ NHẤT làm `taskBoundary()` KHÁC RỖNG mà không chứa dòng code nào.
+      // Thiếu nó, ranh giới rỗng và `outsideBoundary()` rơi vào nhánh "ranh
+      // giới rỗng ⇒ không kết luận gì" (docstring `src/boundary.ts`) — tức
+      // task thiết kế lỡ tay sửa code mà KHÔNG AI BÁO. Tiền lệ dùng tiêu chí
+      // `artifact` trỏ `.ganas/`: `.ganas/tasks/done/T-006.yaml`.
+      const hasArtifactCriterion = t.exit_contract.some(
+        (c) => c.kind === "artifact" && c.path.replace(/^\.\//, "") === designArtifactPath,
+      );
+      if (!hasArtifactCriterion) {
+        diags.push({
+          severity: "warning",
+          code: "spine/design-task-without-artifact-criterion",
+          message:
+            `task ${t.id} khai role: design nhưng \`exit_contract\` không có tiêu chí ` +
+            `\`kind: artifact\` nào trỏ ${designArtifactPath}`,
+          file: task.file,
+          line: at(graph, task, "exit_contract"),
+          hint:
+            `Thêm vào exit_contract: { kind: artifact, path: "${designArtifactPath}" }. ` +
+            `Thiếu nó, ranh giới code của task này RỖNG và \`outsideBoundary()\` không báo ` +
+            `được khi task thiết kế lỡ tay sửa code thật.`,
+        });
+      }
+    }
 
     t.context_contract.facts.forEach((factId, i) => {
       if (!graph.facts.has(factId)) {

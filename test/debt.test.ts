@@ -278,7 +278,7 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
     for (const m of src.matchAll(/code:\s*"([a-zA-Z0-9/_-]+)"/g)) codes.add(m[1]!);
   }
 
-  // Đối chiếu chính con số đã tự grep xác nhận: 59 mã DUY NHẤT trong
+  // Đối chiếu chính con số đã tự grep xác nhận: 62 mã DUY NHẤT trong
   // validate.ts (43 gốc + 3 mã icebox: icebox/promoted-missing-task,
   // icebox/review-overdue, icebox/without-scope + 7 mã proposal:
   // scope/proposal-scope-not-found, spine/proposal-missing-target,
@@ -289,16 +289,17 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
   // knowledge/url-anchor-without-quote + 1 mã bản đồ code suy từ import thật:
   // spine/module-cycle-code + 2 mã chặng dữ liệu: spine/design-stalled,
   // spine/design-missing-exit-contract + 1 mã bản vẽ:
-  // spine/exit-verification-target-not-found — các mã
-  // spine/design-artifact-* KHÔNG đếm ở đây vì chúng dựng bằng template
-  // literal từ `artifactIssues()`, không phải literal tĩnh), cộng 3 mã DUY NHẤT trong load.ts
-  // (spine/config-unknown-key, load/yaml, load/duplicate-id
-  // — hai mã sau xuất hiện hai lần trong file nhưng cùng literal nên `Set` chỉ
-  // giữ một) → tổng 63.
+  // spine/exit-verification-target-not-found + 2 mã Task.role (T-069):
+  // spine/design-task-touches-code, spine/design-task-without-artifact-criterion
+  // — các mã spine/design-artifact-* KHÔNG đếm ở đây vì chúng dựng bằng
+  // template literal từ `artifactIssues()`, không phải literal tĩnh), cộng 3
+  // mã DUY NHẤT trong load.ts (spine/config-unknown-key, load/yaml,
+  // load/duplicate-id — hai mã sau xuất hiện hai lần trong file nhưng cùng
+  // literal nên `Set` chỉ giữ một) → tổng 65.
   assert.equal(
     codes.size,
-    63,
-    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 63 (60 + 3) — kiểm lại pattern grep hoặc số đếm`,
+    65,
+    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 65 (62 + 3) — kiểm lại pattern grep hoặc số đếm`,
   );
 
   const missing = [...codes].filter((c) => !isExplicitlyScored(c));

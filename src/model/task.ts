@@ -31,6 +31,13 @@ export const TASK_STATUS = ["todo", "in_progress", "done"] as const;
 export const ESTIMATED_CONTEXT = ["small", "medium", "large"] as const;
 
 /**
+ * Vai của task: `design` (vẽ bản thiết kế, không đụng code) hay `build`
+ * (hiện thực code theo bản vẽ). Xem docstring trường `role` bên dưới `zTask`
+ * cho lý do và luật đi kèm.
+ */
+export const TASK_ROLE = ["design", "build"] as const;
+
+/**
  * context_contract — trả lời câu hỏi "phiên mới cần THÔNG TIN gì".
  * Đây là thứ SessionStart render vào brief.
  */
@@ -128,6 +135,23 @@ export const zTask = z
      * việc). Không gán thì brief không gợi ý model nào — không đoán bừa.
      */
     model: z.enum(MODEL_TIER).optional(),
+
+    /**
+     * Vai của task: `design` (vẽ bản thiết kế) hay `build` (hiện thực code
+     * theo bản vẽ). Gán lúc chẻ task — quyết định của NGƯỜI, không suy tự
+     * động, đúng lý lẽ đã áp cho `model` ngay phía trên: heuristic (vd "task
+     * không có `touches` thì chắc là design") không đáng tin bằng người biết
+     * rõ việc, và đoán sai thì không lỗi nào nổi lên.
+     *
+     * Mặc định `build`: toàn bộ task khai từ trước khi trường này ra đời là
+     * hiện thực code, và phần lớn task tương lai cũng vậy — coi "build" là
+     * ngầm định để 49 task cũ adopt được mà không phải sửa file nào, thay vì
+     * bắt mọi task khai tay một trường vốn hầu như luôn cùng một giá trị.
+     * Đây KHÔNG phải suy luận: mặc định chỉ chọn giá trị PHỔ BIẾN NHẤT, còn
+     * `design` vẫn phải khai tay — không có tín hiệu nào (kể cả `touches`
+     * rỗng, vốn có nhiều lý do khác) tự động biến một task thành design.
+     */
+    role: z.enum(TASK_ROLE).default("build"),
 
     /**
      * Khối trong sơ đồ mà task này chạm tới.

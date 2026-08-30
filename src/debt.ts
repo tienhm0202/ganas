@@ -96,6 +96,17 @@ const SCORES: Record<string, DebtScore> = {
   // "large": rủi ro compact giữa chừng làm tri thức mất/méo — hỏng nền của
   // chính phiên đó. Sửa = chẻ nhỏ task, một việc thiết kế lại thật sự.
   "spine/task-too-large": { weight: 3, ease: 1 },
+  // Task role: design mà touches khác rỗng — vẽ và xây trộn vào một task thì
+  // không ai chấm được bản vẽ trước khi code chạy theo nó. Sửa nhanh: bỏ
+  // touches, chuyển việc hiện thực sang task role: build khác.
+  "spine/design-task-touches-code": { weight: 3, ease: 5 },
+  // Task role: design thiếu tiêu chí `artifact` trỏ đúng file design — không
+  // sai dữ liệu ngay lúc này, nhưng làm `taskBoundary()` RỖNG, và ranh giới
+  // rỗng khiến `outsideBoundary()` không báo được khi task thiết kế lỡ tay
+  // sửa code thật (docstring `src/boundary.ts`): đúng nghĩa "sinh kết luận
+  // sai" bằng cách im lặng. ease thấp hơn `design-task-touches-code` vì phải
+  // thêm đúng một tiêu chí trỏ đúng path, không chỉ xoá một dòng.
+  "spine/design-task-without-artifact-criterion": { weight: 4, ease: 4 },
 
   /* --- scope: task/module/phạm vi ----------------------------------------- */
   "scope/task-scope-not-found": { weight: 3, ease: 5 },
