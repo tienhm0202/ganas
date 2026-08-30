@@ -1,0 +1,57 @@
+id: T-070
+title: "Ranh giới và cảnh báo lệch bản vẽ: verificationPathRefs nhận D-, gate/commit nói ra"
+serves:
+  - G-001
+implements: D-010
+scope: P-cli
+status: todo
+estimated_context: medium
+model: main
+blocked_by:
+  - T-069
+
+context_contract:
+  must_read:
+    - path: "src/boundary.ts"
+      why: "verificationPathRefs:111-131 là chỗ hở thật; formatBoundaryWarning:256-286 là khuôn cho hàm cảnh báo mới"
+    - path: ".ganas/icebox/2026-08.yaml"
+      why: "mục `Ranh giới task còn hở ba nhánh` — cùng lớp lỗi, đừng mở lại nhánh thứ tư"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli-core
+  - M-workflow
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/design-role-boundary.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/boundary-verification-paths.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: >-
+  Việc BẮT BUỘC, không phải tuỳ chọn: `verificationPathRefs` (`:111-131`) hiện
+  làm `graph.modules.get("D-010")` ⇒ `undefined` ⇒ `continue` ở dòng 123. Nghĩa
+  là task trỏ `{kind: verification, target: "D-010/A-x"}` thì file mà probe của
+  bản vẽ chạy KHÔNG vào ranh giới ⇒ không được `git add` ⇒ gate xanh ở máy tác
+  giả, đỏ ở máy khác. Đúng lớp lỗi T-065/T-061/T-062 mà chính hàm này sinh ra để
+  chặn. Sửa cả docstring "ba dạng" → "bốn dạng".
+
+  `formatDesignDriftWarning()` đọc `freshness.get(...)`, KHÔNG đọc
+  `graph.ledger` — luật 5 của `test/no-dead-ends.test.ts` sẽ đỏ ngay nếu đọc.
+  Hai thông điệp khác nghĩa: `definition_changed` + `role: build` là "đã đổi bản
+  vẽ trong một task xây"; `stale`/`failing` là "code đã lệch bản vẽ", bắn cho mọi
+  vai.
+
+  Gọi ở ĐÚNG hai chỗ người thật sự đọc: `src/commands/gate.ts` và
+  `src/commands/commit.ts`. KHÔNG cài vào hook Stop — thêm chữ vào đó là thêm ồn
+  vào đúng chỗ người ta đã học cách bỏ qua.

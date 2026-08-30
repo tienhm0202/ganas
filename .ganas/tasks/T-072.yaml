@@ -1,0 +1,44 @@
+id: T-072
+title: "Brief in trạng thái bản vẽ, và D-010 tự khai bản vẽ của chính nó"
+serves:
+  - G-001
+implements: D-010
+scope: P-cli
+status: todo
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-071
+
+context_contract:
+  must_read:
+    - path: "src/render/brief.ts"
+      why: "stageProgressLine:268-305 là chỗ thêm; docstring :258-262 cấm chạy lệnh và cấm đọc đồng hồ trong đó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-render
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/render-brief.test.ts'"
+    expect: exit_zero
+  - kind: artifact
+    path: ".ganas/designs/D-010.yaml"
+    must_contain: "artifacts:"
+  - kind: command
+    run: "npx tsx src/cli.ts design check D-010"
+    expect: exit_zero
+  - kind: verification
+    target: "M-render/V-render-brief"
+
+notes: >-
+  Vế dogfood là phần đáng giá nhất của task này: D-010 khai `artifacts` về CHÍNH
+  cơ chế nó dựng, ví dụ một bản vẽ `kind: function` cho `artifactTargets` với
+  probe `grep -qF "export function artifactTargets(" src/verify/run.ts` và
+  `module: M-verify`. Chặng tự chấm bằng đúng thứ nó vừa xây — nếu cơ chế không
+  dùng được cho chính nó thì nó cũng không dùng được cho ai.
+
+  Ràng buộc của `stageProgressLine`: CHỈ đọc graph + freshness. Không chạy lệnh,
+  không đọc đồng hồ — nó nằm trên đường brief render mỗi phiên.

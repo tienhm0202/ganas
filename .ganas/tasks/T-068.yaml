@@ -1,0 +1,80 @@
+id: T-068
+title: "Bản vẽ thành target trong sổ cái: Design.artifacts + artifactTargets +
+  luật validate"
+serves:
+  - G-001
+implements: D-010
+scope: P-graph-core
+status: in_progress
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/verify/run.ts"
+      why: "factTarget/moduleTargets/scopeTargets là ba khuôn phải bắt chước;
+        allTargets:134 là khe cắm duy nhất; runTarget:162-165 là cái bẫy
+        `definition.run`"
+    - path: "src/graph/freshness.ts"
+      why: "decide() quyết 11 trạng thái; computeFreshness:243 gọi depsHash cho TỪNG
+        target — chỗ cần memo"
+    - path: "src/verify/ledger.ts"
+      why: "defHash(definition, statement) băm CẢ statement — đó là lý do shape phải
+        đi vào statement"
+    - path: ".ganas/designs/D-010.yaml"
+      why: "hợp đồng của chặng, và lý do chọn cách nối này"
+  facts: []
+  open_questions:
+    - "kind `doc` (bản vẽ không phải code, lấy `path` thay `module`) có cần ngay
+      ở chặng này không, hay để tới khi có ca dùng thật?"
+
+touches:
+  - M-model
+  - M-verify
+  - M-freshness
+  - M-validate
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/design-artifact.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/design-artifact-rules.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/no-dead-ends.test.ts'"
+    expect: exit_zero
+  # Mã chẩn đoán mới phải có điểm nợ tường minh; guard đếm mã tĩnh nằm ở đây.
+  - kind: command
+    run: "npx tsx --test 'test/debt.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+    expect: exit_zero
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+  - kind: verification
+    target: "M-freshness/V-freshness-staleness"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  Ba cái bẫy đã biết trước, đừng phải trả giá lại:
+
+  1. `definition` PHẢI là `a.probe` (một zProbe), KHÔNG phải cả object artifact
+  —
+     `runTarget` (`src/verify/run.ts:162-165`) đọc `(target.definition).run`, đặt
+     sai thì `runShell(undefined)` hỏng CÂM. `shape` đi vào `statement`.
+  2. `context` PHẢI là `[...m.paths, ...m.entrypoints]`, đúng công thức
+     `moduleTargets()` (`run.ts:90`). Context sai ⇒ `globsOf()` rỗng ⇒ bản vẽ
+     XANH VĨNH VIỄN. Đó là bug đã trả giá ở `scopeTargets()`, docstring
+     `run.ts:96-103` ghi lại nguyên văn.
+  3. `scopeOfTarget()` (`run.ts:127-132`) chỉ tra scopes và modules, nên `D-010`
+     rơi vào `undefined` và `ganas verify --scope` IM LẶNG bỏ hết bản vẽ.
+
+  Mở rộng `covered` ở `spine/task-missing-verification` (`validate.ts:398-401`)
+  nằm trong task này: không làm thì task đã trỏ vào một probe thật chạy trên
+  code thật của đúng khối đó vẫn bị đòi thêm một tiêu chí nữa. Nghĩa vụ trùng
+  lặp là cách nhanh nhất làm người ta thôi tin luật.

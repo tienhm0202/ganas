@@ -1,0 +1,69 @@
+id: D-010
+title: "Bản vẽ chấm được: Design nối tới code, và vai thiết kế tách khỏi vai hiện thực"
+serves:
+  - G-001
+summary: >-
+  Design hiện không nối tới code chút nào. Nó chỉ mang `summary` văn xuôi và một
+  `exit_contract` chấm "chặng đóng được chưa"; cạnh duy nhất đi xuống là
+  `task.implements` (ngược chiều), rồi mới `task.touches → module.paths`. Hệ quả
+  đo được: D-008 và D-009 phải nhét ~30 dòng thiết kế vào đúng một trường, và
+  hình dạng bảng / chữ ký hàm / danh sách migration không có nơi nào để khai.
+
+  Lỗ thứ hai nặng hơn: KHÔNG AI phát hiện được `shape` đã trôi khỏi code.
+  `portIssues()` (`src/graph/trace.ts:79-95`) chỉ so `shape` khối này với `shape`
+  khối kia. `scripts/gen-ports.mjs` có đọc chữ ký thật bằng TypeScript compiler
+  API, nhưng nó cố ý chỉ IN RA để người dán, không ghi đè YAML — nên sau lúc dán
+  thì không còn gì canh. Sửa chữ ký hàm mà quên `contract` thì `ganas trace` vẫn
+  xanh.
+
+  Cách chữa: thêm `Design.artifacts` — mỗi bản vẽ có `kind`, `module`, `shape`,
+  và một `probe` đối chiếu bản vẽ với CODE THẬT. Toàn bộ điểm nối là một hàm
+  `artifactTargets()` cắm vào `allTargets()` (`src/verify/run.ts:134`), khe duy
+  nhất mà `computeFreshness()` lấy đầu vào. Được ngay, không sửa thêm dòng nào:
+  `ganas verify D-010` chạy, và nhánh `verification` của gate
+  (`src/gate.ts:156-169`) chỉ `freshness.get(target)` trên Map khoá chuỗi nên
+  `exit_contract` trỏ được vào bản vẽ mà `gate.ts` không cần sửa gì.
+
+  Điểm tinh tế làm tính năng này rẻ: `defHash(definition, statement)` băm CẢ
+  `statement`. Đặt `shape` vào `statement` thì ba loại lệch tự phân biệt, không
+  cần code so sánh nào — code trong `module.paths` đổi ⇒ `stale`; `shape` trong
+  YAML đổi ⇒ `definition_changed`; code lệch thật bản vẽ ⇒ `failing`. Đó đúng là
+  phân biệt "sửa code giữ contract" với "sửa contract".
+
+  Cộng `Task.role` (`design`/`build`) để tách vai. Vai `design` không cần hook
+  mới: `touches: []` cộng một tiêu chí `kind: artifact` trỏ file design làm
+  `taskBoundary` khác rỗng nhưng không chứa code nào, nên `ganas commit` không
+  stage được dòng code nào và `outsideBoundary` báo đúng mọi file code bị đụng.
+
+  Không nằm trong chặng này, đã cân nhắc: thực thể `Spec` riêng (thêm thư mục là
+  thêm bản đồ để lệch); chặn cứng bằng hook (9 design + 65 task vướng ngay);
+  parse `shape` thành type thật (đắt, và `trace.ts` đã chọn so chuỗi thô có chủ
+  đích).
+
+exit_contract:
+  # Bản vẽ phải thật sự thành target trong sổ cái, phân biệt được ba loại lệch.
+  - kind: command
+    run: "npx tsx --test 'test/design-artifact.test.ts'"
+    expect: exit_zero
+  # Luật mới phải bắt được vi phạm VÀ không làm repo hiện tại đỏ.
+  - kind: command
+    run: "npx tsx --test 'test/design-artifact-rules.test.ts'"
+    expect: exit_zero
+  # Vế ADOPT, đo trên chính repo này: 9 design + 65 task chưa khai trường mới nào.
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+    expect: exit_zero
+  # Vai design không commit được code, và vai build đổi bản vẽ thì bị cảnh báo.
+  - kind: command
+    run: "npx tsx --test 'test/design-role-boundary.test.ts'"
+    expect: exit_zero
+  # Lệnh mới có mặt đủ ở bốn chỗ đăng ký.
+  - kind: command
+    run: "npx tsx --test 'test/cli-help.test.ts' 'test/design-cmd.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+status: active
+created_at: 2026-08-30T00:00:00Z

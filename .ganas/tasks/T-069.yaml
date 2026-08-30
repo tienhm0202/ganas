@@ -1,0 +1,57 @@
+id: T-069
+title: "Task.role: tách vai thiết kế khỏi vai hiện thực ở tầng dữ liệu"
+serves:
+  - G-001
+implements: D-010
+scope: P-graph-core
+status: todo
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-068
+
+context_contract:
+  must_read:
+    - path: "src/model/task.ts"
+      why: "khuôn của `model` tier: quyết định của NGƯỜI lúc chẻ task, không suy tự động — `role` theo đúng lý lẽ đó"
+    - path: "src/graph/validate.ts"
+      why: "chỗ đặt hai luật mới, và khuôn severity của các luật spine/* đã có"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-validate
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/task-role.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/no-dead-ends.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+    expect: exit_zero
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: >-
+  `role: z.enum(["design","build"]).default("build")` — mặc định `build` để 65
+  task hiện có adopt được mà không sửa file nào.
+
+  Hai luật:
+  - `spine/design-task-touches-code` (error) — `role: design` mà `touches` khác
+    rỗng. Vẽ và xây trong cùng một task thì không ai chấm được bản vẽ trước khi
+    code chạy theo nó.
+  - `spine/design-task-without-artifact-criterion` (warning) — `role: design`
+    thiếu tiêu chí `kind: artifact` trỏ file design của nó. Đây là thứ làm
+    `taskBoundary` khác rỗng: `contractPaths()` (`src/boundary.ts:50-56`) nhặt
+    `c.path` kể cả path trong `.ganas/` — tiền lệ `.ganas/tasks/done/T-006.yaml`.
+    Không có nó thì ranh giới rỗng, và `outsideBoundary` rơi vào nhánh "rỗng ⇒
+    không kết luận gì" (`:212-215`), tức task thiết kế sửa code mà không ai báo.
+
+  KHÔNG sửa `taskBoundary()`. Nó cố ý không trả `.ganas` (docstring `:145-147`),
+  và `ownsGanasFile()` đã cho task sở hữu file design nó `implements`.
