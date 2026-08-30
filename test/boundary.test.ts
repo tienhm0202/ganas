@@ -3,7 +3,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 
-import { formatBoundaryWarning, matchPatterns, outsideBoundary, taskBoundary } from "../src/boundary.js";
+import {
+  formatBoundaryWarning,
+  matchPatterns,
+  outsideBoundary,
+  ownsGanasFile,
+  taskBoundary,
+} from "../src/boundary.js";
 import { gitTouchedPaths } from "../src/commit.js";
 import { loadGraph } from "../src/graph/load.js";
 import { zTask } from "../src/model/index.js";
@@ -351,4 +357,113 @@ test("formatBoundaryWarning: chuỗi trả về bắt đầu và kết thúc b�
   const noBoundaryMsg = formatBoundaryWarning("T-042", [], ["a.ts", "b.ts"], []);
   assert.ok(noBoundaryMsg.startsWith("\n"));
   assert.ok(noBoundaryMsg.endsWith("\n"));
+});
+
+/* --- ownsGanasFile: `produces` cộng thêm design ngoài `implements` (T-075) -
+ *
+ * Task có thể `implements: D-010` (chặng đang hiện thực) mà `produces` bản vẽ
+ * cho một design KHÁC — thiếu nhánh này thì file design đó rơi ra ngoài mọi
+ * commit, không ai nghiệm thu (xem docstring `ownsGanasFile`). */
+
+test("ownsGanasFile: task produces bản vẽ ở design KHÁC implements → sở hữu CẢ hai file design", () => {
+  const task = zTask.parse({
+    id: "T-075",
+    title: "t",
+    serves: ["G-001"],
+    implements: "D-010",
+    scope: "P-thu",
+    produces: ["D-011/A-x"],
+    exit_contract: [{ kind: "verification", target: "D-011/A-x" }],
+  });
+
+  assert.ok(
+    ownsGanasFile(task, ".ganas/designs/D-010.yaml"),
+    "design mà task implements vẫn phải được sở hữu như trước",
+  );
+  assert.ok(
+    ownsGanasFile(task, ".ganas/designs/D-011.yaml"),
+    "design mà task produces bản vẽ vào cũng phải được sở hữu",
+  );
+});
+
+test("ownsGanasFile: consumes (không produces) → KHÔNG sở hữu file design đó — ranh giới không nới quá tay", () => {
+  const task = zTask.parse({
+    id: "T-075",
+    title: "t",
+    serves: ["G-001"],
+    implements: "D-010",
+    scope: "P-thu",
+    consumes: ["D-011/A-x"],
+    exit_contract: [{ kind: "command", run: "true" }],
+  });
+
+  assert.ok(
+    !ownsGanasFile(task, ".ganas/designs/D-011.yaml"),
+    "đọc một bản vẽ (consumes) không có nghĩa là sở hữu file chứa nó — nếu nhận" +
+      " cả consumes thì commit của task này sẽ nuốt file design mà task khác đang sửa",
+  );
+});
+
+test("ownsGanasFile: produces trỏ design không tồn tại → không vỡ, vẫn khớp đúng theo chuỗi", () => {
+  const task = zTask.parse({
+    id: "T-075",
+    title: "t",
+    serves: ["G-001"],
+    implements: "D-010",
+    scope: "P-thu",
+    produces: ["D-999/A-khong-ton-tai"],
+    exit_contract: [{ kind: "verification", target: "D-999/A-khong-ton-tai" }],
+  });
+
+  assert.doesNotThrow(() => ownsGanasFile(task, ".ganas/designs/D-999.yaml"));
+  assert.ok(ownsGanasFile(task, ".ganas/designs/D-999.yaml"));
+  assert.ok(!ownsGanasFile(task, ".ganas/designs/D-777.yaml"));
+});
+
+/* --- verificationPathRefs: câu hỏi mở của T-075 ----------------------------
+ *
+ * Task khai `produces: ["D-011/A-x"]` cộng một tiêu chí `verification` trỏ
+ * CHÍNH bản vẽ đó — `verificationPathRefs` đã đọc `exit_contract` để tìm
+ * `probe.run` của bản vẽ (nhánh `D-x/A-y` do T-070 thêm), nên nó không cần
+ * đọc thêm trường `produces` của task: đường dẫn đã có trong `taskBoundary()`
+ * mà không cần sửa gì ở `verificationPathRefs`. */
+test("⭐ verificationPathRefs: produces + tiêu chí verification trỏ đúng bản vẽ → probe.run đã có trong taskBoundary, không cần đọc produces", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/designs/D-011.yaml": design(
+      "D-011",
+      ["G-001"],
+      `artifacts:
+  - id: A-x
+    kind: function
+    module: M-a
+    shape: "(x: number) => number"
+    probe:
+      run: "test -f docs/produced-thing.md"
+`,
+    ),
+    ".ganas/modules/M-a.yaml": MOD_A,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const task = zTask.parse({
+      id: "T-075",
+      title: "t",
+      serves: ["G-001"],
+      implements: "D-001",
+      scope: "P-thu",
+      touches: [],
+      produces: ["D-011/A-x"],
+      exit_contract: [{ kind: "verification", target: "D-011/A-x" }],
+    });
+
+    const boundary = taskBoundary(task, graph);
+    assert.ok(
+      boundary.includes("docs/produced-thing.md"),
+      `probe.run của bản vẽ produces phải nằm trong taskBoundary — boundary: ${JSON.stringify(boundary)}`,
+    );
+  } finally {
+    await cleanup(root);
+  }
 });

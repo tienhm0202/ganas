@@ -412,13 +412,33 @@ export function formatDesignDriftWarning(
 const YAML_EXT = /\.ya?ml$/;
 
 /**
+ * Tách id design ra khỏi địa chỉ bản vẽ `D-011/A-x` (`zArtifactRef`,
+ * `src/model/task.ts`) — cắt chuỗi trước dấu `/`, KHÔNG tra graph. Nhờ vậy
+ * `ownsGanasFile` giữ được chữ ký thuần `(task, relPath)`: đọc `produces` của
+ * chính task là đủ, không cần biết design đó có thật hay không.
+ */
+function designIdFromArtifactRef(ref: string): string {
+  const slash = ref.indexOf("/");
+  return slash === -1 ? ref : ref.slice(0, slash);
+}
+
+/**
  * File `.ganas/` này có thuộc task không.
  *
  * Quyền sở hữu đi theo ĐÚNG những liên kết task tự khai — file task đó, khối
  * trong `touches`, fact trong `context_contract.facts`, và design/goal/phạm vi
- * mà nó khai `implements`/`serves`/`scope`. Nhờ vậy `.ganas/designs/D-003.yaml`
- * của một loạt task khác không lọt vào commit mang nhãn task này, mà bộ khung
- * spine của chính task thì vẫn đi cùng nó.
+ * mà nó khai `implements`/`serves`/`scope`/`produces`. Nhờ vậy
+ * `.ganas/designs/D-003.yaml` của một loạt task khác không lọt vào commit
+ * mang nhãn task này, mà bộ khung spine của chính task thì vẫn đi cùng nó.
+ *
+ * `produces` cũng được tính: một task có thể `implements: D-010` (chặng đang
+ * hiện thực) mà `produces: ["D-011/A-x"]` (SINH bản vẽ cho một chặng khác) —
+ * thiếu nhánh này thì `.ganas/designs/D-011.yaml` không thuộc task nào,
+ * `ganas commit` không stage, và bản vẽ vừa vẽ nằm ngoài mọi commit, không ai
+ * nghiệm thu. `consumes` thì CỐ TÌNH không tính: đọc một bản vẽ không có
+ * nghĩa là sở hữu file chứa nó — nhận cả `consumes` thì commit của task này sẽ
+ * nuốt file design mà task khác đang sửa, đúng lỗi mà luật "cố tình KHÔNG quét
+ * theo `scope`" ngay dưới đây đã chặn cho fact/claim.
  *
  * Cố tình KHÔNG quét theo `scope` cho fact/claim: fact cùng phạm vi là của cả
  * phạm vi, lấy theo đó thì lại nuốt đúng thứ cần tách ra.
@@ -443,6 +463,7 @@ export function ownsGanasFile(task: Task, relPath: string): boolean {
     stem === `${DIRS.scopes}/${task.scope}` ||
     task.serves.some((g) => stem === `${DIRS.goals}/${g}`) ||
     task.touches.some((m) => stem === `${DIRS.modules}/${m}`) ||
-    task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`)
+    task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`) ||
+    task.produces.some((ref) => stem === `${DIRS.designs}/${designIdFromArtifactRef(ref)}`)
   );
 }

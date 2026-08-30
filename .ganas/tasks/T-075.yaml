@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-011
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
 model: verifier
 blocked_by:
@@ -13,7 +13,8 @@ blocked_by:
 context_contract:
   must_read:
     - path: "src/boundary.ts"
-      why: "ownsGanasFile hiện chỉ nhận design mà task `implements` — task sinh bản vẽ vào design KHÁC sẽ bị bỏ lại file"
+      why: "ownsGanasFile hiện chỉ nhận design mà task `implements` — task sinh bản vẽ
+        vào design KHÁC sẽ bị bỏ lại file"
   facts: []
   open_questions: []
 
@@ -22,7 +23,8 @@ touches:
 
 exit_contract:
   - kind: command
-    run: "npx tsx --test 'test/boundary.test.ts' 'test/boundary-verification-paths.test.ts'"
+    run: "npx tsx --test 'test/boundary.test.ts'
+      'test/boundary-verification-paths.test.ts'"
     expect: exit_zero
   - kind: verification
     target: "M-cli-core/V-cli-core-boundary"
@@ -39,3 +41,4 @@ notes: |-
   Cũng phải mở rộng `verificationPathRefs` cho `produces`? KHÔNG — nó đã nhận
   dạng `D-x/A-y` từ T-070, và nó đọc từ `exit_contract`, không từ `produces`.
   Kiểm lại bằng test trước khi sửa gì thêm.
+done_at: 2026-08-30T06:07:07.499Z
