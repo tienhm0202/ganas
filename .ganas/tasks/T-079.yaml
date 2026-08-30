@@ -1,0 +1,49 @@
+id: T-079
+title: "Hai luật vòng đời của design: archive được, và cấm archive khi còn canh code"
+serves:
+  - G-001
+implements: D-012
+scope: P-graph-core
+status: todo
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-077
+
+context_contract:
+  must_read:
+    - path: "src/graph/validate.ts"
+      why: "chỗ đặt hai luật; và `resolvesTarget()` đã có sẵn để hỏi một target bản vẽ còn trỏ được vào đâu không"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-validate
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/design-lifecycle-rules.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/debt.test.ts' 'test/no-dead-ends.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+    expect: exit_zero
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: |-
+  Tách khỏi T-078 vì `src/graph/validate.ts` thuộc M-validate (P-graph-core),
+  còn `src/commands/prune.ts` thuộc M-commands (P-cli) — một task không được
+  chạm khối của hai phạm vi. Luật `scope/task-touches-outside-scope` bắt ngay
+  lúc `ganas validate`, và nó bắt đúng.
+
+  - `spine/design-archivable` (warning) — design `superseded` còn nằm ngoài
+    `designs/archived/`.
+  - luật ngược chiều (error) — bản vẽ của một design ĐÃ archive vẫn là target
+    của một `exit_contract` đang mở. Đó chính là "gỡ hàng rào chống hồi quy"
+    mà D-012 sinh ra để chặn.
+
+  Mã chẩn đoán TĨNH mới phải có điểm trong `src/debt.ts` và cập nhật số đếm cộng
+  comment trong `test/debt.test.ts`.

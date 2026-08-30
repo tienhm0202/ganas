@@ -1,0 +1,55 @@
+id: T-076
+title: "Tài liệu và skill cho bản giao việc: CONCEPTS, plan-to-tasks, skill design"
+serves:
+  - G-001
+implements: D-011
+scope: P-cli
+status: todo
+estimated_context: small
+model: scribe
+blocked_by:
+  - T-074
+
+context_contract:
+  must_read:
+    - path: "docs/CONCEPTS.md"
+      why: "mục 2 (Task) và mục 8 (sơ đồ mermaid) phải có cạnh Design→Module qua artifacts và cạnh task→bản vẽ"
+    - path: "plugin/skills/plan-to-tasks/SKILL.md"
+      why: "chẻ plan ra task thì phải điền luôn `agent`/`consumes`/`produces`, nếu không trường mới không ai dùng"
+    - path: ".claude/rules/agent-guide.md"
+      why: "luật viết file hướng dẫn: ngắn ở gốc, đặt gần code, đừng chép tri thức vào"
+  facts: []
+  open_questions: []
+
+touches: []
+
+exit_contract:
+  - kind: artifact
+    path: "docs/CONCEPTS.md"
+    must_contain: "artifacts"
+  - kind: artifact
+    path: "plugin/skills/design/SKILL.md"
+    must_contain: "ganas design"
+  - kind: artifact
+    path: "plugin/skills/plan-to-tasks/SKILL.md"
+    must_contain: "produces"
+  - kind: command
+    run: "npx tsx --test 'test/plugin-selfcontained.test.ts' 'test/cli-help.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  `touches: []` có chủ đích: tài liệu và skill không nằm trong `paths` của khối
+  nào, nên không có nghĩa vụ verification nào để khai. Ranh giới của task này
+  đến từ các tiêu chí `kind: artifact` ở trên — đó cũng là cách DUY NHẤT kéo
+  `docs/` và `plugin/skills/` vào ranh giới, xem nhánh rò (b) trong icebox.
+
+  Skill `design` viết theo khuôn `plugin/skills/scope/SKILL.md`: frontmatter có
+  `name`/`description`/`when_to_use`/`allowed-tools`, mở đầu bằng một lệnh
+  `!` gọi `ganas design`, rồi giải thích VÌ SAO bản vẽ tồn tại — không chép lại
+  luật gốc.
+
+  Đừng viết dài. `docs/CONCEPTS.md` là tham chiếu được phép dài; SKILL.md thì
+  không — nó nạp vào context mỗi lần skill được gọi.

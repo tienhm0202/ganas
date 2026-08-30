@@ -1,0 +1,66 @@
+id: D-011
+title: "Task là bản giao việc cho agent: consumes/produces và khối `agent`"
+serves:
+  - G-001
+summary: |-
+  D-010 làm bản vẽ chấm được. Chặng này trả lời câu còn lại: giao việc cho một
+  agent thì nó cần gì để làm ĐÚNG mà không phải đọc cả kho.
+
+  Task hiện có `context_contract.must_read` — một danh sách ĐƯỜNG DẪN. Agent
+  nhận nó phải mở cả file: với một design có mười bản vẽ, nó đọc cả mười để
+  dùng hai, và tám cái còn lại là nhiễu mà nó vẫn sẽ suy diễn theo. Đó là cách
+  sinh ảo giác rẻ nhất mà vẫn trông như đang làm đúng quy trình.
+
+  `consumes` sửa đúng chỗ đó: khai địa chỉ BẢN VẼ (`D-010/A-x`, cùng khuôn địa
+  chỉ với `M-intent/V-intent-smoke`), và brief bơm thẳng `shape` của đúng những
+  bản vẽ task cần. Hợp đồng, không phải file.
+
+  `produces` là vế ngược: task này SINH RA bản vẽ nào. Nhờ hai trường đó, câu
+  "bước sau là task nào" SUY ĐƯỢC — task nào `consumes` thứ task này `produces`
+  thì đó là bước sau. Không khai tay `next`: hai câu trả lời cho một câu hỏi
+  thì có ngày lệch nhau, đúng lý lẽ đã dùng cho `blocked_by` so với một
+  `status: blocked`.
+
+  Khối `agent` mang phần còn lại của bản giao việc: `persona`, `objective`,
+  `steps`, `self_check`, `guardrails`, `tools`. Đây là CHỈ THỊ cho agent, không
+  phải PHÁT BIỂU về hệ thống — nên nó không rơi vào luật cấm "viết tổng kết văn
+  xuôi rồi coi là tri thức". Nhưng ranh giới phải giữ, nếu không task thành bãi
+  văn xuôi:
+
+  - điều kiểm chứng được thì thuộc `exit_contract` (lệnh chạy được, hoặc
+    `kind: manual` để người ký), KHÔNG phải một câu văn agent tự chấm mình;
+  - quy trình lặp lại ở nhiều task thì thành `skills`, đã có sẵn và brief đã
+    nạp; `agent.steps` chỉ cho các bước riêng của task này;
+  - guardrail đã cưỡng chế ở nơi khác thì không chép lại — "không ra ngoài
+    scope" đã là `scope` + `taskBoundary`, "không bịa" đã là luật có hook chặn.
+
+  `tools` khai được nhưng ganas KHÔNG cưỡng chế được: tool sinh sub-agent không
+  nhận allowlist từ ganas. Brief in nó như khuyến nghị và tự khai là không kiểm
+  được — đúng cách repo đã xử lý harness không phải Claude Code. Giả vờ cưỡng
+  chế được là đúng lớp lỗi `test/no-dead-ends.test.ts` sinh ra để chặn.
+
+  `agent` là TUỲ CHỌN, chỉ điền khi task thật sự sẽ giao cho sub-agent. Điền cho
+  đủ lệ vào mọi task đang mở là đưa văn xuôi chết vào đường nóng của `loadGraph`,
+  chạy mỗi lần hook chạy.
+
+  Chặng này cũng là lúc `kind: doc` có ca dùng thật đầu tiên (bản vẽ là tài liệu
+  chứ không phải code, lấy độ tươi từ `path` thay `module.paths`) — D-010 đã cố
+  ý hoãn nó tới đây.
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/task-agent.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/brief-agent.test.ts'"
+    expect: exit_zero
+  # Vế ADOPT, đo trên chính repo: 49 task chưa khai trường mới nào vẫn phải sạch.
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+status: active
+created_at: 2026-08-30T05:40:00Z

@@ -1,0 +1,49 @@
+id: T-077
+title: "Vòng đời: archive theo bàn giao, và chặn archive design còn canh code"
+serves:
+  - G-001
+implements: D-012
+scope: P-cli
+status: todo
+estimated_context: medium
+model: main
+blocked_by:
+  - T-076
+
+context_contract:
+  must_read:
+    - path: "src/prune.ts"
+      why: "ba tầng dọn dẹp đã khai sẵn trong docstring đầu file — thêm trigger mới phải nằm ĐÚNG tầng 2, không được chạm tầng 3"
+    - path: "src/graph/load.ts"
+      why: "listYaml lọc isFile() và không đệ quy — đó là lý do archive vào thư mục con cắt được đường nóng mà vẫn giữ git history"
+  facts: []
+  open_questions:
+    - "Design `superseded` archive sang `designs/archived/` — có nên archive cả design `done` mà mọi bản vẽ của nó đã bị design khác thay không, hay để `superseded` là điều kiện duy nhất?"
+
+touches:
+  - M-workflow
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/prune-lifecycle.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/prune.test.ts' 'test/prune-locks.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+
+notes: |-
+  Hai chiều, và chiều thứ hai mới là chiều khó:
+
+  1. Archive ĐƯỢC: task thuộc phạm vi `status: delivered` (không cần đợi đủ
+     tuổi), và design `status: superseded` sang `designs/archived/`.
+  2. Archive KHÔNG ĐƯỢC: design mà bản vẽ của nó vẫn là target của một
+     `exit_contract` đang mở, hoặc vẫn đang canh code sống. Archive nó là gỡ
+     hàng rào chống hồi quy đúng lúc nó bắt đầu có giá trị.
+
+  TUYỆT ĐỐI không đụng tầng 3: `verify-ledger.jsonl`, `facts/`, `claims/`,
+  `decisions/`. Sổ cái có hash-chain — xoá một dòng là gãy chuỗi và mọi bằng
+  chứng sau đó mất giá trị.
+
+  Giữ mặc định DRY-RUN. `ganas prune` không được ghi gì khi chưa có `--yes`.

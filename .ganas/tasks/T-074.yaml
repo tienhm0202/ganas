@@ -1,0 +1,49 @@
+id: T-074
+title: "Brief in bản giao việc đầy đủ và bơm shape của consumes"
+serves:
+  - G-001
+implements: D-011
+scope: P-cli
+status: todo
+estimated_context: medium
+model: verifier
+blocked_by:
+  - T-073
+
+context_contract:
+  must_read:
+    - path: "src/render/brief.ts"
+      why: "mục `Giao việc` hiện dựng từ task.model + harness; đây là chỗ mở rộng, và là NGƯỜI ĐỌC của mọi trường mới"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-render
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/brief-agent.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/scope-brief.test.ts' 'test/no-dead-ends.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-render/V-render-brief"
+
+notes: |-
+  Đây là NGƯỜI ĐỌC của mọi trường D-011 thêm vào — thiếu task này thì
+  `test/no-dead-ends.test.ts` đỏ vì trường khai ra mà không ai đọc.
+
+  Ba ràng buộc, và chúng là ràng buộc thật chứ không phải khẩu hiệu:
+
+  - In `shape` của bản vẽ trong `consumes`, KHÔNG in mọi artifact của design.
+    Cả điểm của `consumes` là bơm vừa đủ; in hết thì nó chỉ là `must_read` viết
+    kiểu khác.
+  - `tools` in như KHUYẾN NGHỊ và tự khai là không cưỡng chế được — tool sinh
+    sub-agent không nhận allowlist từ ganas. Đúng cách repo đã xử lý harness
+    không phải Claude Code.
+  - In `produces`, và suy bước kế: task nào `consumes` thứ task này `produces`
+    thì đó là bước sau. Suy, không đọc một trường `next` khai tay.
+
+  `agent` vắng mặt là chuyện bình thường (nó tuỳ chọn) — lúc đó mục Giao việc
+  giữ nguyên hình dạng cũ, đừng in khung rỗng.

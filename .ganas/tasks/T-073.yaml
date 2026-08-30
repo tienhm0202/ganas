@@ -1,0 +1,74 @@
+id: T-073
+title: "Bản giao việc ở tầng dữ liệu: agent, consumes, produces, và bản vẽ kind doc"
+serves:
+  - G-001
+implements: D-011
+scope: P-graph-core
+status: todo
+estimated_context: medium
+model: main
+
+context_contract:
+  must_read:
+    - path: "src/model/task.ts"
+      why: "chỗ đặt zAgentSpec/consumes/produces; và khuôn `model` tier cho lý lẽ 'người quyết, không suy tự động'"
+    - path: "src/model/design.ts"
+      why: "zDesignArtifact hiện ép `module` bắt buộc — kind `doc` cần `path` thay thế, phải sửa superRefine ở đây"
+    - path: "src/verify/run.ts"
+      why: "artifactTargets lấy context từ module.paths; bản vẽ `doc` phải lấy từ artifact.path"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-model
+  - M-validate
+  - M-verify
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/task-agent.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/design-artifact.test.ts' 'test/design-artifact-rules.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/no-dead-ends.test.ts' 'test/debt.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+    expect: exit_zero
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+  - kind: verification
+    target: "M-verify/V-verify-run"
+
+notes: |-
+  Ba trường mới trên Task, mọi trường đều `.default([])`/optional để 49 task cũ
+  adopt được:
+
+  - `consumes: ArtifactRef[]` — địa chỉ bản vẽ dạng `D-010/A-x`. Đây là thứ
+    thay `context_contract.must_read` cho phần hợp đồng: bơm SHAPE chứ không
+    bơm đường dẫn file.
+  - `produces: ArtifactRef[]` — task này sinh ra bản vẽ nào.
+  - `agent?: AgentSpec` — persona, objective, steps, self_check, guardrails,
+    tools. TUỲ CHỌN, chỉ điền khi thật sự giao cho sub-agent.
+
+  KHÔNG khai `next`: suy được từ `produces` → `consumes`. Hai câu trả lời cho
+  một câu hỏi thì có ngày lệch nhau.
+
+  Bản vẽ `kind: doc`: `module` thành tuỳ chọn, thêm `path`, và `superRefine` ép
+  đúng một trong hai có mặt theo kind. `artifactTargets` lấy `context` từ
+  `[a.path]` với doc, `[...m.paths, ...m.entrypoints]` với các kind còn lại.
+
+  Luật mới, cả ba đều có tiền lệ khuôn sẵn trong validate.ts:
+  - `spine/task-produces-unknown-artifact` (error) — produces/consumes trỏ bản
+    vẽ không tồn tại. Dùng lại `resolvesTarget()` đã có.
+  - `spine/artifact-unproduced` (warning) — bản vẽ không task nào sinh ra.
+  - `spine/task-produces-without-verification` (warning) — khai `produces` mà
+    `exit_contract` không có `verification` trỏ vào chính bản vẽ đó. Đúng khuôn
+    `spine/task-missing-verification` đã có cho `touches`.
+
+  Mã chẩn đoán TĨNH mới phải có điểm trong `src/debt.ts` VÀ cập nhật số đếm cộng
+  comment trong `test/debt.test.ts` (hiện 65) — guard đếm mã sẽ đỏ nếu quên.

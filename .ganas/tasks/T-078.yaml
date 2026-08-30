@@ -1,0 +1,48 @@
+id: T-078
+title: "`ganas prune --scope` và hai luật vòng đời của design"
+serves:
+  - G-001
+implements: D-012
+scope: P-cli
+status: todo
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-077
+  - T-079
+
+context_contract:
+  must_read:
+    - path: "src/commands/prune.ts"
+      why: "khuôn cờ và cách in xem-trước; và bất biến `lệnh chỉ đọc thì không ghi`"
+    - path: "src/commands/CLAUDE.md"
+      why: "thêm cờ cho lệnh đã có vẫn phải cập nhật docs/COMMANDS.md — hai test đòi cái đó"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-commands
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/prune-cmd-scope.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/cli-help.test.ts'"
+    expect: exit_zero
+  - kind: artifact
+    path: "docs/COMMANDS.md"
+    must_contain: "prune --scope"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+
+notes: |-
+  `--scope P-x` để quét đúng một phạm vi vừa release. Giữ mặc định dry-run.
+
+  Hai luật validate KHÔNG nằm ở đây mà ở T-079: `src/graph/validate.ts` thuộc
+  khối M-validate của phạm vi P-graph-core, và một task không được chạm khối của
+  hai phạm vi (`scope/task-touches-outside-scope`, mức error).
+
+  Tiêu chí `artifact` trỏ `docs/COMMANDS.md` là thứ DUY NHẤT kéo file đó vào
+  ranh giới — nó không thuộc `paths` của khối nào. Thiếu nó thì `ganas commit`
+  bỏ lại tài liệu trong khi `cli-help.test.ts` lại đòi mục trong đó.

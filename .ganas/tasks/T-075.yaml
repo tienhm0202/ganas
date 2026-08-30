@@ -1,0 +1,41 @@
+id: T-075
+title: "Quyền sở hữu file design theo produces, không chỉ theo implements"
+serves:
+  - G-001
+implements: D-011
+scope: P-cli
+status: todo
+estimated_context: small
+model: verifier
+blocked_by:
+  - T-073
+
+context_contract:
+  must_read:
+    - path: "src/boundary.ts"
+      why: "ownsGanasFile hiện chỉ nhận design mà task `implements` — task sinh bản vẽ vào design KHÁC sẽ bị bỏ lại file"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-cli-core
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/boundary.test.ts' 'test/boundary-verification-paths.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+
+notes: |-
+  Lỗ cụ thể: `ownsGanasFile()` cho task sở hữu `.ganas/designs/<implements>.yaml`
+  và chỉ thế. Task khai `produces: [D-011/A-x]` trong khi `implements: D-010`
+  thì file `D-011.yaml` KHÔNG thuộc nó ⇒ `ganas commit` bỏ lại ⇒ bản vẽ vừa vẽ
+  không nằm trong commit nào và không ai nghiệm thu.
+
+  Đúng lớp rò mà icebox đã ghi ba nhánh; đây là nhánh thứ tư, lần này biết
+  trước nên vá luôn thay vì trả giá.
+
+  Cũng phải mở rộng `verificationPathRefs` cho `produces`? KHÔNG — nó đã nhận
+  dạng `D-x/A-y` từ T-070, và nó đọc từ `exit_contract`, không từ `produces`.
+  Kiểm lại bằng test trước khi sửa gì thêm.
