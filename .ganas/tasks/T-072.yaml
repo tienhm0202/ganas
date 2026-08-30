@@ -4,7 +4,7 @@ serves:
   - G-001
 implements: D-010
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
 model: verifier
 blocked_by:
@@ -13,7 +13,8 @@ blocked_by:
 context_contract:
   must_read:
     - path: "src/render/brief.ts"
-      why: "stageProgressLine:268-305 là chỗ thêm; docstring :258-262 cấm chạy lệnh và cấm đọc đồng hồ trong đó"
+      why: "stageProgressLine:268-305 là chỗ thêm; docstring :258-262 cấm chạy lệnh và
+        cấm đọc đồng hồ trong đó"
   facts: []
   open_questions: []
 
@@ -22,7 +23,7 @@ touches:
 
 exit_contract:
   - kind: command
-    run: "npx tsx --test 'test/render-brief.test.ts'"
+    run: "npx tsx --test 'test/scope-brief.test.ts'"
     expect: exit_zero
   - kind: artifact
     path: ".ganas/designs/D-010.yaml"
@@ -33,7 +34,7 @@ exit_contract:
   - kind: verification
     target: "M-render/V-render-brief"
 
-notes: >-
+notes: |-
   Vế dogfood là phần đáng giá nhất của task này: D-010 khai `artifacts` về CHÍNH
   cơ chế nó dựng, ví dụ một bản vẽ `kind: function` cho `artifactTargets` với
   probe `grep -qF "export function artifactTargets(" src/verify/run.ts` và
@@ -42,3 +43,4 @@ notes: >-
 
   Ràng buộc của `stageProgressLine`: CHỈ đọc graph + freshness. Không chạy lệnh,
   không đọc đồng hồ — nó nằm trên đường brief render mỗi phiên.
+done_at: 2026-08-30T05:30:31.915Z

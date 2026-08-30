@@ -264,6 +264,15 @@ function pendingProposalsSection(graph: Graph, t: Task): string {
  * trong SỔ CÁI chứ không nằm trong cây file — đúng lý do ngược với
  * `evaluateTreeCriteria` (src/gate.ts). Ba loại còn lại phải chạy thật; brief
  * nói thẳng là chưa biết và chỉ tới `ganas gate --design`, không đoán hộ.
+ *
+ * Cùng lý do đó áp cho mệnh đề bản vẽ (`Design.artifacts`): freshness của mỗi
+ * `D-x/A-y` đã nằm sẵn trong `freshness` (tham số truyền vào, tính từ sổ cái ở
+ * chỗ gọi), nên đọc thẳng bằng `freshness.get()` là đủ.
+ *
+ * RÀNG BUỘC CỨNG: hàm này CHỈ được đọc `graph` và tra `freshness` đã tính sẵn.
+ * Không chạy lệnh, không đọc đồng hồ, không chạm đĩa — vi phạm là phá prompt
+ * cache của MỌI phiên sau, không riêng phiên đang chạy (xem docstring phía
+ * trên và `src/render/CLAUDE.md`).
  */
 function stageProgressLine(graph: Graph, d: Design, freshness: Map<string, FactFreshness>): string {
   const tasks = [...graph.tasks.values()].filter((s) => s.value.implements === d.id);
@@ -294,6 +303,26 @@ function stageProgressLine(graph: Graph, d: Design, freshness: Map<string, FactF
         (mustRun > 0
           ? `, ${mustRun} tiêu chí phải chạy \`ganas gate --design ${d.id}\` mới biết`
           : ` (chấm lại: \`ganas gate --design ${d.id}\`)`),
+    );
+  }
+
+  // Bản vẽ (`Design.artifacts`) — design chưa khai bản vẽ nào thì bỏ hẳn mệnh
+  // đề này, đừng in "0/0": đó là hai tình huống khác nhau (chưa cần bản vẽ,
+  // và có bản vẽ nhưng chưa cái nào fresh) mà một con số giống nhau sẽ trộn lẫn.
+  if (d.artifacts.length > 0) {
+    const notFresh: string[] = [];
+    let fresh = 0;
+    for (const a of d.artifacts) {
+      const state = freshness.get(`${d.id}/${a.id}`);
+      if (state?.freshness === "fresh") {
+        fresh++;
+      } else {
+        notFresh.push(`${a.id} ${freshnessMark(state)}`);
+      }
+    }
+    parts.push(
+      `bản vẽ: ${fresh}/${d.artifacts.length} fresh` +
+        (notFresh.length > 0 ? ` (${notFresh.join(", ")})` : ""),
     );
   }
 

@@ -40,6 +40,54 @@ summary: >-
   parse `shape` thành type thật (đắt, và `trace.ts` đã chọn so chuỗi thô có chủ
   đích).
 
+artifacts:
+  # Dogfood: D-010 tự khai bản vẽ về chính cơ chế nó vừa dựng, để không chỉ
+  # tương lai mới đối chiếu được `Design.artifacts` với code — chính chặng
+  # sinh ra cơ chế này cũng phải chấm được bằng cơ chế đó.
+  - id: A-artifact-target
+    kind: function
+    module: M-verify
+    shape: "(sourced: Sourced<Design>, graph: Graph) => Target[]"
+    notes: |-
+      Hàm nối Design.artifacts vào sổ cái: mỗi bản vẽ có `probe` sinh ra một
+      Target khoá `D-x/A-y`, cắm vào allTargets() để computeFreshness() lấy
+      làm đầu vào — đây là khe duy nhất nối bản vẽ với code thật.
+    probe:
+      # Kiểm ĐÚNG CHỮ KÝ, không chỉ tên hàm: `shape` ở trên là lời khẳng định,
+      # và một probe chỉ tìm tên sẽ vẫn xanh sau khi ai đó đổi tham số — lúc đó
+      # bản vẽ nói dối mà không có gì bắt được.
+      run: >-
+        grep -qF "export function artifactTargets(sourced: Sourced<Design>, graph: Graph): Target[]"
+        src/verify/run.ts
+      expect: exit_zero
+  - id: A-artifact-issues
+    kind: function
+    module: M-model
+    shape: "(design: Design, lookupModule: (id: string) => Module | undefined) => ArtifactIssue[]"
+    notes: |-
+      Đối chiếu bản vẽ với sơ đồ khối, thuần — không chạm đĩa, không chạy
+      lệnh. Một nơi quyết (hàm này), hai nơi in: graph/validate.ts dựng
+      diagnostic, commands/design.ts in cho người.
+    probe:
+      # Chữ ký trải trên bốn dòng nên gộp dòng trước rồi mới khớp — vẫn là kiểm
+      # chữ ký thật, không phải chỉ kiểm tên hàm tồn tại.
+      run: >-
+        tr '\n' ' ' < src/model/design.ts | tr -s ' ' |
+        grep -qF "export function artifactIssues( design: Design, lookupModule: (id: string) => Module | undefined, ): ArtifactIssue[]"
+      expect: exit_zero
+  - id: A-task-role
+    kind: type
+    module: M-model
+    shape: 'TASK_ROLE = ["design", "build"] as const'
+    notes: |-
+      Vai của task: `design` (vẽ bản thiết kế, không đụng code) hay `build`
+      (hiện thực code theo bản vẽ). Mặc định `build` để 49 task cũ adopt
+      được mà không phải sửa file nào.
+    probe:
+      run: >-
+        grep -qF 'export const TASK_ROLE = ["design", "build"] as const;' src/model/task.ts
+      expect: exit_zero
+
 exit_contract:
   # Bản vẽ phải thật sự thành target trong sổ cái, phân biệt được ba loại lệch.
   - kind: command

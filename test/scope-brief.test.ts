@@ -5,7 +5,7 @@ import { computeFreshness } from "../src/graph/freshness.js";
 import { loadGraph } from "../src/graph/load.js";
 import { selectNextTask } from "../src/graph/select.js";
 import { renderBrief } from "../src/render/brief.js";
-import { factTarget, runTarget } from "../src/verify/run.js";
+import { artifactTargets, factTarget, runTarget } from "../src/verify/run.js";
 import { cleanup, design, goal, makeProject, moduleYaml, scope, task } from "./helpers.js";
 
 /**
@@ -590,6 +590,79 @@ test("design superseded mà không design nào khai thay thế → vẫn cảnh 
     const brief = await briefOf(root);
     assert.match(brief, /đã bị thay thế/, "vẫn phải cảnh báo dù không tra được ai thay thế");
     assert.doesNotMatch(brief, /thay bởi `/, "không được bịa tên design thay thế khi không tra được");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- Design.artifacts: mệnh đề bản vẽ trong dòng tiến độ chặng ------------ */
+
+/** Dựng dự án với D-001 khai hai bản vẽ, neo vào M-a. */
+async function withDesignArtifacts(): Promise<string> {
+  return makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(
+      "D-001",
+      ["G-001"],
+      `artifacts:
+  - id: A-fresh
+    kind: function
+    module: M-a
+    shape: "() => void"
+    probe:
+      run: "test -d .ganas/scopes"
+      expect: exit_zero
+  - id: A-chua-verify
+    kind: function
+    module: M-a
+    shape: "() => void"
+    probe:
+      run: "test -d .ganas/scopes"
+      expect: exit_zero
+`,
+    ),
+    ".ganas/tasks/T-001.yaml": task(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+  });
+}
+
+test("design có bản vẽ, một cái fresh một cái chưa verify → dòng tiến độ in đúng tỉ lệ và nêu cái chưa fresh", async () => {
+  const root = await withDesignArtifacts();
+  try {
+    const graph = await loadGraph(root);
+    const [fresh] = artifactTargets(graph.designs.get("D-001")!, graph).filter(
+      (t) => t.id === "D-001/A-fresh",
+    );
+    await runTarget(fresh!, { root, by: "test", skipMutation: true });
+
+    const brief = await briefOf(root);
+    const line = brief.slice(brief.indexOf("**Tiến độ chặng:**"));
+    const progressLine = line.slice(0, line.indexOf("\n"));
+
+    assert.match(progressLine, /bản vẽ: 1\/2 fresh/, "phải đếm đúng số bản vẽ fresh trên tổng");
+    assert.match(
+      progressLine,
+      /A-chua-verify/,
+      "bản vẽ chưa fresh phải được nêu tên trong dòng tiến độ",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("design KHÔNG khai bản vẽ nào → dòng tiến độ chặng KHÔNG có mệnh đề bản vẽ", async () => {
+  const root = await withDesignStatus("active");
+  try {
+    const brief = await briefOf(root);
+    const line = brief.slice(brief.indexOf("**Tiến độ chặng:**"));
+    const progressLine = line.slice(0, line.indexOf("\n"));
+
+    assert.doesNotMatch(
+      progressLine,
+      /bản vẽ:/,
+      "design chưa có artifacts thì không được bịa ra mệnh đề bản vẽ (không in '0/0')",
+    );
   } finally {
     await cleanup(root);
   }
