@@ -477,13 +477,22 @@ async function checkCriterion(criterion, ctx) {
     }
   }
 }
-async function evaluateGate(graph, task, freshness, sessionId) {
+async function evaluateExitContract(subject, criteria, ctx) {
   const results = await Promise.all(
-    task.exit_contract.map((c) => checkCriterion(c, { root: graph.root, sessionId, freshness }))
+    criteria.map(
+      (c) => checkCriterion(c, { root: ctx.root, sessionId: ctx.sessionId, freshness: ctx.freshness })
+    )
   );
   const unmet = results.filter((r) => r.status === "fail");
   const pendingHuman = results.filter((r) => r.status === "pending_human");
-  return { task: task.id, ok: unmet.length === 0, results, unmet, pendingHuman };
+  return { subject, ok: unmet.length === 0, results, unmet, pendingHuman };
+}
+async function evaluateGate(graph, task, freshness, sessionId) {
+  return evaluateExitContract(task.id, task.exit_contract, {
+    root: graph.root,
+    freshness,
+    sessionId
+  });
 }
 function formatGate(result) {
   const lines = [];
@@ -4960,14 +4969,211 @@ var init_config = __esm({
   }
 });
 
+// src/model/task.ts
+var TASK_STATUS, ESTIMATED_CONTEXT, TASK_ROLE, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
+var init_task = __esm({
+  "src/model/task.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    init_config();
+    TASK_STATUS = ["todo", "in_progress", "done"];
+    ESTIMATED_CONTEXT = ["small", "medium", "large"];
+    TASK_ROLE = ["design", "build"];
+    zContextContract = external_exports.object({
+      must_read: external_exports.array(
+        external_exports.object({
+          path: zNonEmpty,
+          /** Bắt buộc: một danh sách file không có lý do thì phiên sau đọc mò. */
+          why: zNonEmpty
+        })
+      ).default([]),
+      /** Fact phải còn FRESH mới được dùng; brief cảnh báo nếu STALE. */
+      facts: external_exports.array(zFactId).default([]),
+      open_questions: external_exports.array(zNonEmpty).default([])
+    });
+    zExitCommand = external_exports.object({
+      kind: external_exports.literal("command"),
+      run: zNonEmpty,
+      expect: zExpect
+    });
+    zExitArtifact = external_exports.object({
+      kind: external_exports.literal("artifact"),
+      path: zNonEmpty,
+      must_contain: external_exports.string().optional()
+    });
+    zExitHandoff = external_exports.object({
+      kind: external_exports.literal("handoff"),
+      required: external_exports.boolean().default(true)
+    });
+    zExitManual = external_exports.object({
+      kind: external_exports.literal("manual"),
+      check: zNonEmpty
+    });
+    zExitVerification = external_exports.object({
+      kind: external_exports.literal("verification"),
+      target: zNonEmpty.describe(
+        "id target trong s\u1ED5 c\xE1i, vd `M-intent/V-intent-eval` (b\u1EB1ng ch\u1EE9ng c\u1EE7a kh\u1ED1i) ho\u1EB7c `F-ACC-001` (fact)"
+      )
+    });
+    zExitCriterion = external_exports.discriminatedUnion("kind", [
+      zExitCommand,
+      zExitArtifact,
+      zExitHandoff,
+      zExitManual,
+      zExitVerification
+    ]);
+    zTask = external_exports.object({
+      id: zTaskId,
+      title: zNonEmpty,
+      serves: external_exports.array(zGoalId, { required_error: "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?" }).min(1, "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?"),
+      implements: zDesignId.describe("design m\xE0 task n\xE0y hi\u1EC7n th\u1EF1c"),
+      /**
+       * Phạm vi công việc chứa task. Bắt buộc: task không thuộc phạm vi nào thì
+       * không ai nghiệm thu được nó, và tri thức nó sinh ra không biết neo vào đâu.
+       */
+      scope: zScopeId,
+      status: external_exports.enum(TASK_STATUS).default("todo"),
+      estimated_context: external_exports.enum(ESTIMATED_CONTEXT).default("medium"),
+      context_contract: zContextContract.default({ must_read: [], facts: [], open_questions: [] }),
+      /** Kỹ năng cần cho task — brief liệt kê để phiên mới biết nạp gì. */
+      skills: external_exports.array(zNonEmpty).default([]),
+      /**
+       * Tier model nên dùng khi giao task này (cho sub-agent hoặc phiên mới).
+       * Gán lúc chẻ task từ plan — quyết định của người/agent thiết kế, KHÔNG
+       * suy tự động từ module.nature (heuristic không đáng tin bằng người biết rõ
+       * việc). Không gán thì brief không gợi ý model nào — không đoán bừa.
+       */
+      model: external_exports.enum(MODEL_TIER).optional(),
+      /**
+       * Vai của task: `design` (vẽ bản thiết kế) hay `build` (hiện thực code
+       * theo bản vẽ). Gán lúc chẻ task — quyết định của NGƯỜI, không suy tự
+       * động, đúng lý lẽ đã áp cho `model` ngay phía trên: heuristic (vd "task
+       * không có `touches` thì chắc là design") không đáng tin bằng người biết
+       * rõ việc, và đoán sai thì không lỗi nào nổi lên.
+       *
+       * Mặc định `build`: toàn bộ task khai từ trước khi trường này ra đời là
+       * hiện thực code, và phần lớn task tương lai cũng vậy — coi "build" là
+       * ngầm định để 49 task cũ adopt được mà không phải sửa file nào, thay vì
+       * bắt mọi task khai tay một trường vốn hầu như luôn cùng một giá trị.
+       * Đây KHÔNG phải suy luận: mặc định chỉ chọn giá trị PHỔ BIẾN NHẤT, còn
+       * `design` vẫn phải khai tay — không có tín hiệu nào (kể cả `touches`
+       * rỗng, vốn có nhiều lý do khác) tự động biến một task thành design.
+       */
+      role: external_exports.enum(TASK_ROLE).default("build"),
+      /**
+       * Khối trong sơ đồ mà task này chạm tới.
+       *
+       * Đây là điểm nối giữa trục VIỆC và trục HỆ THỐNG: chạm khối nào thì phải để
+       * lại bằng chứng cho khối đó (luật `spine/task-missing-verification`).
+       */
+      touches: external_exports.array(zModuleId).default([]),
+      exit_contract: external_exports.array(zExitCriterion, {
+        required_error: 'task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong? Kh\xF4ng c\xF3 ti\xEAu ch\xED ki\u1EC3m ch\u1EE9ng \u0111\u01B0\u1EE3c th\xEC Stop hook kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c, v\xE0 "xong" tr\u1EDF th\xE0nh \xFD ki\u1EBFn.'
+      }).min(1, "task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong?"),
+      blocked_by: external_exports.array(zTaskId).default([]),
+      created_at: zIsoDate.optional(),
+      done_at: zIsoDate.optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((t, ctx) => {
+      if (t.blocked_by.includes(t.id)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["blocked_by"],
+          message: `task ${t.id} kh\xF4ng th\u1EC3 t\u1EF1 ch\u1EB7n ch\xEDnh n\xF3`
+        });
+      }
+      if (t.status === "done" && !t.done_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["done_at"],
+          message: `task ${t.id} \u0111\xE1nh d\u1EA5u done nh\u01B0ng thi\u1EBFu done_at`
+        });
+      }
+      const dupServes = t.serves.find((g, i) => t.serves.indexOf(g) !== i);
+      if (dupServes) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["serves"],
+          message: `task ${t.id} li\u1EC7t k\xEA goal ${dupServes} hai l\u1EA7n`
+        });
+      }
+    });
+  }
+});
+
 // src/model/design.ts
-var DESIGN_STATUS, zDesign;
+function artifactStatement(design, artifact) {
+  return `${design.id}/${artifact.id} (${artifact.kind}) trong ${artifact.module}: ${artifact.shape}`;
+}
+function artifactIssues(design, lookupModule) {
+  const issues = [];
+  design.artifacts.forEach((a, index) => {
+    const add = (code, message, hint) => {
+      issues.push({ artifactId: a.id, index, code, message, hint });
+    };
+    const mod = lookupModule(a.module);
+    if (!mod) {
+      add(
+        "missing-module",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} thu\u1ED9c kh\u1ED1i \`${a.module}\` nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng t\u1ED3n t\u1EA1i`,
+        `T\u1EA1o .ganas/modules/${a.module}.yaml, ho\u1EB7c s\u1EEDa \`module\` c\u1EE7a b\u1EA3n v\u1EBD. B\u1EA3n v\u1EBD kh\xF4ng neo \u0111\u01B0\u1EE3c v\xE0o kh\u1ED1i th\xEC kh\xF4ng c\xF3 file n\xE0o \u0111\u1EC3 t\xEDnh STALE \u2014 n\xF3 s\u1EBD xanh v\u0129nh vi\u1EC5n.`
+      );
+      return;
+    }
+    if (!a.probe) {
+      add(
+        "missing-probe",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} ch\u01B0a c\xF3 \`probe\` \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1ED1i chi\u1EBFu n\xF3 v\u1EDBi code th\u1EADt`,
+        'Th\xEAm `probe: { run: "...", expect: exit_zero }`. B\u1EA3n v\u1EBD kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c th\xEC n\xF3 l\xE0 v\u0103n xu\xF4i, ch\u1EC9 kh\xE1c ch\u1ED7 \u0111\u1EB7t.'
+      );
+    }
+    if (!a.port) return;
+    const ports = a.port.side === "out" ? mod.contract.outputs : mod.contract.inputs;
+    const sideLabel = a.port.side === "out" ? "c\u1ED5ng ra" : "c\u1ED5ng v\xE0o";
+    const port = ports.find((p) => p.name === a.port?.name);
+    if (!port) {
+      add(
+        "port-not-found",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} neo v\xE0o ${sideLabel} \`${a.port.name}\` c\u1EE7a kh\u1ED1i ${a.module}, nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng khai c\u1ED5ng n\xE0o t\xEAn v\u1EADy`,
+        `Th\xEAm c\u1ED5ng v\xE0o \`contract.${a.port.side === "out" ? "outputs" : "inputs"}\` c\u1EE7a ${a.module}, ho\u1EB7c b\u1ECF \`port\` kh\u1ECFi b\u1EA3n v\u1EBD.`
+      );
+      return;
+    }
+    if (port.shape.trim() !== a.shape.trim()) {
+      add(
+        "shape-drift",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} khai shape \`${a.shape.trim()}\` nh\u01B0ng ${sideLabel} \`${port.name}\` c\u1EE7a ${a.module} khai \`${port.shape.trim()}\` \u2014 hai b\u1EA3n v\u1EBD c\u1EE7a c\xF9ng m\u1ED9t th\u1EE9`,
+        "S\u1EEDa m\u1ED9t trong hai cho kh\u1EDBp. Ph\xE9p so l\xE0 `.trim()` r\u1ED3i so t\u1EEBng k\xFD t\u1EF1, \u0111\xFAng nh\u01B0 `portIssues()` \u2014 kho\u1EA3ng tr\u1EAFng \u0111\u1EA7u/cu\u1ED1i kh\xF4ng t\xEDnh, c\xF2n l\u1EA1i t\xEDnh h\u1EBFt."
+      );
+    }
+  });
+  return issues;
+}
+var DESIGN_STATUS, ARTIFACT_KIND, zArtifactId, zArtifactPort, zDesignArtifact, zDesign;
 var init_design = __esm({
   "src/model/design.ts"() {
     "use strict";
     init_zod();
     init_common();
-    DESIGN_STATUS = ["draft", "active", "superseded", "archived"];
+    init_task();
+    DESIGN_STATUS = ["draft", "active", "superseded", "archived", "done"];
+    ARTIFACT_KIND = ["schema", "migration", "function", "api", "type"];
+    zArtifactId = external_exports.string().regex(/^A-[a-z0-9][a-z0-9-]*$/i, "ID b\u1EA3n v\u1EBD ph\u1EA3i d\u1EA1ng A-users-table");
+    zArtifactPort = external_exports.object({
+      side: external_exports.enum(["in", "out"]),
+      name: zNonEmpty
+    }).strict();
+    zDesignArtifact = external_exports.object({
+      id: zArtifactId,
+      kind: external_exports.enum(ARTIFACT_KIND),
+      /** Khối chứa code mà bản vẽ này mô tả. Cũng là nguồn tính STALE. */
+      module: zModuleId,
+      shape: zNonEmpty.describe('h\xECnh d\u1EA1ng, vd "(userId: string) => Date | null"'),
+      port: zArtifactPort.optional(),
+      probe: zProbe.optional(),
+      notes: external_exports.string().optional()
+    }).strict();
     zDesign = external_exports.object({
       id: zDesignId,
       title: zNonEmpty,
@@ -4983,7 +5189,34 @@ var init_design = __esm({
       /** Các quyết định người đã chốt mà design này dựa vào. */
       decisions: external_exports.array(zDecisionId).default([]),
       supersedes: external_exports.array(zDesignId).default([]),
+      /**
+       * Hợp đồng ra của CHẶNG — dùng chung `zExitCriterion` với task, cố ý.
+       *
+       * Task trả lời "bước này xong chưa"; design trả lời "chặng này đóng được
+       * chưa". Hai câu hỏi khác nhau nhưng cùng một loại bằng chứng, nên loại
+       * tiêu chí thứ hai chỉ làm hai bảng trôi khỏi nhau.
+       *
+       * Đây cũng là chỗ nợ tiếp nối phải sống. Trước đó nó sống trong `notes`
+       * văn xuôi — không schema, không validator — và T-039 (xem
+       * `.ganas/tasks/T-048.yaml`) bay hơi đúng vì thế.
+       *
+       * `.default([])` chứ không `.min(1)`: bảy design đã có phải adopt được.
+       * Chỗ ép là luật `spine/design-missing-exit-contract`, ở mức warning.
+       */
+      /**
+       * Bản vẽ của chặng — hình dạng dữ liệu và chữ ký mà code phải khớp.
+       *
+       * Đây là cạnh Design → Module mà xương sống vốn thiếu: trước đây đường duy
+       * nhất từ design xuống code là `task.implements` (ngược chiều) rồi mới
+       * `task.touches`. Nghĩa là design không nói được nó CHỐT cái gì, chỉ nói
+       * được ai đang làm nó.
+       *
+       * `.default([])` chứ không `.min(1)`: chín design đã có phải adopt được.
+       */
+      artifacts: external_exports.array(zDesignArtifact).default([]),
+      exit_contract: external_exports.array(zExitCriterion).default([]),
       created_at: zIsoDate.optional(),
+      done_at: zIsoDate.optional(),
       notes: external_exports.string().optional()
     }).strict().superRefine((d, ctx) => {
       const dup = d.serves.find((g, i) => d.serves.indexOf(g) !== i);
@@ -4992,6 +5225,22 @@ var init_design = __esm({
           code: external_exports.ZodIssueCode.custom,
           path: ["serves"],
           message: `design ${d.id} li\u1EC7t k\xEA goal ${dup} hai l\u1EA7n`
+        });
+      }
+      if (d.status === "done" && !d.done_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["done_at"],
+          message: `design ${d.id} \u0111\xE1nh d\u1EA5u done nh\u01B0ng thi\u1EBFu done_at`
+        });
+      }
+      const artifactIds = d.artifacts.map((a) => a.id);
+      const dupArtifact = artifactIds.find((id, i) => artifactIds.indexOf(id) !== i);
+      if (dupArtifact) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["artifacts"],
+          message: `design ${d.id} c\xF3 hai b\u1EA3n v\u1EBD tr\xF9ng id "${dupArtifact}"`
         });
       }
       if (d.supersedes.includes(d.id)) {
@@ -5700,122 +5949,6 @@ var init_scope = __esm({
           code: external_exports.ZodIssueCode.custom,
           path: ["acceptance"],
           message: `ph\u1EA1m vi ${s.id} c\xF3 hai ti\xEAu ch\xED nghi\u1EC7m thu tr\xF9ng id "${dupA}"`
-        });
-      }
-    });
-  }
-});
-
-// src/model/task.ts
-var TASK_STATUS, ESTIMATED_CONTEXT, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
-var init_task = __esm({
-  "src/model/task.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    init_config();
-    TASK_STATUS = ["todo", "in_progress", "blocked", "done"];
-    ESTIMATED_CONTEXT = ["small", "medium", "large"];
-    zContextContract = external_exports.object({
-      must_read: external_exports.array(
-        external_exports.object({
-          path: zNonEmpty,
-          /** Bắt buộc: một danh sách file không có lý do thì phiên sau đọc mò. */
-          why: zNonEmpty
-        })
-      ).default([]),
-      /** Fact phải còn FRESH mới được dùng; brief cảnh báo nếu STALE. */
-      facts: external_exports.array(zFactId).default([]),
-      open_questions: external_exports.array(zNonEmpty).default([])
-    });
-    zExitCommand = external_exports.object({
-      kind: external_exports.literal("command"),
-      run: zNonEmpty,
-      expect: zExpect
-    });
-    zExitArtifact = external_exports.object({
-      kind: external_exports.literal("artifact"),
-      path: zNonEmpty,
-      must_contain: external_exports.string().optional()
-    });
-    zExitHandoff = external_exports.object({
-      kind: external_exports.literal("handoff"),
-      required: external_exports.boolean().default(true)
-    });
-    zExitManual = external_exports.object({
-      kind: external_exports.literal("manual"),
-      check: zNonEmpty
-    });
-    zExitVerification = external_exports.object({
-      kind: external_exports.literal("verification"),
-      target: zNonEmpty.describe(
-        "id target trong s\u1ED5 c\xE1i, vd `M-intent/V-intent-eval` (b\u1EB1ng ch\u1EE9ng c\u1EE7a kh\u1ED1i) ho\u1EB7c `F-ACC-001` (fact)"
-      )
-    });
-    zExitCriterion = external_exports.discriminatedUnion("kind", [
-      zExitCommand,
-      zExitArtifact,
-      zExitHandoff,
-      zExitManual,
-      zExitVerification
-    ]);
-    zTask = external_exports.object({
-      id: zTaskId,
-      title: zNonEmpty,
-      serves: external_exports.array(zGoalId, { required_error: "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?" }).min(1, "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?"),
-      implements: zDesignId.describe("design m\xE0 task n\xE0y hi\u1EC7n th\u1EF1c"),
-      /**
-       * Phạm vi công việc chứa task. Bắt buộc: task không thuộc phạm vi nào thì
-       * không ai nghiệm thu được nó, và tri thức nó sinh ra không biết neo vào đâu.
-       */
-      scope: zScopeId,
-      status: external_exports.enum(TASK_STATUS).default("todo"),
-      estimated_context: external_exports.enum(ESTIMATED_CONTEXT).default("medium"),
-      context_contract: zContextContract.default({ must_read: [], facts: [], open_questions: [] }),
-      /** Kỹ năng cần cho task — brief liệt kê để phiên mới biết nạp gì. */
-      skills: external_exports.array(zNonEmpty).default([]),
-      /**
-       * Tier model nên dùng khi giao task này (cho sub-agent hoặc phiên mới).
-       * Gán lúc chẻ task từ plan — quyết định của người/agent thiết kế, KHÔNG
-       * suy tự động từ module.nature (heuristic không đáng tin bằng người biết rõ
-       * việc). Không gán thì brief không gợi ý model nào — không đoán bừa.
-       */
-      model: external_exports.enum(MODEL_TIER).optional(),
-      /**
-       * Khối trong sơ đồ mà task này chạm tới.
-       *
-       * Đây là điểm nối giữa trục VIỆC và trục HỆ THỐNG: chạm khối nào thì phải để
-       * lại bằng chứng cho khối đó (luật `spine/task-missing-verification`).
-       */
-      touches: external_exports.array(zModuleId).default([]),
-      exit_contract: external_exports.array(zExitCriterion, {
-        required_error: 'task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong? Kh\xF4ng c\xF3 ti\xEAu ch\xED ki\u1EC3m ch\u1EE9ng \u0111\u01B0\u1EE3c th\xEC Stop hook kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c, v\xE0 "xong" tr\u1EDF th\xE0nh \xFD ki\u1EBFn.'
-      }).min(1, "task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong?"),
-      blocked_by: external_exports.array(zTaskId).default([]),
-      created_at: zIsoDate.optional(),
-      done_at: zIsoDate.optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((t, ctx) => {
-      if (t.blocked_by.includes(t.id)) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["blocked_by"],
-          message: `task ${t.id} kh\xF4ng th\u1EC3 t\u1EF1 ch\u1EB7n ch\xEDnh n\xF3`
-        });
-      }
-      if (t.status === "done" && !t.done_at) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["done_at"],
-          message: `task ${t.id} \u0111\xE1nh d\u1EA5u done nh\u01B0ng thi\u1EBFu done_at`
-        });
-      }
-      const dupServes = t.serves.find((g, i) => t.serves.indexOf(g) !== i);
-      if (dupServes) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["serves"],
-          message: `task ${t.id} li\u1EC7t k\xEA goal ${dupServes} hai l\u1EA7n`
         });
       }
     });
@@ -13551,31 +13684,31 @@ function tokensOf(text) {
 }
 function lintProbe(input) {
   const findings = [];
-  const run21 = input.run.trim();
+  const run22 = input.run.trim();
   for (const [pattern, what] of DANGEROUS) {
-    if (pattern.test(run21)) {
+    if (pattern.test(run22)) {
       findings.push({
         code: "dangerous",
         severity: "error",
-        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run21}\``,
+        message: `probe ch\u1EE9a thao t\xE1c nguy hi\u1EC3m (${what}): \`${run22}\``,
         hint: `ganas s\u1EBD KH\xD4NG ch\u1EA1y l\u1EC7nh n\xE0y. Probe ch\u1EC9 \u0111\u01B0\u1EE3c \u0111\u1ECDc v\xE0 ki\u1EC3m tra, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1ED5i tr\u1EA1ng th\xE1i h\u1EC7 th\u1ED1ng.`
       });
       return findings;
     }
   }
-  const simple = run21.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
+  const simple = run22.replace(/^\s*\(\s*|\s*\)\s*$/g, "").trim();
   if (ALWAYS_TRUE.some((re) => re.test(simple))) {
     findings.push({
       code: "tautological",
       severity: "error",
-      message: `probe \`${run21}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
+      message: `probe \`${run22}\` lu\xF4n th\xE0nh c\xF4ng \u2014 n\xF3 kh\xF4ng ki\u1EC3m ch\u1EE9ng \u0111i\u1EC1u g\xEC c\u1EA3`,
       hint: `Probe ph\u1EA3i c\xF3 kh\u1EA3 n\u0103ng FAIL khi ph\xE1t bi\u1EC3u sai. Vi\u1EBFt l\u1EC7nh th\u1EADt s\u1EF1 ch\u1EA1m v\xE0o th\u1EE9 \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh (vd \`test -f <\u0111\u01B0\u1EDDng-d\u1EABn>\`, \`grep -q '<chu\u1ED7i>' <file>\`, \`npm test -- <t\xEAn-test>\`).`
     });
     return findings;
   }
   const haystack = [input.statement ?? "", ...input.context ?? []].join(" ");
   if (haystack.trim()) {
-    const probeTokens = [...tokensOf(run21)].filter((t) => !SHELL_NOISE.has(t));
+    const probeTokens = [...tokensOf(run22)].filter((t) => !SHELL_NOISE.has(t));
     const claimTokens = tokensOf(haystack);
     const shared = probeTokens.some(
       (t) => [...claimTokens].some((c) => c === t || c.includes(t) || t.includes(c))
@@ -13584,7 +13717,7 @@ function lintProbe(input) {
       findings.push({
         code: "unrelated",
         severity: "warning",
-        message: `probe \`${run21}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
+        message: `probe \`${run22}\` kh\xF4ng nh\u1EAFc t\u1EDBi th\u1EE9 g\xEC c\xF3 trong ph\xE1t bi\u1EC3u \u2014 nhi\u1EC1u kh\u1EA3 n\u0103ng n\xF3 \u0111ang ki\u1EC3m m\u1ED9t th\u1EE9 kh\xE1c`,
         hint: `Ki\u1EC3m l\u1EA1i xem probe c\xF3 th\u1EADt s\u1EF1 ki\u1EC3m \u0111\xFAng \u0111i\u1EC1u \u0111ang \u0111\u01B0\u1EE3c kh\u1EB3ng \u0111\u1ECBnh kh\xF4ng.`
       });
     }
@@ -13679,6 +13812,21 @@ function codeModuleEdges(graph) {
   }
   return [...edges.values()];
 }
+function resolvesTarget(graph, target) {
+  if (graph.facts.has(target)) return true;
+  if (graph.modules.has(target)) return true;
+  const slash = target.indexOf("/");
+  if (slash === -1) return false;
+  const owner = target.slice(0, slash);
+  const child = target.slice(slash + 1);
+  const mod = graph.modules.get(owner)?.value;
+  if (mod) return mod.verify.some((v) => v.id === child);
+  const scope = graph.scopes.get(owner)?.value;
+  if (scope) return scope.acceptance.some((v) => v.id === child);
+  const design = graph.designs.get(owner)?.value;
+  if (design) return design.artifacts.some((a) => a.id === child);
+  return false;
+}
 function at(graph, sourced, ...path) {
   const loaded = graph.sources.get(sourced.file);
   if (!loaded) return void 0;
@@ -13718,6 +13866,13 @@ function findCycle(edges) {
 function validateGraph(graph, opts = {}) {
   const now = opts.now ?? Date.now();
   const diags = [...graph.loadDiagnostics];
+  const taskCountOf = /* @__PURE__ */ new Map();
+  for (const t of graph.tasks.values()) {
+    const c = taskCountOf.get(t.value.implements) ?? { total: 0, open: 0 };
+    c.total += 1;
+    if (t.value.status !== "done") c.open += 1;
+    taskCountOf.set(t.value.implements, c);
+  }
   for (const design of graph.designs.values()) {
     const d = design.value;
     d.serves.forEach((goalId, i) => {
@@ -13774,6 +13929,63 @@ function validateGraph(graph, opts = {}) {
           message: `design ${d.id} thay th\u1EBF design ${oldId} kh\xF4ng t\u1ED3n t\u1EA1i`,
           file: design.file,
           line: at(graph, design, "supersedes", i)
+        });
+      }
+    });
+    if (d.status === "active") {
+      const tasks = taskCountOf.get(d.id) ?? { total: 0, open: 0 };
+      if (tasks.total > 0 && tasks.open === 0) {
+        diags.push({
+          severity: "error",
+          code: "spine/design-stalled",
+          message: `design ${d.id} c\xF2n active nh\u01B0ng c\u1EA3 ${tasks.total} task tr\u1ECF v\xE0o n\xF3 \u0111\u1EC1u done \u2014 ch\u1EB7ng b\u1ECF d\u1EDF`,
+          file: design.file,
+          line: at(graph, design, "status"),
+          hint: `\u0110\xF3ng ch\u1EB7ng: \u0111\u1EB7t status: done + done_at sau khi exit_contract tho\u1EA3. C\xF2n thi\u1EBFu b\u01B0\u1EDBc th\xEC d\u1EF1ng n\u1ED1t task v\xE0 cho n\xF3 implements: ${d.id}.`
+        });
+      }
+      if (d.exit_contract.length === 0) {
+        diags.push({
+          severity: "warning",
+          code: "spine/design-missing-exit-contract",
+          message: `design ${d.id} ch\u01B0a khai exit_contract \u2014 kh\xF4ng c\xF3 g\xEC ch\u1EA5m "ch\u1EB7ng \u0111\xF3ng \u0111\u01B0\u1EE3c ch\u01B0a"`,
+          file: design.file,
+          line: at(graph, design, "id"),
+          hint: `Th\xEAm exit_contract v\xE0o ${design.file}, d\xF9ng \u0111\xFAng khu\xF4n ti\xEAu ch\xED c\u1EE7a task (kind: command / artifact / handoff / manual / verification).`
+        });
+      }
+    }
+    for (const issue of artifactIssues(d, (id) => graph.modules.get(id)?.value)) {
+      if (issue.code === "missing-probe" && d.status !== "active") continue;
+      diags.push({
+        // `shape-drift` và `port-not-found` là ERROR, không phải cảnh báo: đó là
+        // hai nguồn sự thật cho cùng một câu hỏi, đúng lớp mà
+        // `scope/module-scope-mismatch` cũng đánh error. Và cổng CI chỉ đóng khi
+        // có error — một bản vẽ lệch cổng ở mức warning là bản vẽ không ai sửa.
+        severity: issue.code === "missing-probe" ? "warning" : "error",
+        code: `spine/design-artifact-${issue.code}`,
+        message: issue.message,
+        file: design.file,
+        line: at(graph, design, "artifacts", issue.index),
+        hint: issue.hint
+      });
+    }
+    d.artifacts.forEach((a, i) => {
+      if (!a.probe) return;
+      const mod = graph.modules.get(a.module)?.value;
+      if (!mod) return;
+      for (const f of lintProbe({
+        run: a.probe.run,
+        statement: artifactStatement(d, a),
+        context: [...mod.paths, ...mod.entrypoints]
+      })) {
+        diags.push({
+          severity: f.severity,
+          code: `verify/${f.code === "unrelated" ? "probe-unrelated" : f.code}`,
+          message: `b\u1EA3n v\u1EBD ${d.id}/${a.id}: ${f.message}`,
+          file: design.file,
+          line: at(graph, design, "artifacts", i),
+          hint: f.hint
         });
       }
     });
@@ -13851,6 +14063,17 @@ function validateGraph(graph, opts = {}) {
     const verifiedTargets = t.exit_contract.filter(
       (c) => c.kind === "verification"
     ).map((c) => c.target);
+    verifiedTargets.forEach((target) => {
+      if (resolvesTarget(graph, target)) return;
+      diags.push({
+        severity: "error",
+        code: "spine/exit-verification-target-not-found",
+        message: `task ${t.id} khai ti\xEAu ch\xED \`verification\` tr\u1ECF \`${target}\` nh\u01B0ng kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng n\xE0o mang t\xEAn \u0111\xF3`,
+        file: task.file,
+        line: at(graph, task, "exit_contract"),
+        hint: "Target h\u1EE3p l\u1EC7 c\xF3 b\u1ED1n d\u1EA1ng: `F-ACC-001` (fact), `M-intent` (m\u1ECDi b\u1EB1ng ch\u1EE9ng c\u1EE7a kh\u1ED1i), `M-intent/V-intent-smoke` (m\u1ED9t b\u1EB1ng ch\u1EE9ng), `D-010/A-users-table` (m\u1ED9t b\u1EA3n v\u1EBD)."
+      });
+    });
     t.touches.forEach((moduleId, i) => {
       const mod = graph.modules.get(moduleId);
       if (!mod) {
@@ -13863,9 +14086,14 @@ function validateGraph(graph, opts = {}) {
         });
         return;
       }
-      const covered = verifiedTargets.some(
-        (target) => target === moduleId || target.startsWith(`${moduleId}/`)
-      );
+      const covered = verifiedTargets.some((target) => {
+        if (target === moduleId || target.startsWith(`${moduleId}/`)) return true;
+        const slash = target.indexOf("/");
+        if (slash === -1) return false;
+        const design2 = graph.designs.get(target.slice(0, slash))?.value;
+        const artifactId = target.slice(slash + 1);
+        return design2?.artifacts.some((a) => a.id === artifactId && a.module === moduleId) ?? false;
+      });
       if (!covered) {
         diags.push({
           severity: "error",
@@ -13877,6 +14105,32 @@ function validateGraph(graph, opts = {}) {
         });
       }
     });
+    if (t.role === "design" && t.touches.length > 0) {
+      diags.push({
+        severity: "error",
+        code: "spine/design-task-touches-code",
+        message: `task ${t.id} khai role: design nh\u01B0ng l\u1EA1i ch\u1EA1m kh\u1ED1i ${t.touches.join(", ")} \u2014 vai thi\u1EBFt k\u1EBF kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EE5ng code`,
+        file: task.file,
+        line: at(graph, task, "touches"),
+        hint: `B\u1ECF \`touches\` kh\u1ECFi task thi\u1EBFt k\u1EBF; vi\u1EC7c hi\u1EC7n th\u1EF1c chuy\u1EC3n sang m\u1ED9t task kh\xE1c \`role: build\`. V\u1EBD v\xE0 x\xE2y trong c\xF9ng m\u1ED9t task th\xEC kh\xF4ng ai ch\u1EA5m \u0111\u01B0\u1EE3c b\u1EA3n v\u1EBD tr\u01B0\u1EDBc khi code ch\u1EA1y theo n\xF3.`
+      });
+    }
+    if (t.role === "design") {
+      const designArtifactPath = `${GANAS_DIR}/${DIRS.designs}/${t.implements}.yaml`;
+      const hasArtifactCriterion = t.exit_contract.some(
+        (c) => c.kind === "artifact" && c.path.replace(/^\.\//, "") === designArtifactPath
+      );
+      if (!hasArtifactCriterion) {
+        diags.push({
+          severity: "warning",
+          code: "spine/design-task-without-artifact-criterion",
+          message: `task ${t.id} khai role: design nh\u01B0ng \`exit_contract\` kh\xF4ng c\xF3 ti\xEAu ch\xED \`kind: artifact\` n\xE0o tr\u1ECF ${designArtifactPath}`,
+          file: task.file,
+          line: at(graph, task, "exit_contract"),
+          hint: `Th\xEAm v\xE0o exit_contract: { kind: artifact, path: "${designArtifactPath}" }. Thi\u1EBFu n\xF3, ranh gi\u1EDBi code c\u1EE7a task n\xE0y R\u1ED6NG v\xE0 \`outsideBoundary()\` kh\xF4ng b\xE1o \u0111\u01B0\u1EE3c khi task thi\u1EBFt k\u1EBF l\u1EE1 tay s\u1EEDa code th\u1EADt.`
+        });
+      }
+    }
     t.context_contract.facts.forEach((factId, i) => {
       if (!graph.facts.has(factId)) {
         diags.push({
@@ -14971,11 +15225,11 @@ var init_shell = __esm({
 });
 
 // src/verify/mutate.ts
-function runnerPathSpan(run21) {
-  const m = RUNNER.exec(run21);
+function runnerPathSpan(run22) {
+  const m = RUNNER.exec(run22);
   if (!m) return null;
   const after = m.index + m[0].length;
-  const spans = tokenSpans(run21.slice(after)).map((s) => ({ ...s, start: s.start + after }));
+  const spans = tokenSpans(run22.slice(after)).map((s) => ({ ...s, start: s.start + after }));
   let skipNext = false;
   for (const span of spans) {
     if (span.text.startsWith("-")) {
@@ -14990,53 +15244,53 @@ function runnerPathSpan(run21) {
   }
   return null;
 }
-function mutateProbe(run21) {
-  const fileTest = FILE_TEST.exec(run21);
+function mutateProbe(run22) {
+  const fileTest = FILE_TEST.exec(run22);
   if (fileTest) {
     const [full, head, flag2, quote3, path] = fileTest;
     const replaced = `${head}${flag2} ${quote3}${path}${MUTANT_SUFFIX}${quote3}`;
     return {
-      run: run21.replace(full, replaced),
+      run: run22.replace(full, replaced),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const grep = GREP.exec(run21);
+  const grep = GREP.exec(run22);
   if (grep) {
     const [full, cmd, flags, quote3, pattern] = grep;
     return {
-      run: run21.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
+      run: run22.replace(full, `${cmd}${flags} ${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const grepBare = GREP_BARE.exec(run21);
+  const grepBare = GREP_BARE.exec(run22);
   if (grepBare) {
     const [full, cmd, flags, pattern] = grepBare;
     return {
-      run: run21.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
+      run: run22.replace(full, `${cmd}${flags} ${IMPROBABLE}`),
       what: `\u0111\u1ED5i pattern \`${pattern}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
-  const runnerPath = runnerPathSpan(run21);
+  const runnerPath = runnerPathSpan(run22);
   if (runnerPath) {
     const path = stripOperators(runnerPath.text);
     const replaced = runnerPath.text.replace(path, `${path}${MUTANT_SUFFIX}`);
     return {
-      run: run21.slice(0, runnerPath.start) + replaced + run21.slice(runnerPath.start + runnerPath.text.length),
+      run: run22.slice(0, runnerPath.start) + replaced + run22.slice(runnerPath.start + runnerPath.text.length),
       what: `\u0111\u1ED5i \u0111\u01B0\u1EDDng d\u1EABn \`${path}\` th\xE0nh \u0111\u01B0\u1EDDng d\u1EABn kh\xF4ng t\u1ED3n t\u1EA1i`
     };
   }
-  const quoted = QUOTED.exec(run21);
+  const quoted = QUOTED.exec(run22);
   if (quoted) {
     const [full, quote3, body] = quoted;
     return {
-      run: run21.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
+      run: run22.replace(full, `${quote3}${IMPROBABLE}${quote3}`),
       what: `\u0111\u1ED5i chu\u1ED7i \`${body}\` th\xE0nh chu\u1ED7i kh\xF4ng th\u1EC3 kh\u1EDBp`
     };
   }
   return null;
 }
-async function proveCanFail(run21, expect, opts) {
-  const mutation = mutateProbe(run21);
+async function proveCanFail(run22, expect, opts) {
+  const mutation = mutateProbe(run22);
   if (!mutation) {
     return {
       status: "unproven",
@@ -15053,7 +15307,7 @@ async function proveCanFail(run21, expect, opts) {
       status: "cannot_fail",
       what: mutation.what,
       message: `b\u1EA3n b\xF3p m\xE9o (${mutation.what}) V\u1EAAN PASS \u2014 probe n\xE0y kh\xF4ng ki\u1EC3m th\u1EE9 n\xF3 n\xF3i l\xE0 \u0111ang ki\u1EC3m.
-    b\u1EA3n g\u1ED1c:    ${run21}
+    b\u1EA3n g\u1ED1c:    ${run22}
     b\xF3p m\xE9o:    ${mutation.run}
     C\u1EA3 hai c\xF9ng pass ngh\u0129a l\xE0 k\u1EBFt qu\u1EA3 pass kh\xF4ng mang th\xF4ng tin g\xEC.`
     };
@@ -15139,17 +15393,43 @@ function scopeTargets(sourced, graph) {
     ttlDays: v.ttl_days
   }));
 }
+function artifactTargets(sourced, graph) {
+  const d = sourced.value;
+  const targets = [];
+  for (const a of d.artifacts) {
+    if (!a.probe) continue;
+    const m = graph.modules.get(a.module)?.value;
+    targets.push({
+      id: `${d.id}/${a.id}`,
+      label: `${d.id}/${a.id}`,
+      kind: "probe",
+      definition: a.probe,
+      statement: artifactStatement(d, a),
+      context: m ? [...m.paths, ...m.entrypoints] : [],
+      ttlDays: 0
+    });
+  }
+  return targets;
+}
 function scopeOfTarget(target, graph) {
   if (target.fact) return target.fact.value.scope;
   const owner = target.id.split("/")[0];
   if (graph.scopes.has(owner)) return owner;
+  const design = graph.designs.get(owner)?.value;
+  if (design) {
+    const artifactId = target.id.slice(owner.length + 1);
+    const artifact = design.artifacts.find((a) => a.id === artifactId);
+    if (artifact) return graph.modules.get(artifact.module)?.value.scope;
+    return void 0;
+  }
   return graph.modules.get(owner)?.value.scope;
 }
 function allTargets(graph) {
   return [
     ...[...graph.facts.values()].map(factTarget),
     ...[...graph.modules.values()].flatMap(moduleTargets),
-    ...[...graph.scopes.values()].flatMap((s) => scopeTargets(s, graph))
+    ...[...graph.scopes.values()].flatMap((s) => scopeTargets(s, graph)),
+    ...[...graph.designs.values()].flatMap((d) => artifactTargets(d, graph))
   ];
 }
 async function shouldSkip(skipIf, root) {
@@ -15163,10 +15443,10 @@ async function runTarget(target, opts) {
     return { target, result: "unprovable", reason: "ki\u1EC3m t\u01B0\u01A1ng th\xEDch c\u1EA1nh thu\u1ED9c `ganas trace`" };
   }
   const v = target.verification;
-  const run21 = target.kind === "eval" ? v.run : target.definition.run;
+  const run22 = target.kind === "eval" ? v.run : target.definition.run;
   const skipIf = v?.skip_if ?? target.definition.skip_if;
   if (target.kind === "probe") {
-    const findings = lintProbe({ run: run21, statement: target.statement, context: target.context });
+    const findings = lintProbe({ run: run22, statement: target.statement, context: target.context });
     if (hasBlockingFinding(findings)) {
       const blocking = findings.filter((f) => f.severity === "error");
       return {
@@ -15189,23 +15469,23 @@ async function runTarget(target, opts) {
     outcome2.entry = await record(target, outcome2, opts);
     return outcome2;
   }
-  const outcome = target.kind === "eval" ? await runEval(target, run21, opts) : await runProbe(target, run21, opts);
+  const outcome = target.kind === "eval" ? await runEval(target, run22, opts) : await runProbe(target, run22, opts);
   outcome.entry = await record(target, outcome, opts);
   if (target.fact && (outcome.result === "pass" || outcome.result === "fail")) {
     await writeBackFact(target.fact, outcome, root);
   }
   return outcome;
 }
-async function runProbe(target, run21, opts) {
+async function runProbe(target, run22, opts) {
   const def = target.definition;
   const expect = def.expect ?? "exit_zero";
-  const result = await runShell(run21, { cwd: opts.root, timeoutMs: def.timeout_ms });
+  const result = await runShell(run22, { cwd: opts.root, timeoutMs: def.timeout_ms });
   const verdict = judge(result, expect);
   if (!verdict.pass) {
     return { target, result: "fail", reason: verdict.reason };
   }
   if (opts.skipMutation) return { target, result: "pass" };
-  const proof = await proveCanFail(run21, expect, { cwd: opts.root });
+  const proof = await proveCanFail(run22, expect, { cwd: opts.root });
   if (proof.status === "cannot_fail") {
     return {
       target,
@@ -15221,12 +15501,12 @@ async function runProbe(target, run21, opts) {
     reason: proof.status === "unproven" ? proof.message : void 0
   };
 }
-async function runEval(target, run21, opts) {
+async function runEval(target, run22, opts) {
   const v = target.verification;
   const dir = await mkdtemp(join6(tmpdir(), "ganas-eval-"));
   const outFile = join6(dir, "result.json");
   try {
-    const result = await runShell(run21, {
+    const result = await runShell(run22, {
       cwd: opts.root,
       timeoutMs: v.timeout_ms ?? 6e5,
       env: { GANAS_EVAL_OUT: outFile }
@@ -15304,6 +15584,7 @@ var init_run = __esm({
   "src/verify/run.ts"() {
     "use strict";
     import_yaml4 = __toESM(require_dist(), 1);
+    init_model();
     init_exec();
     init_glob();
     init_adapters();
@@ -15421,6 +15702,14 @@ async function computeFreshness(graph, opts = {}) {
   const needsFileScan = targets.some((t) => globsOf(t).length > 0);
   const files = needsFileScan ? await listProjectFiles(graph.root) : [];
   const mtimeCache = /* @__PURE__ */ new Map();
+  const depsCache = /* @__PURE__ */ new Map();
+  const depsHashOf = async (context) => {
+    const key = [...context].sort().join("\n");
+    if (depsCache.has(key)) return depsCache.get(key);
+    const value = await depsHash(context, graph.root, files);
+    depsCache.set(key, value);
+    return value;
+  };
   const mtimeOf = async (rel) => {
     const cached = mtimeCache.get(rel);
     if (cached !== void 0) return cached;
@@ -15445,7 +15734,7 @@ async function computeFreshness(graph, opts = {}) {
     }
     const decision = decide({
       entry,
-      depsNow: await depsHash(target.context, graph.root, files),
+      depsNow: await depsHashOf(target.context),
       currentDef: defHash(target.definition, target.statement),
       current: await currentFingerprint(target, graph.root),
       ttlDays: target.ttlDays,
@@ -15640,12 +15929,22 @@ __export(boundary_exports, {
   contractPathRefs: () => contractPathRefs,
   contractPaths: () => contractPaths,
   formatBoundaryWarning: () => formatBoundaryWarning,
+  formatDesignDriftWarning: () => formatDesignDriftWarning,
   formatDispatchWarning: () => formatDispatchWarning,
   matchPatterns: () => matchPatterns,
   outsideBoundary: () => outsideBoundary,
   ownsGanasFile: () => ownsGanasFile,
-  taskBoundary: () => taskBoundary
+  taskBoundary: () => taskBoundary,
+  verificationPathRefs: () => verificationPathRefs
 });
+function pathsFromCommand(run22) {
+  const out = [];
+  for (const token of tokenizeShell(run22)) {
+    const cleaned = stripOperators(token);
+    if (looksLikePath(cleaned)) out.push(cleaned);
+  }
+  return out;
+}
 function contractPathRefs(task) {
   const refs = [];
   const seen = /* @__PURE__ */ new Set();
@@ -15657,10 +15956,7 @@ function contractPathRefs(task) {
   };
   for (const c of task.exit_contract) {
     if (c.kind === "command") {
-      for (const token of tokenizeShell(c.run)) {
-        const cleaned = stripOperators(token);
-        if (looksLikePath(cleaned)) add(cleaned, `l\u1EC7nh \`${c.run}\``);
-      }
+      for (const p of pathsFromCommand(c.run)) add(p, `l\u1EC7nh \`${c.run}\``);
     } else if (c.kind === "artifact") {
       add(c.path, `file \`${c.path}\``);
     }
@@ -15670,6 +15966,50 @@ function contractPathRefs(task) {
 function contractPaths(task) {
   return contractPathRefs(task).map((r) => r.path);
 }
+function verificationPathRefs(task, graph) {
+  const refs = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (raw, from) => {
+    const path = raw.replace(/^\.\//, "");
+    if (!path || seen.has(path)) return;
+    seen.add(path);
+    refs.push({ path, from });
+  };
+  const addFromRun = (run22, label) => {
+    if (!run22) return;
+    for (const p of pathsFromCommand(run22)) add(p, `b\u1EB1ng ch\u1EE9ng \`${label}\``);
+  };
+  for (const c of task.exit_contract) {
+    if (c.kind !== "verification") continue;
+    const target = c.target;
+    if (target.startsWith("F-")) {
+      addFromRun(graph.facts.get(target)?.value.verify.run, target);
+      continue;
+    }
+    const slash = target.indexOf("/");
+    const ownerId = slash === -1 ? target : target.slice(0, slash);
+    const design = graph.designs.get(ownerId)?.value;
+    if (design) {
+      if (slash === -1) {
+        for (const a of design.artifacts) addFromRun(a.probe?.run, `${ownerId}/${a.id}`);
+      } else {
+        const artifactId = target.slice(slash + 1);
+        const a = design.artifacts.find((a2) => a2.id === artifactId);
+        if (a) addFromRun(a.probe?.run, target);
+      }
+      continue;
+    }
+    const mod = graph.modules.get(ownerId)?.value;
+    if (!mod) continue;
+    if (slash === -1) {
+      for (const v of mod.verify) addFromRun(v.run, `${ownerId}/${v.id}`);
+    } else {
+      const v = mod.verify.find((v2) => `${ownerId}/${v2.id}` === target);
+      if (v) addFromRun(v.run, target);
+    }
+  }
+  return refs;
+}
 function taskBoundary(task, graph) {
   const patterns = /* @__PURE__ */ new Set();
   for (const moduleId of task.touches) {
@@ -15677,6 +16017,7 @@ function taskBoundary(task, graph) {
     for (const p of mod?.paths ?? []) patterns.add(p);
   }
   for (const p of contractPaths(task)) patterns.add(p);
+  for (const r of verificationPathRefs(task, graph)) patterns.add(r.path);
   return [...patterns];
 }
 function matchPatterns(boundary) {
@@ -15737,6 +16078,39 @@ function formatDispatchWarning(taskId, tier, subagentTouched) {
   c\xF3 v\u1EBB phi\xEAn ch\xEDnh (model m\u1EA1nh nh\u1EA5t) \u0111\xE3 t\u1EF1 l\xE0m vi\u1EC7c c\u01A1 h\u1ECDc/ki\u1EC3m ch\u1EE9ng thay v\xEC giao vi\u1EC7c.
   Xem m\u1EE5c "Giao vi\u1EC7c" trong brief \u0111\u1EC3 giao \u0111\xFAng cho sub-agent.
 `;
+}
+function formatDesignDriftWarning(task, graph, freshness) {
+  const design = graph.designs.get(task.implements)?.value;
+  if (!design) return "";
+  const changed = [];
+  const drifted = [];
+  for (const a of design.artifacts) {
+    const targetId = `${design.id}/${a.id}`;
+    const state = freshness.get(targetId);
+    if (!state) continue;
+    if (state.freshness === "definition_changed") {
+      if (task.role === "build") changed.push(targetId);
+    } else if (state.freshness === "stale" || state.freshness === "failing") {
+      drifted.push({ id: targetId, reason: state.reason });
+    }
+  }
+  let out = "";
+  if (changed.length > 0) {
+    out += `
+\u26A0 ${task.id} khai \`role: build\` nh\u01B0ng \u0111\xE3 \u0110\u1ED4I B\u1EA2N V\u1EBC ${changed.join(", ")} \u2014
+  s\u1EEDa h\u1EE3p \u0111\u1ED3ng trong m\u1ED9t task x\xE2y l\xE0 quy\u1EBFt \u0111\u1ECBnh kh\xF4ng ai duy\u1EC7t.
+  T\xE1ch ph\u1EA7n \u0111\u1ED5i b\u1EA3n v\u1EBD ra m\u1ED9t task \`role: design\`, ho\u1EB7c \u0111\u1ED5i \`role\` c\u1EE7a ${task.id}.
+`;
+  }
+  if (drifted.length > 0) {
+    out += `
+\u26A0 code \u0111\xE3 l\u1EC7ch b\u1EA3n v\u1EBD ${drifted.map((d) => d.id).join(", ")}:
+` + drifted.map((d) => `    ${d.id} \u2014 ${d.reason}`).join("\n") + `
+  Ch\u1EA1y \`ganas design check ${design.id}\` \u0111\u1EC3 xem l\u1EC7ch \u1EDF \u0111\xE2u, r\u1ED3i \`ganas verify\`
+  cho b\u1EA3n v\u1EBD \u0111\xF3 khi code \u0111\xE3 kh\u1EDBp l\u1EA1i.
+`;
+  }
+  return out;
 }
 function ownsGanasFile(task, relPath) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
@@ -16585,7 +16959,7 @@ function moduleGuideMd(v) {
   const io = v.nature === "io" ? `Kh\u1ED1i n\xE0y l\xE0 \`nature: io\` \u2014 **\u0111\xE2y l\xE0 n\u01A1i ch\u1EA1m ra ngo\xE0i th\u1EADt** (file, m\u1EA1ng, ti\u1EBFn tr\xECnh con, DB). L\xF5i kh\xF4ng \u0111\u01B0\u1EE3c t\u1EF1 l\xE0m vi\u1EC7c \u0111\xF3; n\u1EBFu b\u1EA1n th\u1EA5y m\u1ED9t kh\u1ED1i l\xF5i g\u1ECDi th\u1EB3ng ra ngo\xE0i, \u0111\xF3 l\xE0 ch\u1ED7 l\u1EC7ch \u0111\xE1ng ghi \`ganas proposal new\`.
 ` : `Kh\u1ED1i n\xE0y l\xE0 \`nature: ${v.nature}\` \u2014 **l\xF5i**. Kh\xF4ng t\u1EF1 m\u1EDF file, kh\xF4ng t\u1EF1 g\u1ECDi m\u1EA1ng, kh\xF4ng t\u1EF1 query DB \u1EDF \u0111\xE2y; ch\u1EA1m ra ngo\xE0i th\xEC \u0111i qua m\u1ED9t kh\u1ED1i \`io\`.
 `;
-  const testBlock = v.probes.length ? v.probes.map((run21) => `${run21}`).join("\n") : `# kh\u1ED1i n\xE0y ch\u01B0a khai probe n\xE0o \u2014 \`ganas validate\` \u0111ang b\xE1o verify/module-unverified`;
+  const testBlock = v.probes.length ? v.probes.map((run22) => `${run22}`).join("\n") : `# kh\u1ED1i n\xE0y ch\u01B0a khai probe n\xE0o \u2014 \`ganas validate\` \u0111ang b\xE1o verify/module-unverified`;
   return `# ${v.dir}/ \u2014 ${v.title}
 
 <!-- Kh\u1ED1i \`${v.id}\`. File n\xE0y ch\u1EC9 \u0111\u01B0\u1EE3c n\u1EA1p khi agent \u0111\u1EE5ng v\xE0o file trong th\u01B0 m\u1EE5c
@@ -16957,10 +17331,10 @@ async function checkEdge(graph, edge, root) {
   if (issues.length > 0) {
     return { edge, result: "fail", issues, reason: issues.map((i) => i.reason).join("; ") };
   }
-  const run21 = edge.verification.run;
-  if (!run21) return { edge, result: "pass", issues: [] };
+  const run22 = edge.verification.run;
+  if (!run22) return { edge, result: "pass", issues: [] };
   const findings = lintProbe({
-    run: run21,
+    run: run22,
     statement: `${from.id} \u2192 ${to.id}`,
     context: [
       ...from.contract.outputs.map((p) => p.name),
@@ -16976,7 +17350,7 @@ async function checkEdge(graph, edge, root) {
       reason: blocking.map((f) => f.message).join("; ")
     };
   }
-  const result = await runShell(run21, { cwd: root, timeoutMs: 6e4 });
+  const result = await runShell(run22, { cwd: root, timeoutMs: 6e4 });
   const verdict = judge(result, "exit_zero");
   if (!verdict.pass) {
     return { edge, result: "fail", issues: [], reason: verdict.reason };
@@ -17143,8 +17517,10 @@ var init_common2 = __esm({
 var scope_exports = {};
 __export(scope_exports, {
   looksLikeIoGlob: () => looksLikeIoGlob,
+  prompt: () => prompt2,
   run: () => run4,
-  slugify: () => slugify
+  slugify: () => slugify,
+  writeNewYaml: () => writeNewYaml
 });
 import { mkdir as mkdir5, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
 import { dirname as dirname5, join as join9, relative as relative3 } from "node:path";
@@ -17981,6 +18357,43 @@ function pendingProposalsSection(graph, t) {
 
 ${count} \u0111\u1EC1 xu\u1EA5t \`pending\` c\xF9ng ph\u1EA1m vi \`${t.scope}\` \u2014 n\u1ED9i dung kh\xF4ng in \u1EDF \u0111\xE2y, xem \`ganas proposal list\`.`;
 }
+function stageProgressLine(graph, d, freshness) {
+  const tasks = [...graph.tasks.values()].filter((s) => s.value.implements === d.id);
+  const open3 = tasks.filter((s) => s.value.status !== "done").map((s) => s.value.id).sort((a, b) => a.localeCompare(b));
+  const parts = [
+    tasks.length === 0 ? "ch\u01B0a task n\xE0o khai `implements` ch\u1EB7ng n\xE0y" : `c\xF2n ${open3.length}/${tasks.length} task m\u1EDF` + (open3.length > 0 ? ` \u2014 ${open3.map((id) => `\`${id}\``).join(", ")}` : "")
+  ];
+  const contract = d.exit_contract;
+  if (contract.length === 0) {
+    parts.push("ch\u1EB7ng CH\u01AFA khai `exit_contract` \u2014 \u0111\xF3ng ch\u1EB7ng s\u1EBD l\xE0 \xFD ki\u1EBFn, kh\xF4ng ph\u1EA3i ph\xE9p \u0111o");
+  } else {
+    const fromLedger = contract.filter((c) => c.kind === "verification");
+    const met = fromLedger.filter(
+      (c) => c.kind === "verification" && freshness.get(c.target)?.freshness === "fresh"
+    ).length;
+    const mustRun = contract.length - fromLedger.length;
+    parts.push(
+      `h\u1EE3p \u0111\u1ED3ng ch\u1EB7ng ${contract.length} ti\xEAu ch\xED` + (fromLedger.length > 0 ? `, ${met}/${fromLedger.length} b\u1EB1ng ch\u1EE9ng \u0111ang fresh` : "") + (mustRun > 0 ? `, ${mustRun} ti\xEAu ch\xED ph\u1EA3i ch\u1EA1y \`ganas gate --design ${d.id}\` m\u1EDBi bi\u1EBFt` : ` (ch\u1EA5m l\u1EA1i: \`ganas gate --design ${d.id}\`)`)
+    );
+  }
+  if (d.artifacts.length > 0) {
+    const notFresh = [];
+    let fresh = 0;
+    for (const a of d.artifacts) {
+      const state = freshness.get(`${d.id}/${a.id}`);
+      if (state?.freshness === "fresh") {
+        fresh++;
+      } else {
+        notFresh.push(`${a.id} ${freshnessMark(state)}`);
+      }
+    }
+    parts.push(
+      `b\u1EA3n v\u1EBD: ${fresh}/${d.artifacts.length} fresh` + (notFresh.length > 0 ? ` (${notFresh.join(", ")})` : "")
+    );
+  }
+  const closed = d.status === "done" && d.done_at ? ` **Ch\u1EB7ng \u0111\xE3 \u0110\xD3NG** ng\xE0y ${d.done_at.slice(0, 10)} \u2014 vi\u1EC7c c\xF2n m\u1EDF d\u01B0\u1EDBi n\xF3 l\xE0 n\u1EE3 ti\u1EBFp n\u1ED1i, kh\xF4ng ph\u1EA3i vi\u1EC7c c\u1EE7a ch\u1EB7ng n\xE0y.` : "";
+  return `**Ti\u1EBFn \u0111\u1ED9 ch\u1EB7ng:** ${parts.join(" \xB7 ")}.${closed}`;
+}
 function findSupersededBy(graph, designId) {
   for (const sourced of graph.designs.values()) {
     if (sourced.value.supersedes.includes(designId)) return sourced.value.id;
@@ -18152,11 +18565,15 @@ ${goalBlocks.join("\n\n")}`);
 
 > \u26A0 **Design n\xE0y \u0111\xE3 l\u01B0u kho (archived)** \u2014 kh\xF4ng c\xF2n l\xE0 h\u01B0\u1EDBng \u0111ang d\xF9ng, d\xF9 ch\u01B0a b\u1ECB design n\xE0o kh\xE1c thay th\u1EBF th\u1EB3ng. Task khai \`implements\` m\u1ED9t design \u0111\xE3 l\u01B0u kho th\xEC nhi\u1EC1u kh\u1EA3 n\u0103ng b\u1EA3n th\xE2n task c\u0169ng l\u1ED7i th\u1EDDi \u2014 x\xE1c nh\u1EADn l\u1EA1i tr\u01B0\u1EDBc khi l\xE0m, \u0111\u1EEBng m\u1EB7c \u0111\u1ECBnh n\xF3 c\xF2n \u0111\xFAng.`;
     }
-    parts.push(`## Design \u0111ang hi\u1EC7n th\u1EF1c
+    parts.push(
+      `## Design \u0111ang hi\u1EC7n th\u1EF1c
 
 ### ${d.id} \u2014 ${d.title}
 
-${d.summary}${warning}`);
+${d.summary}${warning}
+
+` + stageProgressLine(graph, d, freshness)
+    );
   }
   const decisionIds = new Set(design?.value.decisions ?? []);
   for (const sourced2 of graph.decisions.values()) {
@@ -18443,16 +18860,85 @@ var init_brief2 = __esm({
   }
 });
 
+// src/commands/_task-status.ts
+import { readFile as readFile11, writeFile as writeFile5 } from "node:fs/promises";
+import { join as join11 } from "node:path";
+async function setTaskStatus(root, sourced, status, extra = {}) {
+  const file = join11(root, sourced.file);
+  const original = await readFile11(file, "utf8");
+  const doc = (0, import_yaml6.parseDocument)(original);
+  const base2 = sourced.index === void 0 ? [] : [sourced.index];
+  doc.setIn([...base2, "status"], status);
+  for (const [key, value] of Object.entries(extra)) doc.setIn([...base2, key], value);
+  await writeFile5(file, doc.toString(), "utf8");
+  return original;
+}
+var import_yaml6;
+var init_task_status = __esm({
+  "src/commands/_task-status.ts"() {
+    "use strict";
+    import_yaml6 = __toESM(require_dist(), 1);
+  }
+});
+
 // src/commands/next.ts
 var next_exports = {};
 __export(next_exports, {
   run: () => run7
 });
+function withoutTask(graph, taskId) {
+  const tasks = new Map(graph.tasks);
+  tasks.delete(taskId);
+  return { ...graph, tasks };
+}
+async function refuseSwitch(graph, open3, freshness, sessionId, argv) {
+  const task = open3.value;
+  const gate = await evaluateGate(graph, task, freshness, sessionId);
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          task: null,
+          current_task: task.id,
+          needs_switch: true,
+          gate: {
+            ok: gate.ok,
+            results: gate.results.map((r) => ({ label: r.label, status: r.status }))
+          }
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    return 1;
+  }
+  process.stdout.write(
+    `Ch\u01B0a m\u1EDF task m\u1EDBi \u0111\u01B0\u1EE3c \u2014 phi\xEAn n\xE0y \u0111ang l\xE0m ${task.id} (\`${task.status}\`), ch\u01B0a done:
+
+  ${task.id} \u2014 ${task.title}
+
+${formatGate(gate)}
+
+` + (gate.ok ? `  Gate \u0111\xE3 xanh: \`ganas commit ${task.id}\` \u0111\u1EC3 \u0111\xF3ng l\u1EA1i, r\u1ED3i \`ganas next\`.
+` : `  \u0110\xF3ng lu\u1ED3ng tr\u01B0\u1EDBc khi m\u1EDF lu\u1ED3ng: l\xE0m n\u1ED1t ${task.id}, r\u1ED3i \`ganas commit\`.
+`) + `  Th\u1EADt s\u1EF1 c\u1EA7n b\u1ECF d\u1EDF \u0111\u1EC3 l\xE0m vi\u1EC7c kh\xE1c: \`ganas next --switch\` \u2014 ${task.id} v\u1EABn gi\u1EEF
+  \`status: in_progress\` v\xE0 s\u1EBD \u0111\u01B0\u1EE3c ch\u1ECDn l\u1EA1i tr\u01B0\u1EDBc ti\xEAn.
+`
+  );
+  return 1;
+}
 async function run7(argv) {
   const { root, graph, freshness } = await openProject(argv);
-  const ranked = rankedCandidates(graph);
+  const sessionId = option(argv, "session");
+  const switching = flag(argv, "switch");
+  const boundId = await taskForSession(root, sessionId);
+  const boundTask = boundId ? graph.tasks.get(boundId) : void 0;
+  const stillOpen = boundTask && boundTask.value.status !== "done" ? boundTask : void 0;
+  if (stillOpen && !switching) return refuseSwitch(graph, stillOpen, freshness, sessionId, argv);
+  const pool = stillOpen ? withoutTask(graph, stillOpen.value.id) : graph;
+  const ranked = rankedCandidates(pool);
   if (ranked.length === 0) {
-    const blocked = blockedTasks(graph);
+    const blocked = blockedTasks(pool);
     if (flag(argv, "json")) {
       process.stdout.write(
         JSON.stringify(
@@ -18467,6 +18953,13 @@ async function run7(argv) {
       return 0;
     }
     if (blocked.length === 0) {
+      if (stillOpen) {
+        process.stdout.write(
+          `Kh\xF4ng c\xF2n task n\xE0o KH\xC1C ngo\xE0i ${stillOpen.value.id} \u0111ang d\u1EDF \u2014 kh\xF4ng c\xF3 ch\u1ED7 n\xE0o \u0111\u1EC3 chuy\u1EC3n sang.
+`
+        );
+        return 0;
+      }
       const empty = graph.tasks.size === 0;
       process.stdout.write(
         (empty ? `D\u1EF1 \xE1n ch\u01B0a c\xF3 task n\xE0o.
@@ -18495,8 +18988,7 @@ r\u1ED3i ch\u1EA1y: ganas validate
     );
     return 0;
   }
-  const sessionId = option(argv, "session");
-  const picked = await claimNextTask(graph, root, sessionId ?? "cli");
+  const picked = await claimNextTask(pool, root, sessionId ?? "cli");
   if (!picked) {
     if (flag(argv, "json")) {
       process.stdout.write(
@@ -18521,10 +19013,17 @@ Th\u1EED l\u1EA1i sau, ho\u1EB7c ch\u1EDD phi\xEAn \u0111ang gi\u1EEF gi\u1EA3i 
   const taskId = picked.task.value.id;
   if (sessionId) await bindSession(root, sessionId, taskId);
   else await updateState(root, (s) => void (s.current_task = taskId));
+  const marked = picked.task.value.status === "todo";
+  if (marked) await setTaskStatus(root, picked.task, "in_progress");
+  const markedNote = marked ? `
+${taskId} \u0111\xE3 \u0111\xE1nh d\u1EA5u \`status: in_progress\` trong ${picked.task.file} \u2014 \`ganas commit\` s\u1EBD \u0111em theo file \u0111\xF3.
+` : "";
   const baselineGreen = sessionId ? await recordBaseline(root, graph, picked.task.value, freshness, argv) : [];
   if (flag(argv, "json")) {
     const brief = renderBrief({ graph, task: picked.task, freshness });
-    process.stdout.write(JSON.stringify({ task: taskId, brief }, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify({ task: taskId, brief, marked_in_progress: marked }, null, 2) + "\n"
+    );
     return 0;
   }
   const volatile = argv.flags["volatile"] === false ? void 0 : await volatileStatus(root);
@@ -18541,6 +19040,7 @@ Th\u1EED l\u1EA1i sau, ho\u1EB7c ch\u1EDD phi\xEAn \u0111ang gi\u1EEF gi\u1EA3i 
 `
     );
   }
+  process.stdout.write(markedNote);
   return 0;
 }
 async function recordBaseline(root, graph, task, freshness, argv) {
@@ -18569,13 +19069,290 @@ var init_next = __esm({
     init_state();
     init_args();
     init_common2();
+    init_task_status();
+  }
+});
+
+// src/commands/design.ts
+var design_exports = {};
+__export(design_exports, {
+  run: () => run8
+});
+import { mkdir as mkdir7 } from "node:fs/promises";
+import { dirname as dirname7, relative as relative4 } from "node:path";
+function requireDesign(graph, id) {
+  if (!id) {
+    throw new GanasError(
+      `thi\u1EBFu id design (vd \`ganas design show D-010\`) \u2014 xem \`ganas design\` \u0111\u1EC3 li\u1EC7t k\xEA.`
+    );
+  }
+  const found = graph.designs.get(id);
+  if (!found) throw new GanasError(`kh\xF4ng c\xF3 design ${id} trong graph \u2014 xem \`ganas design\`.`);
+  return found;
+}
+function issuesOf(graph, d) {
+  return artifactIssues(d, (id) => graph.modules.get(id)?.value);
+}
+function rowsOf2(graph, freshness) {
+  const rows = [];
+  for (const [id, sourced] of graph.designs) {
+    const d = sourced.value;
+    const fresh = d.artifacts.filter(
+      (a) => a.probe && freshness.get(`${id}/${a.id}`)?.freshness === "fresh"
+    ).length;
+    rows.push({ id, title: d.title, status: d.status, artifacts: d.artifacts.length, fresh });
+  }
+  return rows.sort((a, b) => a.id.localeCompare(b.id));
+}
+function formatRows2(rows) {
+  if (rows.length === 0) {
+    return `Ch\u01B0a c\xF3 ch\u1EB7ng (design) n\xE0o.
+
+Design l\xE0 ch\u1EB7ng thi\u1EBFt k\u1EBF ph\u1EE5c v\u1EE5 m\u1ED9t goal. T\u1EA1o c\xE1i \u0111\u1EA7u ti\xEAn:
+
+  ganas design new
+`;
+  }
+  const shown = rows.slice(0, LIST_LIMIT);
+  const lines = shown.map(
+    (r) => `${r.id} \u2014 ${r.title}
+  ${r.status} \xB7 ${r.artifacts} b\u1EA3n v\u1EBD` + (r.artifacts > 0 ? ` \xB7 ${r.fresh}/${r.artifacts} c\xF2n t\u01B0\u01A1i` : "")
+  );
+  let out = lines.join("\n\n") + "\n";
+  const omitted = rows.length - shown.length;
+  if (omitted > 0) {
+    out += `
+\u2026 \u0111\xE3 b\u1ECF b\u1EDBt ${omitted} ch\u1EB7ng (in ${shown.length}/${rows.length}) \u2014 d\xF9ng \`ganas design --json\`.
+`;
+  }
+  return out;
+}
+function runList(argv, graph, freshness) {
+  const rows = rowsOf2(graph, freshness);
+  if (flag(argv, "json")) {
+    process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(formatRows2(rows));
+  return 0;
+}
+function runShow(argv, graph, freshness) {
+  const sourced = requireDesign(graph, argv.positional[1]);
+  const d = sourced.value;
+  const issues = issuesOf(graph, d);
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          ...d,
+          artifacts: d.artifacts.map((a) => ({
+            ...a,
+            freshness: a.probe ? freshness.get(`${d.id}/${a.id}`)?.freshness ?? "never_verified" : null
+          })),
+          issues
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    return 0;
+  }
+  const lines = [
+    `# ${d.id} \u2014 ${d.title}`,
+    `tr\u1EA1ng th\xE1i \`${d.status}\` \xB7 ph\u1EE5c v\u1EE5 ${d.serves.join(", ")}`,
+    d.summary.trim()
+  ];
+  if (d.artifacts.length === 0) {
+    lines.push(
+      `Ch\u01B0a c\xF3 b\u1EA3n v\u1EBD n\xE0o. Th\xEAm v\xE0o \`artifacts:\` c\u1EE7a .ganas/designs/${d.id}.yaml, r\u1ED3i \`ganas design check ${d.id}\`.`
+    );
+  } else {
+    const rows = d.artifacts.map((a) => {
+      const state = a.probe ? freshness.get(`${d.id}/${a.id}`) : void 0;
+      return `${freshnessMark(state)} ${a.id} (${a.kind}) \u2014 kh\u1ED1i ${a.module}
+    ${a.shape}` + (a.probe ? "" : `
+    \u26A0 ch\u01B0a c\xF3 \`probe\` \u2014 ch\u01B0a c\xF3 g\xEC \u0111\u1ED1i chi\u1EBFu v\u1EDBi code th\u1EADt`);
+    });
+    lines.push(`## B\u1EA3n v\u1EBD (${d.artifacts.length})
+
+` + rows.join("\n\n"));
+  }
+  if (issues.length > 0) {
+    lines.push(
+      `## L\u1EC7ch c\u1EA5u tr\xFAc (${issues.length})
+
+` + issues.map((i) => `\u26A0 [${i.code}] ${i.message}
+    ${i.hint}`).join("\n\n")
+    );
+  }
+  if (d.exit_contract.length === 0) {
+    lines.push(
+      `\u26A0 ch\u1EB7ng ch\u01B0a khai \`exit_contract\` \u2014 \`ganas gate --design ${d.id}\` s\u1EBD b\xE1o thi\u1EBFu.`
+    );
+  }
+  process.stdout.write(lines.join("\n\n") + "\n");
+  return 0;
+}
+function splitCsv(raw) {
+  return raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+}
+function nextDesignId(graph) {
+  let max = 0;
+  for (const id of graph.designs.keys()) {
+    if (!ID_PATTERNS.design.test(id)) continue;
+    const n = Number(id.slice("D-".length));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `D-${String(max + 1).padStart(3, "0")}`;
+}
+function designYaml(a) {
+  return `id: ${a.id}
+title: ${JSON.stringify(a.title)}
+serves:
+${a.serves.map((g) => `  - ${g}`).join("\n")}
+summary: ${JSON.stringify(a.summary)}
+status: draft
+
+# B\u1EA3n v\u1EBD c\u1EE7a ch\u1EB7ng \u2014 h\xECnh d\u1EA1ng m\xE0 code ph\u1EA3i kh\u1EDBp. M\u1ED7i b\u1EA3n v\u1EBD c\u1EA7n \`probe\` m\u1EDBi
+# ch\u1EA5m \u0111\u01B0\u1EE3c \u2014 xem \`.claude/rules/ganas-knowledge.md\` v\xE0 src/model/design.ts.
+artifacts: []
+
+# H\u1EE3p \u0111\u1ED3ng ra c\u1EE7a ch\u1EB7ng \u2014 \`ganas gate --design ${a.id}\` ch\u1EA5m m\u1EA3ng n\xE0y.
+exit_contract: []
+`;
+}
+async function runNew2(argv, root, graph) {
+  const interactive = process.stdin.isTTY && !flag(argv, "yes", "y");
+  const title = option(argv, "title") ?? (interactive ? await prompt2("Ch\u1EB7ng n\xE0y t\xEAn g\xEC?") : "");
+  if (!title) throw new GanasError(`thi\u1EBFu --title (ch\u1EB7ng n\xE0y t\xEAn g\xEC?)`);
+  const servesRaw = option(argv, "serves") ?? (interactive ? await prompt2("Ph\u1EE5c v\u1EE5 goal n\xE0o? (id, c\xE1ch nhau b\u1EDFi d\u1EA5u ph\u1EA9y)") : "");
+  const serves = splitCsv(servesRaw);
+  if (serves.length === 0) {
+    throw new GanasError(`thi\u1EBFu --serves (ch\u1EB7ng n\xE0y ph\u1EE5c v\u1EE5 goal n\xE0o? vd --serves G-001)`);
+  }
+  for (const g of serves) {
+    if (!ID_PATTERNS.goal.test(g)) {
+      throw new GanasError(`--serves ch\u1EE9a id kh\xF4ng h\u1EE3p l\u1EC7 "${g}" \u2014 goal ph\u1EA3i d\u1EA1ng "G-001"`);
+    }
+  }
+  const summary = option(argv, "summary") ?? (interactive ? await prompt2("T\xF3m t\u1EAFt c\xE1ch ti\u1EBFp c\u1EADn?") : "");
+  if (!summary) throw new GanasError(`thi\u1EBFu --summary (t\xF3m t\u1EAFt c\xE1ch ti\u1EBFp c\u1EADn?)`);
+  const suggested = nextDesignId(graph);
+  const id = option(argv, "id") ?? (interactive ? await prompt2("Id design?", suggested) : suggested);
+  if (!ID_PATTERNS.design.test(id)) {
+    throw new GanasError(`id design ph\u1EA3i d\u1EA1ng "D-001", nh\u1EADn \u0111\u01B0\u1EE3c "${id}"`);
+  }
+  if (graph.designs.has(id)) throw new GanasError(`design ${id} \u0111\xE3 t\u1ED3n t\u1EA1i`);
+  const file = ganasPath(root, DIRS.designs, `${id}.yaml`);
+  await mkdir7(dirname7(file), { recursive: true });
+  await writeNewYaml(file, designYaml({ id, title, serves, summary }), `design ${id}`);
+  process.stdout.write(
+    `\u0110\xE3 t\u1EA1o ${id} \u2014 ${title}
+
+  ${relative4(root, file)}
+
+Ti\u1EBFp theo: \`ganas validate\`, r\u1ED3i th\xEAm \`artifacts\` khi h\xECnh d\u1EA1ng \u0111\xE3 r\xF5 (\`ganas design check ${id}\` ch\u1EA5m ch\xFAng v\u1EDBi code th\u1EADt), v\xE0 \`exit_contract\` khi bi\u1EBFt ch\u1EB7ng \u0111\xF3ng \u0111\u01B0\u1EE3c th\u1EBF n\xE0o.
+`
+  );
+  return 0;
+}
+async function runCheck(argv, root, graph, freshness) {
+  const idArg = argv.positional[1];
+  const designs = idArg ? [requireDesign(graph, idArg)] : [...graph.designs.values()].filter((d) => d.value.status === "active");
+  const dryRun = flag(argv, "dry-run");
+  const skipMutation = argv.flags["mutation"] === false;
+  const by = option(argv, "session") ? `session:${option(argv, "session")}` : "cli";
+  if (designs.length === 0) {
+    process.stdout.write(`Kh\xF4ng c\xF3 ch\u1EB7ng n\xE0o \u0111ang \`active\` \u0111\u1EC3 ch\u1EA5m.
+`);
+    return 0;
+  }
+  let structuralIssue = false;
+  let notClean = false;
+  const lines = [];
+  const jsonOut = [];
+  for (const sourced of designs) {
+    const d = sourced.value;
+    const issues = issuesOf(graph, d);
+    if (issues.length > 0) structuralIssue = true;
+    const targets = artifactTargets(sourced, graph);
+    const results = [];
+    lines.push(`## ${d.id} \u2014 ${d.title}`);
+    if (d.artifacts.length === 0) {
+      lines.push(`  ch\u01B0a c\xF3 b\u1EA3n v\u1EBD n\xE0o \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 ch\u1EA5m.`);
+    } else if (targets.length === 0) {
+      lines.push(
+        `  ${d.artifacts.length} b\u1EA3n v\u1EBD, nh\u01B0ng ch\u01B0a c\xE1i n\xE0o c\xF3 \`probe\` \u2014 kh\xF4ng c\xF3 g\xEC ch\u1EA1y \u0111\u01B0\u1EE3c.`
+      );
+    }
+    for (const target of targets) {
+      const outcome = await runTarget(target, { root, by, skipMutation, dryRun });
+      if (dryRun) {
+        const state = freshness.get(target.id);
+        if (state?.freshness !== "fresh") notClean = true;
+        lines.push(`  \u2192 ${target.label} \u2014 s\u1EBD ch\u1EA1y. Hi\u1EC7n t\u1EA1i: ${freshnessMark(state)}`);
+        results.push({ target: target.id });
+      } else {
+        const ok = outcome.result === "pass";
+        if (!ok) notClean = true;
+        lines.push(
+          `  ${ok ? "\u2713" : "\u2717"} ${target.label}` + (outcome.reason ? `
+      ${outcome.reason}` : "")
+        );
+        results.push({ target: target.id, result: outcome.result, reason: outcome.reason });
+      }
+    }
+    for (const issue of issues) {
+      lines.push(`  \u26A0 [${issue.code}] ${issue.message}
+      ${issue.hint}`);
+    }
+    jsonOut.push({ id: d.id, issues, results });
+  }
+  const exitCode = structuralIssue || notClean ? 1 : 0;
+  if (flag(argv, "json")) {
+    process.stdout.write(JSON.stringify({ dryRun, designs: jsonOut }, null, 2) + "\n");
+    return exitCode;
+  }
+  process.stdout.write(lines.join("\n") + "\n");
+  return exitCode;
+}
+async function run8(argv) {
+  const sub = argv.positional[0];
+  const { root, graph, freshness } = await openProject(argv);
+  switch (sub) {
+    case "new":
+      return runNew2(argv, root, graph);
+    case void 0:
+    case "list":
+      return runList(argv, graph, freshness);
+    case "show":
+      return runShow(argv, graph, freshness);
+    case "check":
+      return runCheck(argv, root, graph, freshness);
+    default:
+      throw new GanasError(`l\u1EC7nh con kh\xF4ng bi\u1EBFt: "${sub}" \u2014 c\xF3: list, new, show, check`);
+  }
+}
+var LIST_LIMIT;
+var init_design2 = __esm({
+  "src/commands/design.ts"() {
+    "use strict";
+    init_freshness();
+    init_paths();
+    init_model();
+    init_args();
+    init_errors();
+    init_run();
+    init_common2();
+    init_scope2();
+    LIST_LIMIT = 30;
   }
 });
 
 // src/commit.ts
 import { mkdtemp as mkdtemp2, rm as rm4, symlink } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 function buildCommitMessage(graph, task, gate) {
   const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
   for (const r of gate.results) {
@@ -18595,7 +19372,7 @@ function shellQuote(p) {
   return `'${p.split("'").join(`'\\''`)}'`;
 }
 async function materializeTree(root, treeish) {
-  const dir = await mkdtemp2(join11(tmpdir2(), "ganas-tree-"));
+  const dir = await mkdtemp2(join12(tmpdir2(), "ganas-tree-"));
   const extract = await runShell(`git archive ${treeish} | tar -x -C ${shellQuote(dir)}`, {
     cwd: root,
     timeoutMs: 12e4
@@ -18604,9 +19381,9 @@ async function materializeTree(root, treeish) {
     await rm4(dir, { recursive: true, force: true }).catch(() => void 0);
     return void 0;
   }
-  const modules = join11(root, "node_modules");
+  const modules = join12(root, "node_modules");
   if (exists(modules)) {
-    await symlink(modules, join11(dir, "node_modules"), "dir").catch(() => void 0);
+    await symlink(modules, join12(dir, "node_modules"), "dir").catch(() => void 0);
   }
   return dir;
 }
@@ -18742,11 +19519,13 @@ var init_commit = __esm({
 // src/commands/gate.ts
 var gate_exports = {};
 __export(gate_exports, {
-  run: () => run8
+  run: () => run9
 });
-async function run8(argv) {
+async function run9(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
+  const designId = option(argv, "design");
+  if (designId) return gateDesign({ root, graph, freshness, designId, argv });
   const taskId = argv.positional[0] ?? option(argv, "task") ?? await taskForSession(root, sessionId);
   if (!taskId) throw new GanasError("ch\u01B0a bi\u1EBFt \u0111ang l\xE0m task n\xE0o \u2014 ch\u1EA1y `ganas next` tr\u01B0\u1EDBc");
   const task = graph.tasks.get(taskId);
@@ -18760,7 +19539,7 @@ async function run8(argv) {
     process.stdout.write(
       JSON.stringify(
         {
-          task: result.task,
+          subject: result.subject,
           ok: result.ok,
           unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
           pending_human: result.pendingHuman.map((p) => p.label),
@@ -18773,7 +19552,7 @@ async function run8(argv) {
     );
     return result.ok ? 0 : 1;
   }
-  process.stdout.write(`\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh c\u1EE7a ${result.task}:
+  process.stdout.write(`\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh c\u1EE7a ${result.subject}:
 ${formatGate(result)}
 
 `);
@@ -18794,6 +19573,9 @@ ${formatGate(result)}
   const dispatchWarning = formatDispatchWarning(taskId, task.value.model, subagentTouched);
   if (dispatchWarning) process.stdout.write(`${dispatchWarning}
 `);
+  const driftWarning = formatDesignDriftWarning(task.value, graph, freshness);
+  if (driftWarning) process.stdout.write(`${driftWarning}
+`);
   if (result.ok) {
     process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng \u0111\u1EC1u \u0111\u1EA1t.
 `);
@@ -18809,6 +19591,75 @@ C\xF2n ${result.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\x
   process.stdout.write(`\u2717 C\xF2n ${result.unmet.length} ti\xEAu ch\xED ch\u01B0a \u0111\u1EA1t.
 `);
   return 1;
+}
+async function gateDesign(ctx) {
+  const { root, graph, freshness, designId, argv } = ctx;
+  const sourced = graph.designs.get(designId);
+  if (!sourced) throw new GanasError(`kh\xF4ng c\xF3 design ${designId}`);
+  const design = sourced.value;
+  if (design.exit_contract.length === 0) {
+    const message = `${designId} ch\u01B0a khai \`exit_contract\` \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 ch\u1EA5m.
+Ch\u1EB7ng kh\xF4ng c\xF3 h\u1EE3p \u0111\u1ED3ng ra th\xEC "\u0111\xF3ng \u0111\u01B0\u1EE3c ch\u01B0a" l\xE0 \xFD ki\u1EBFn, kh\xF4ng ph\u1EA3i k\u1EBFt qu\u1EA3 \u0111o.
+`;
+    if (flag(argv, "json")) {
+      process.stdout.write(
+        JSON.stringify({ subject: designId, ok: false, unmet: [], pending_human: [] }, null, 2) + "\n"
+      );
+      return 1;
+    }
+    process.stdout.write(message);
+    return 1;
+  }
+  const result = await evaluateExitContract(designId, design.exit_contract, { root, freshness });
+  if (flag(argv, "json")) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          subject: result.subject,
+          ok: result.ok,
+          unmet: result.unmet.map((u) => ({ label: u.label, reason: u.reason })),
+          pending_human: result.pendingHuman.map((p) => p.label),
+          open_tasks: openTaskIds(graph, designId)
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    return result.ok ? 0 : 1;
+  }
+  process.stdout.write(
+    `H\u1EE3p \u0111\u1ED3ng c\u1EE7a ch\u1EB7ng ${design.id} \u2014 ${design.title}:
+${formatGate(result)}
+
+`
+  );
+  const open3 = openTaskIds(graph, designId);
+  if (open3.length > 0) {
+    process.stdout.write(
+      `\u26A0 Ch\u1EB7ng c\xF2n ${open3.length} task ch\u01B0a xong: ${open3.join(", ")}
+  H\u1EE3p \u0111\u1ED3ng ch\u1EB7ng xanh trong khi task c\xF2n m\u1EDF ngh\u0129a l\xE0 h\u1EE3p \u0111\u1ED3ng \u0111o thi\u1EBFu.
+
+`
+    );
+  }
+  if (result.ok) {
+    process.stdout.write(`\u2713 M\u1ECDi ti\xEAu ch\xED ch\u1EA5m t\u1EF1 \u0111\u1ED9ng c\u1EE7a ch\u1EB7ng \u0111\u1EC1u \u0111\u1EA1t.
+`);
+    if (result.pendingHuman.length > 0) {
+      process.stdout.write(
+        `
+C\xF2n ${result.pendingHuman.length} ti\xEAu ch\xED c\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn tr\u01B0\u1EDBc khi \u0111\xF3ng ch\u1EB7ng:
+` + result.pendingHuman.map((p) => `  \u2026 ${p.label}`).join("\n") + "\n"
+      );
+    }
+    return 0;
+  }
+  process.stdout.write(`\u2717 C\xF2n ${result.unmet.length} ti\xEAu ch\xED ch\u01B0a \u0111\u1EA1t \u2014 ch\u1EB7ng ch\u01B0a \u0111\xF3ng \u0111\u01B0\u1EE3c.
+`);
+  return 1;
+}
+function openTaskIds(graph, designId) {
+  return [...graph.tasks.values()].filter((t) => t.value.implements === designId && t.value.status !== "done").map((t) => t.value.id).sort((a, b) => a.localeCompare(b));
 }
 var init_gate2 = __esm({
   "src/commands/gate.ts"() {
@@ -18827,7 +19678,7 @@ var init_gate2 = __esm({
 var verify_exports = {};
 __export(verify_exports, {
   needsRunFor: () => needsRunFor,
-  run: () => run9
+  run: () => run10
 });
 function needsRunFor(target, graph, freshness) {
   const state = freshness.get(target.id);
@@ -18855,7 +19706,7 @@ function estimateCost(target, graph) {
 function matches(target, wanted) {
   return target.id === wanted || target.id.startsWith(`${wanted}/`);
 }
-async function run9(argv) {
+async function run10(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const wanted = argv.positional;
   const tier = option(argv, "tier") ?? "smoke";
@@ -19024,7 +19875,7 @@ var init_verify = __esm({
 // src/commands/trace.ts
 var trace_exports = {};
 __export(trace_exports, {
-  run: () => run10
+  run: () => run11
 });
 function edgeLine(check) {
   const { edge } = check;
@@ -19032,7 +19883,7 @@ function edgeLine(check) {
   return check.reason ? `${head}
     ${check.reason}` : head;
 }
-async function run10(argv) {
+async function run11(argv) {
   const { root, graph } = await openProject(argv);
   const scopeFilter = option(argv, "scope");
   if (scopeFilter !== void 0 && !graph.scopes.has(scopeFilter)) {
@@ -19233,6 +20084,14 @@ var init_debt = __esm({
       // không sai lệch gì, chỉ nhắc một trạng thái đang chờ.
       "spine/design-serves-draft-goal": { weight: 1, ease: 3 },
       "spine/design-orphaned": { weight: 1, ease: 5 },
+      // Chặng bỏ dở: bảng còn báo "đang chạy" trong khi không bước nào chạy — đúng
+      // nghĩa sinh kết luận sai, và ca T-039 cho thấy nó im lặng nhiều tuần. Không
+      // sửa bằng một dòng YAML: phải QUYẾT là đóng chặng hay dựng nốt task còn thiếu.
+      "spine/design-stalled": { weight: 3, ease: 3 },
+      // Chặng chưa có hợp đồng ra: không sai dữ liệu gì, nhưng không ai chấm được
+      // "đóng được chưa" — cùng hạng `scope/module-missing-guide`. ease thấp hơn vì
+      // phải nghĩ ra tiêu chí kiểm chứng được, không phải chép một dòng.
+      "spine/design-missing-exit-contract": { weight: 2, ease: 3 },
       /* --- spine: task -------------------------------------------------------- */
       "spine/task-missing-goal": { weight: 3, ease: 5 },
       "spine/task-missing-design": { weight: 3, ease: 5 },
@@ -19243,11 +20102,25 @@ var init_debt = __esm({
       // "done" được mà chưa ai chạy verify: đúng nghĩa "sinh kết luận sai". Sửa
       // cần thêm một mục exit_contract, đôi khi phải viết bằng chứng mới cho khối.
       "spine/task-missing-verification": { weight: 3, ease: 3 },
+      // Nặng vì nó làm gate BÁO SAI: tiêu chí trỏ vào hư không thì task không bao
+      // giờ đóng được, mà lý do chỉ lộ lúc chạy. Sửa thì chỉ là gõ lại một chuỗi.
+      "spine/exit-verification-target-not-found": { weight: 4, ease: 5 },
       // Thiếu `model`: không ai quyết tier — không sai lệch dữ liệu, chỉ là ngỏ.
       "spine/task-missing-model": { weight: 1, ease: 5 },
       // "large": rủi ro compact giữa chừng làm tri thức mất/méo — hỏng nền của
       // chính phiên đó. Sửa = chẻ nhỏ task, một việc thiết kế lại thật sự.
       "spine/task-too-large": { weight: 3, ease: 1 },
+      // Task role: design mà touches khác rỗng — vẽ và xây trộn vào một task thì
+      // không ai chấm được bản vẽ trước khi code chạy theo nó. Sửa nhanh: bỏ
+      // touches, chuyển việc hiện thực sang task role: build khác.
+      "spine/design-task-touches-code": { weight: 3, ease: 5 },
+      // Task role: design thiếu tiêu chí `artifact` trỏ đúng file design — không
+      // sai dữ liệu ngay lúc này, nhưng làm `taskBoundary()` RỖNG, và ranh giới
+      // rỗng khiến `outsideBoundary()` không báo được khi task thiết kế lỡ tay
+      // sửa code thật (docstring `src/boundary.ts`): đúng nghĩa "sinh kết luận
+      // sai" bằng cách im lặng. ease thấp hơn `design-task-touches-code` vì phải
+      // thêm đúng một tiêu chí trỏ đúng path, không chỉ xoá một dòng.
+      "spine/design-task-without-artifact-criterion": { weight: 4, ease: 4 },
       /* --- scope: task/module/phạm vi ----------------------------------------- */
       "scope/task-scope-not-found": { weight: 3, ease: 5 },
       // Có cả lối sửa nhanh (thêm khối vào phạm vi) lẫn lối phải chẻ task — chấm
@@ -19409,7 +20282,7 @@ __export(debt_exports, {
   buildDebtRows: () => buildDebtRows,
   commitDebtSummary: () => commitDebtSummary,
   renderDebtSection: () => renderDebtSection,
-  run: () => run11,
+  run: () => run12,
   scopeFromClaimedTask: () => scopeFromClaimedTask
 });
 function buildDebtRows(graph, checks) {
@@ -19484,7 +20357,7 @@ D\xF9ng \`ganas debt --all\` \u0111\u1EC3 xem to\xE0n d\u1EF1 \xE1n, ho\u1EB7c g
   if (!task) throw new GanasError(`kh\xF4ng c\xF3 task ${taskId}`);
   return task.value.scope;
 }
-async function run11(argv) {
+async function run12(argv) {
   const { root, graph } = await openProject(argv);
   const checks = await checkAllEdges(graph, root);
   const rows = buildDebtRows(graph, checks);
@@ -19536,10 +20409,10 @@ var init_debt2 = __esm({
 var icebox_exports = {};
 __export(icebox_exports, {
   overdueIceboxItems: () => overdueIceboxItems,
-  run: () => run12
+  run: () => run13
 });
-import { mkdir as mkdir7, readFile as readFile11, writeFile as writeFile5 } from "node:fs/promises";
-import { dirname as dirname7, join as join12 } from "node:path";
+import { mkdir as mkdir8, readFile as readFile12, writeFile as writeFile6 } from "node:fs/promises";
+import { dirname as dirname8, join as join13 } from "node:path";
 function monthOf(d) {
   return d.toISOString().slice(0, 7);
 }
@@ -19568,24 +20441,24 @@ async function nextIceboxId(graph, root, sessionId, ttlMinutes) {
 }
 async function appendIceboxRecord(root, month, record2) {
   const relFile = iceboxRelFile(month);
-  const file = join12(root, relFile);
-  await mkdir7(dirname7(file), { recursive: true });
+  const file = join13(root, relFile);
+  await mkdir8(dirname8(file), { recursive: true });
   await withFileLock(iceboxLockFile(root, relFile), ICEBOX_LOCK_TTL_MS, async () => {
-    const raw = exists(file) ? await readFile11(file, "utf8") : "";
-    const doc = (0, import_yaml6.parseDocument)(raw);
+    const raw = exists(file) ? await readFile12(file, "utf8") : "";
+    const doc = (0, import_yaml7.parseDocument)(raw);
     if (doc.contents === null) doc.contents = doc.createNode([]);
     doc.addIn([], record2);
-    await writeFile5(file, doc.toString(), "utf8");
+    await writeFile6(file, doc.toString(), "utf8");
   });
 }
 async function writeIceboxUpdate(root, sourced, updates, deleteKeys = []) {
-  const file = join12(root, sourced.file);
+  const file = join13(root, sourced.file);
   const base2 = sourced.index === void 0 ? [] : [sourced.index];
   await withFileLock(iceboxLockFile(root, sourced.file), ICEBOX_LOCK_TTL_MS, async () => {
-    const doc = (0, import_yaml6.parseDocument)(await readFile11(file, "utf8"));
+    const doc = (0, import_yaml7.parseDocument)(await readFile12(file, "utf8"));
     for (const [k, v] of Object.entries(updates)) doc.setIn([...base2, k], v);
     for (const k of deleteKeys) doc.deleteIn([...base2, k]);
-    await writeFile5(file, doc.toString(), "utf8");
+    await writeFile6(file, doc.toString(), "utf8");
   });
 }
 function parseScoreValue(raw, flagLabel) {
@@ -19652,7 +20525,7 @@ async function runAdd(argv, root, graph) {
 `);
   return 0;
 }
-async function runList(argv, root, graph) {
+async function runList2(argv, root, graph) {
   const scopeId = await scopeFromClaimedTask(argv, root, graph);
   const showClosed = flag(argv, "closed");
   const rows = [...graph.icebox.values()].map((s) => s.value).filter((i) => scopeId === void 0 || i.scope === scopeId).filter((i) => showClosed || i.status === "open").sort((a, b) => a.id.localeCompare(b.id));
@@ -19797,14 +20670,14 @@ async function runPromote(argv, root, graph) {
 `);
   return 0;
 }
-async function run12(argv) {
+async function run13(argv) {
   const sub = argv.positional[0];
   const { root, graph } = await openProject(argv);
   switch (sub) {
     case "add":
       return runAdd(argv, root, graph);
     case "list":
-      return runList(argv, root, graph);
+      return runList2(argv, root, graph);
     case "review":
       return runReview(argv, root, graph);
     case "close":
@@ -19817,11 +20690,11 @@ async function run12(argv) {
       );
   }
 }
-var import_yaml6, DAY_MS2, ICEBOX_LOCK_TTL_MS;
+var import_yaml7, DAY_MS2, ICEBOX_LOCK_TTL_MS;
 var init_icebox2 = __esm({
   "src/commands/icebox.ts"() {
     "use strict";
-    import_yaml6 = __toESM(require_dist(), 1);
+    import_yaml7 = __toESM(require_dist(), 1);
     init_claim();
     init_paths();
     init_model();
@@ -19839,10 +20712,10 @@ var init_icebox2 = __esm({
 var proposal_exports = {};
 __export(proposal_exports, {
   rankProposals: () => rankProposals,
-  run: () => run13
+  run: () => run14
 });
-import { mkdir as mkdir8, readFile as readFile12, writeFile as writeFile6 } from "node:fs/promises";
-import { dirname as dirname8, join as join13, relative as relative4 } from "node:path";
+import { mkdir as mkdir9, readFile as readFile13, writeFile as writeFile7 } from "node:fs/promises";
+import { dirname as dirname9, join as join14, relative as relative5 } from "node:path";
 function relFileOf(id) {
   return `${GANAS_DIR}/${DIRS.proposals}/${id}.yaml`;
 }
@@ -19873,11 +20746,11 @@ function requireProposal(graph, id) {
   return found;
 }
 async function writeUpdate(root, sourced, updates) {
-  const file = join13(root, sourced.file);
+  const file = join14(root, sourced.file);
   await withFileLock(lockFileOf(root, sourced.value.id), PROPOSAL_LOCK_TTL_MS, async () => {
-    const doc = (0, import_yaml7.parseDocument)(await readFile12(file, "utf8"));
+    const doc = (0, import_yaml8.parseDocument)(await readFile13(file, "utf8"));
     for (const [k, v] of Object.entries(updates)) doc.setIn([k], v);
-    await writeFile6(file, doc.toString(), "utf8");
+    await writeFile7(file, doc.toString(), "utf8");
   });
 }
 function requireDecider(argv) {
@@ -19917,7 +20790,7 @@ found_at: "${p.foundAt}"
 status: pending
 `;
 }
-async function runNew2(argv, root, graph) {
+async function runNew3(argv, root, graph) {
   const title = option(argv, "title");
   if (!title) throw new GanasError("thi\u1EBFu --title \u2014 \u0111\u1EC1 xu\u1EA5t ph\u1EA3i c\xF3 ti\xEAu \u0111\u1EC1.");
   const problem = option(argv, "problem");
@@ -19944,8 +20817,8 @@ async function runNew2(argv, root, graph) {
   const sessionId = option(argv, "session") ?? "cli";
   const id = await nextProposalId(graph, root, sessionId, graph.config.claim.ttl_minutes);
   const file = ganasPath(root, DIRS.proposals, `${id}.yaml`);
-  await mkdir8(dirname8(file), { recursive: true });
-  await writeFile6(
+  await mkdir9(dirname9(file), { recursive: true });
+  await writeFile7(
     file,
     proposalYaml({
       id,
@@ -19965,7 +20838,7 @@ async function runNew2(argv, root, graph) {
     return 0;
   }
   process.stdout.write(
-    `\u0110\xE3 ghi ${id} v\xE0o ${relative4(root, file)}
+    `\u0110\xE3 ghi ${id} v\xE0o ${relative5(root, file)}
 Ch\u01B0a ai duy\u1EC7t \u2014 ng\u01B0\u1EDDi quy\u1EBFt ch\u1EA1y \`ganas proposal approve ${id} --by @ten\` ho\u1EB7c \`ganas proposal reject ${id} --by @ten --why "..."\`.
 `
   );
@@ -19976,7 +20849,7 @@ function rankProposals(items) {
     (a, b) => b.weight + b.ease - (a.weight + a.ease) || a.id.localeCompare(b.id)
   );
 }
-async function runList2(argv, root, graph) {
+async function runList3(argv, root, graph) {
   const scopeId = await scopeFromClaimedTask(argv, root, graph);
   const showAllStatus = flag(argv, "all-status");
   const rows = rankProposals(
@@ -20010,7 +20883,7 @@ Chi ti\u1EBFt: \`ganas proposal show <id>\`
   );
   return 0;
 }
-function runShow(argv, graph) {
+function runShow2(argv, graph) {
   const sourced = requireProposal(graph, argv.positional[1]);
   const p = sourced.value;
   if (flag(argv, "json")) {
@@ -20124,17 +20997,17 @@ Mu\u1ED1n gi\u1EEF l\u1EA1i \u0111\u1EC3 xem x\xE9t sau th\xEC ghi v\xE0o s\u1ED
   );
   return 0;
 }
-async function run13(argv) {
+async function run14(argv) {
   const sub = argv.positional[0];
   const { root, graph } = await openProject(argv);
   switch (sub) {
     case "new":
-      return runNew2(argv, root, graph);
+      return runNew3(argv, root, graph);
     case void 0:
     case "list":
-      return runList2(argv, root, graph);
+      return runList3(argv, root, graph);
     case "show":
-      return runShow(argv, graph);
+      return runShow2(argv, graph);
     case "approve":
       return runApprove(argv, root, graph);
     case "reject":
@@ -20145,11 +21018,11 @@ async function run13(argv) {
       );
   }
 }
-var import_yaml7, PROPOSAL_LOCK_TTL_MS;
+var import_yaml8, PROPOSAL_LOCK_TTL_MS;
 var init_proposal2 = __esm({
   "src/commands/proposal.ts"() {
     "use strict";
-    import_yaml7 = __toESM(require_dist(), 1);
+    import_yaml8 = __toESM(require_dist(), 1);
     init_claim();
     init_paths();
     init_model();
@@ -20164,7 +21037,7 @@ var init_proposal2 = __esm({
 // src/commands/search.ts
 var search_exports = {};
 __export(search_exports, {
-  run: () => run14
+  run: () => run15
 });
 function displayQuery(query, task) {
   if (task) return `task ${task.id} \u2014 "${task.title}"`;
@@ -20181,7 +21054,7 @@ function renderHit(hit, freshness, referenceScope) {
   ${hit.fact.statement}
   file: ${hit.file}  \xB7  kh\u1EDBp: ${hit.matchedTerms.join(", ")}` + outOfScope;
 }
-async function run14(argv) {
+async function run15(argv) {
   const { graph, freshness } = await openProject(argv);
   const taskId = option(argv, "task");
   const queryArg = argv.positional.join(" ").trim();
@@ -20281,11 +21154,11 @@ var init_search2 = __esm({
 var commit_exports = {};
 __export(commit_exports, {
   parsePorcelainZ: () => parsePorcelainZ,
-  run: () => run15
+  run: () => run16
 });
-import { mkdtemp as mkdtemp3, readFile as readFile13, rm as rm5, writeFile as writeFile7 } from "node:fs/promises";
+import { mkdtemp as mkdtemp3, rm as rm5, writeFile as writeFile8 } from "node:fs/promises";
 import { tmpdir as tmpdir3 } from "node:os";
-import { join as join14 } from "node:path";
+import { join as join15 } from "node:path";
 function quote(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
 }
@@ -20299,14 +21172,7 @@ function foreignPaths(task, entries) {
   return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
 }
 async function closeTaskFile(root, sourced) {
-  const file = join14(root, sourced.file);
-  const original = await readFile13(file, "utf8");
-  const doc = (0, import_yaml8.parseDocument)(original);
-  const base2 = sourced.index === void 0 ? [] : [sourced.index];
-  doc.setIn([...base2, "status"], "done");
-  doc.setIn([...base2, "done_at"], (/* @__PURE__ */ new Date()).toISOString());
-  await writeFile7(file, doc.toString(), "utf8");
-  return original;
+  return setTaskStatus(root, sourced, "done", { done_at: (/* @__PURE__ */ new Date()).toISOString() });
 }
 function reportBaseline(gate, baseline) {
   const green = alreadyGreen(gate, baseline);
@@ -20318,7 +21184,7 @@ function reportBaseline(gate, baseline) {
   M\u1ED9t gate t\u1EF1 xanh tr\u01B0\u1EDBc khi s\u1EEDa l\xE0 gate kh\xF4ng t\u1ED3n t\u1EA1i.
 `;
 }
-async function run15(argv) {
+async function run16(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
   const taskId = argv.positional[0] ?? option(argv, "task") ?? await taskForSession(root, sessionId);
@@ -20354,6 +21220,7 @@ ${formatGate(gateResult)}
     touched,
     outsideBoundary(task, graph, touched)
   );
+  const driftWarning = formatDesignDriftWarning(task, graph, freshness);
   const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
   if (flag(argv, "dry-run")) {
     const ganasChanged2 = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
@@ -20369,7 +21236,7 @@ S\u1EBD stage:
 \u0110\u1EC3 l\u1EA1i (kh\xF4ng thu\u1ED9c ${taskId}):
 ` + foreign2.map((p) => `  \xB7 ${p}`).join("\n") : "") + (willClose ? `
 
-S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + outsideWarning + `
+S\u1EBD \u0111\xE1nh d\u1EA5u ${taskId}: status: done + done_at.` : "") + baselineWarning + outsideWarning + driftWarning + `
 
 --- commit message ---
 ${message2}`
@@ -20387,7 +21254,7 @@ ${message2}`
   const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
   if (staged.code === 0) {
     if (originalTaskFile !== null) {
-      await writeFile7(join14(root, sourced.file), originalTaskFile, "utf8");
+      await writeFile8(join15(root, sourced.file), originalTaskFile, "utf8");
     }
     process.stdout.write(
       `Kh\xF4ng c\xF3 g\xEC \u0111\u1EC3 commit \u2014 ph\u1EA1m vi c\u1EE7a ${taskId} \u0111ang s\u1EA1ch.
@@ -20395,7 +21262,7 @@ ${message2}`
 ${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId}:
 ` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
 Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBFu mu\u1ED1n g\u1ED9p.
-` : "") + outsideWarning
+` : "") + outsideWarning + driftWarning
     );
     return 0;
   }
@@ -20404,7 +21271,7 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
     const report = formatStagedTreeCheck(taskId, recheck);
     if (recheck.status === "failed") {
       if (originalTaskFile !== null) {
-        await writeFile7(join14(root, sourced.file), originalTaskFile, "utf8");
+        await writeFile8(join15(root, sourced.file), originalTaskFile, "utf8");
       }
       throw new GanasError(
         report.trimStart() + `
@@ -20415,17 +21282,17 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
     if (report) process.stdout.write(report);
   }
   const message = buildCommitMessage(graph, task, gateResult);
-  const dir = await mkdtemp3(join14(tmpdir3(), "ganas-commit-"));
+  const dir = await mkdtemp3(join15(tmpdir3(), "ganas-commit-"));
   try {
-    const msgFile = join14(dir, "MSG");
-    await writeFile7(msgFile, message, "utf8");
+    const msgFile = join15(dir, "MSG");
+    await writeFile8(msgFile, message, "utf8");
     const result = await runShell(`git commit -F ${quote(msgFile)}`, {
       cwd: root,
       timeoutMs: 3e4
     });
     if (result.code !== 0) {
       if (originalTaskFile !== null) {
-        await writeFile7(join14(root, sourced.file), originalTaskFile, "utf8");
+        await writeFile8(join15(root, sourced.file), originalTaskFile, "utf8");
       }
       throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
 ${result.stderr || result.stdout}`);
@@ -20442,7 +21309,7 @@ ${taskId} CH\u01AFA \u0111\xF3ng: c\xF2n ${gateResult.pendingHuman.length} ti\xE
 ${GANAS_DIR}/ c\xF3 ${foreign.length} file \u0111ang \u0111\u1ED5i nh\u01B0ng KH\xD4NG thu\u1ED9c ${taskId} \u2014 \u0111\u1EC3 l\u1EA1i, ch\u01B0a commit:
 ` + foreign.map((p) => `  \xB7 ${p}`).join("\n") + `
 Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
-` : "") + baselineWarning + outsideWarning + commitDebtSummary(graph, task.scope)
+` : "") + baselineWarning + outsideWarning + driftWarning + commitDebtSummary(graph, task.scope)
     );
     return 0;
   } finally {
@@ -20450,7 +21317,7 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu ch\xFAng.
   }
 }
 async function unstagedContractPaths(root, task) {
-  const existing = contractPathRefs(task).filter((r) => exists(join14(root, r.path)));
+  const existing = contractPathRefs(task).filter((r) => exists(join15(root, r.path)));
   if (existing.length === 0) return [];
   const changed = await gitChangedPaths(
     root,
@@ -20471,11 +21338,9 @@ function reportUnstagedContract(task, left) {
   Clone v\u1EC1 m\xE1y kh\xE1c, gate c\u1EE7a ${task.id} s\u1EBD \u0111\u1ECF. \`git add\` ch\xFAng r\u1ED3i commit ti\u1EBFp.
 `;
 }
-var import_yaml8;
 var init_commit2 = __esm({
   "src/commands/commit.ts"() {
     "use strict";
-    import_yaml8 = __toESM(require_dist(), 1);
     init_boundary();
     init_commit();
     init_gate();
@@ -20487,22 +21352,23 @@ var init_commit2 = __esm({
     init_fsprobe();
     init_ledger();
     init_common2();
+    init_task_status();
     init_debt2();
   }
 });
 
 // src/prune.ts
-import { mkdir as mkdir9, rename as rename2, rm as rm6 } from "node:fs/promises";
-import { basename as basename3, dirname as dirname9, join as join15, relative as relative5 } from "node:path";
+import { mkdir as mkdir10, readFile as readFile14, rename as rename2, rm as rm6 } from "node:fs/promises";
+import { basename as basename3, dirname as dirname10, join as join16, relative as relative6 } from "node:path";
 function notePath(root, sessionId) {
-  return join15(ganasPath(root, DIRS.runs), NOTES_DIRNAME, `${sessionId}.md`);
+  return join16(ganasPath(root, DIRS.runs), NOTES_DIRNAME, `${sessionId}.md`);
 }
 async function planPrune(root, graph, opts) {
   const now = opts.now ?? Date.now();
   const cutoff = now - opts.olderThanDays * DAY_MS3;
   const state = await readState(root);
   const runsDir = ganasPath(root, DIRS.runs);
-  const notesDir = join15(runsDir, NOTES_DIRNAME);
+  const notesDir = join16(runsDir, NOTES_DIRNAME);
   const staleRuns = [
     ...await collectStaleIn(runsDir, state, cutoff, now),
     ...await collectStaleIn(notesDir, state, cutoff, now)
@@ -20513,6 +21379,7 @@ async function planPrune(root, graph, opts) {
     if (Number.isNaN(startedAt) || startedAt > cutoff) continue;
     deadSessions.push({ sessionId, ageDays: Math.floor((now - startedAt) / DAY_MS3) });
   }
+  const staleLocks = await collectStaleLocks(root, state, graph.config.claim.ttl_minutes, cutoff, now);
   const blockedByTargets = /* @__PURE__ */ new Set();
   for (const t of graph.tasks.values()) {
     for (const dep of t.value.blocked_by) blockedByTargets.add(dep);
@@ -20532,10 +21399,20 @@ async function planPrune(root, graph, opts) {
     if (Date.parse(t.value.done_at) > cutoff) continue;
     if (blockedByTargets.has(t.value.id)) continue;
     if (promotedTargets.has(t.value.id)) continue;
+    if (graph.designs.get(t.value.implements)?.value.status !== "done") continue;
     doneTasks.push({ id: t.value.id, file: t.file });
   }
   const iceboxFiles = collectClosedIceboxFiles(graph.icebox, cutoff, now);
-  return { staleRuns, deadSessions, doneTasks, iceboxFiles };
+  const closedProposals = collectClosedProposals(graph.proposals, cutoff);
+  return {
+    staleRuns,
+    deadSessions,
+    staleLocks,
+    doneTasks,
+    iceboxFiles,
+    closedProposals,
+    cutoffAt: new Date(cutoff).toISOString()
+  };
 }
 function collectClosedIceboxFiles(icebox, cutoff, now) {
   const byFile = /* @__PURE__ */ new Map();
@@ -20562,6 +21439,52 @@ function collectClosedIceboxFiles(icebox, cutoff, now) {
   }
   return out;
 }
+function collectClosedProposals(proposals, cutoff) {
+  const supersededTargets = /* @__PURE__ */ new Set();
+  for (const rec of proposals.values()) {
+    for (const oldId of rec.value.supersedes) supersededTargets.add(oldId);
+  }
+  const out = [];
+  for (const rec of proposals.values()) {
+    const p = rec.value;
+    if (p.status !== "approved" && p.status !== "rejected") continue;
+    if (!p.decided_at) continue;
+    if (Date.parse(p.decided_at) > cutoff) continue;
+    if (supersededTargets.has(p.id)) continue;
+    out.push({ id: p.id, file: rec.file });
+  }
+  return out;
+}
+async function collectStaleLocks(root, state, ttlMinutes, cutoff, now) {
+  const dir = ganasPath(root, DIRS.locks);
+  const out = [];
+  for (const entry of await listDir(dir)) {
+    if (!entry.isFile() || !LOCK_SUFFIXES2.some((s) => entry.name.endsWith(s))) continue;
+    const file = join16(dir, entry.name);
+    let claim;
+    try {
+      claim = JSON.parse(await readFile14(file, "utf8"));
+    } catch {
+      continue;
+    }
+    const claimedAt = Date.parse(claim.claimed_at);
+    const relFile = relative6(root, file);
+    if (Number.isNaN(claimedAt) || now - claimedAt > ttlMinutes * 6e4) {
+      const ageDays = Number.isNaN(claimedAt) ? 0 : Math.floor((now - claimedAt) / DAY_MS3);
+      out.push({ file: relFile, sessionId: claim.session_id, ageDays, reason: "ttl" });
+      continue;
+    }
+    if (!state.sessions[claim.session_id] && claimedAt <= cutoff) {
+      out.push({
+        file: relFile,
+        sessionId: claim.session_id,
+        ageDays: Math.floor((now - claimedAt) / DAY_MS3),
+        reason: "orphan-session"
+      });
+    }
+  }
+  return out;
+}
 async function collectStaleIn(dir, state, cutoff, now) {
   const out = [];
   if (!exists(dir)) return out;
@@ -20569,7 +21492,7 @@ async function collectStaleIn(dir, state, cutoff, now) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
     const sessionId = entry.name.slice(0, -3);
     if (state.sessions[sessionId]) continue;
-    const file = join15(dir, entry.name);
+    const file = join16(dir, entry.name);
     const mtime = await mtimeMs(file) ?? 0;
     if (mtime > cutoff) continue;
     out.push({ sessionId, file, ageDays: Math.floor((now - mtime) / DAY_MS3) });
@@ -20580,13 +21503,13 @@ function quote2(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
 }
 async function archive(root, relFile, archiveDirName) {
-  const src = join15(root, relFile);
-  const dstRel = join15(dirname9(relFile), archiveDirName, basename3(relFile));
-  const dst = join15(root, dstRel);
-  await mkdir9(dirname9(dst), { recursive: true });
-  if (exists(join15(root, ".git"))) {
+  const src = join16(root, relFile);
+  const dstRel = join16(dirname10(relFile), archiveDirName, basename3(relFile));
+  const dst = join16(root, dstRel);
+  await mkdir10(dirname10(dst), { recursive: true });
+  if (exists(join16(root, ".git"))) {
     const result = await runShell(
-      `git mv -- ${quote2(relative5(root, src))} ${quote2(relative5(root, dst))}`,
+      `git mv -- ${quote2(relative6(root, src))} ${quote2(relative6(root, dst))}`,
       { cwd: root, timeoutMs: 15e3 }
     );
     if (result.code === 0) return dstRel;
@@ -20598,6 +21521,9 @@ async function applyPrune(root, plan) {
   for (const r of plan.staleRuns) {
     await rm6(r.file, { force: true });
   }
+  for (const l of plan.staleLocks) {
+    await rm6(join16(root, l.file), { force: true });
+  }
   if (plan.deadSessions.length > 0) {
     const state = await readState(root);
     for (const d of plan.deadSessions) delete state.sessions[d.sessionId];
@@ -20605,8 +21531,9 @@ async function applyPrune(root, plan) {
   }
   for (const t of plan.doneTasks) await archive(root, t.file, "done");
   for (const f of plan.iceboxFiles) await archive(root, f.file, "closed");
+  for (const p of plan.closedProposals) await archive(root, p.file, "closed");
 }
-var NOTES_DIRNAME, DAY_MS3;
+var NOTES_DIRNAME, DAY_MS3, LOCK_SUFFIXES2;
 var init_prune = __esm({
   "src/prune.ts"() {
     "use strict";
@@ -20617,16 +21544,17 @@ var init_prune = __esm({
     init_fsprobe();
     NOTES_DIRNAME = "notes";
     DAY_MS3 = 864e5;
+    LOCK_SUFFIXES2 = [".claim", ".id"];
   }
 });
 
 // src/commands/note.ts
 var note_exports = {};
 __export(note_exports, {
-  run: () => run16
+  run: () => run17
 });
-import { appendFile as appendFile3, mkdir as mkdir10, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname10 } from "node:path";
+import { appendFile as appendFile3, mkdir as mkdir11, writeFile as writeFile9 } from "node:fs/promises";
+import { dirname as dirname11 } from "node:path";
 async function gitSha(root) {
   const result = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5e3 });
   return result.code === 0 ? result.stdout.trim() : void 0;
@@ -20656,7 +21584,7 @@ function renderEntry(opts) {
   );
   return lines.join("\n") + "\n";
 }
-async function run16(argv) {
+async function run17(argv) {
   const content = argv.positional.join(" ").trim();
   if (!content) {
     throw new GanasError(`c\u1EA7n n\u1ED9i dung ghi ch\xFA \u2014 vd: ganas note "ch\u01B0a r\xF5 v\xEC sao webhook retry 3 l\u1EA7n"`);
@@ -20668,12 +21596,12 @@ async function run16(argv) {
   const sha = await gitSha(root);
   const at2 = (/* @__PURE__ */ new Date()).toISOString();
   const path = notePath(root, sessionId);
-  await mkdir10(dirname10(path), { recursive: true });
+  await mkdir11(dirname11(path), { recursive: true });
   const entry = renderEntry({ at: at2, taskId, sha, touchedPaths, content });
   if (await existsAsync(path)) {
     await appendFile3(path, entry, "utf8");
   } else {
-    await writeFile8(path, renderHead(sessionId) + entry, "utf8");
+    await writeFile9(path, renderHead(sessionId) + entry, "utf8");
   }
   process.stdout.write(`\u0110\xE3 ghi note v\xE0o ${path}
 `);
@@ -20695,8 +21623,8 @@ var init_note = __esm({
 });
 
 // src/handoff.ts
-import { mkdir as mkdir11, readFile as readFile14, writeFile as writeFile9 } from "node:fs/promises";
-import { dirname as dirname11 } from "node:path";
+import { mkdir as mkdir12, readFile as readFile15, writeFile as writeFile10 } from "node:fs/promises";
+import { dirname as dirname12 } from "node:path";
 function textOf(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -20823,15 +21751,15 @@ async function generateHandoff(root, graph, task, gate, opts) {
   let transcript = null;
   if (opts.transcriptPath && exists(opts.transcriptPath)) {
     try {
-      transcript = parseTranscript(await readFile14(opts.transcriptPath, "utf8"));
+      transcript = parseTranscript(await readFile15(opts.transcriptPath, "utf8"));
     } catch {
       transcript = null;
     }
   }
   const content = renderHandoff({ sessionId: opts.sessionId, task, gate, graph, transcript });
   const path = runsPath(root, opts.sessionId);
-  await mkdir11(dirname11(path), { recursive: true });
-  await writeFile9(path, content, "utf8");
+  await mkdir12(dirname12(path), { recursive: true });
+  await writeFile10(path, content, "utf8");
   return { path, content };
 }
 var WRITE_TOOL_NAMES, SYNTHETIC_PREFIXES;
@@ -20849,9 +21777,9 @@ var init_handoff = __esm({
 // src/commands/handoff.ts
 var handoff_exports = {};
 __export(handoff_exports, {
-  run: () => run17
+  run: () => run18
 });
-async function run17(argv) {
+async function run18(argv) {
   const { root, graph, freshness } = await openProject(argv);
   const sessionId = option(argv, "session");
   if (!sessionId) {
@@ -20892,8 +21820,11 @@ var init_handoff2 = __esm({
 // src/commands/prune.ts
 var prune_exports = {};
 __export(prune_exports, {
-  run: () => run18
+  run: () => run19
 });
+function cutoffDate(cutoffAt) {
+  return cutoffAt.slice(0, 10);
+}
 function summarize(plan) {
   const lines = [];
   if (plan.staleRuns.length > 0) {
@@ -20906,6 +21837,11 @@ function summarize(plan) {
     for (const d of plan.deadSessions)
       lines.push(`  - ${d.sessionId} (${d.ageDays} ng\xE0y, ch\u01B0a t\u1EEBng release)`);
   }
+  if (plan.staleLocks.length > 0) {
+    lines.push(`${plan.staleLocks.length} lock m\u1ED3 c\xF4i trong .locks/ s\u1EBD b\u1ECB XO\xC1:`);
+    for (const l of plan.staleLocks)
+      lines.push(`  - ${l.file} (${l.ageDays} ng\xE0y, session ${l.sessionId}, l\xFD do: ${l.reason})`);
+  }
   if (plan.doneTasks.length > 0) {
     lines.push(`${plan.doneTasks.length} task done s\u1EBD chuy\u1EC3n sang tasks/done/:`);
     for (const t of plan.doneTasks) lines.push(`  - ${t.id} (${t.file})`);
@@ -20914,9 +21850,20 @@ function summarize(plan) {
     lines.push(`${plan.iceboxFiles.length} file icebox \u0111\xE3 \u0111\xF3ng h\u1EBFt s\u1EBD chuy\u1EC3n sang icebox/closed/:`);
     for (const f of plan.iceboxFiles) lines.push(`  - ${f.month} (${f.ageDays} ng\xE0y, ${f.file})`);
   }
+  if (plan.closedProposals.length > 0) {
+    lines.push(`${plan.closedProposals.length} \u0111\u1EC1 xu\u1EA5t \u0111\xE3 quy\u1EBFt s\u1EBD chuy\u1EC3n sang proposals/closed/:`);
+    for (const p of plan.closedProposals) lines.push(`  - ${p.id} (${p.file})`);
+  }
+  const archivable = plan.doneTasks.length + plan.iceboxFiles.length + plan.closedProposals.length;
+  if (archivable > 0) {
+    lines.push(
+      `
+${archivable} m\u1EE5c s\u1EBD ARCHIVE \u2014 \u0111\u1EE7 tu\u1ED5i t\xEDnh t\u1EDBi m\u1ED1c ${cutoffDate(plan.cutoffAt)} (ng\u01B0\u1EE1ng --older-than). M\u1EE5c tr\u1EBB h\u01A1n m\u1ED1c n\xE0y ch\u01B0a hi\u1EC7n \u1EDF tr\xEAn, kh\xF4ng ph\u1EA3i b\u1ECB b\u1ECF s\xF3t.`
+    );
+  }
   return lines.join("\n");
 }
-async function run18(argv) {
+async function run19(argv) {
   const { root, graph } = await openProject(argv);
   const olderThanRaw = option(argv, "older-than");
   const olderThanDays = olderThanRaw === void 0 ? DEFAULT_OLDER_THAN_DAYS : Number(olderThanRaw);
@@ -20924,13 +21871,15 @@ async function run18(argv) {
     throw new GanasError(`--older-than kh\xF4ng ph\u1EA3i s\u1ED1 ng\xE0y h\u1EE3p l\u1EC7: ${olderThanRaw}`);
   }
   const plan = await planPrune(root, graph, { olderThanDays });
-  const total = plan.staleRuns.length + plan.deadSessions.length + plan.doneTasks.length + plan.iceboxFiles.length;
+  const total = plan.staleRuns.length + plan.deadSessions.length + plan.staleLocks.length + plan.doneTasks.length + plan.iceboxFiles.length + plan.closedProposals.length;
   const apply = flag(argv, "yes", "y");
   if (flag(argv, "json")) {
     process.stdout.write(JSON.stringify({ ...plan, applied: apply && total > 0 }, null, 2) + "\n");
   } else if (total === 0) {
-    process.stdout.write(`Kh\xF4ng c\xF3 g\xEC c\u1EA7n d\u1ECDn (ng\u01B0\u1EE1ng ${olderThanDays} ng\xE0y).
-`);
+    process.stdout.write(
+      `Kh\xF4ng c\xF3 g\xEC c\u1EA7n d\u1ECDn (ng\u01B0\u1EE1ng --older-than ${olderThanDays} ng\xE0y, m\u1ED1c ${cutoffDate(plan.cutoffAt)}).
+`
+    );
   } else {
     process.stdout.write(`${summarize(plan)}
 `);
@@ -20967,9 +21916,9 @@ var init_prune2 = __esm({
 // src/commands/ledger.ts
 var ledger_exports = {};
 __export(ledger_exports, {
-  run: () => run19
+  run: () => run20
 });
-async function run19(argv) {
+async function run20(argv) {
   const root = requireGanasRoot(process.cwd());
   const entries = await readLedger(root);
   const corrupt = ledgerCorruption(root);
@@ -21018,9 +21967,12 @@ var init_ledger2 = __esm({
 });
 
 // src/hooks/policy/index.ts
-import { isAbsolute, relative as relative6, resolve as resolve3 } from "node:path";
+import { isAbsolute, relative as relative7, resolve as resolve3 } from "node:path";
 function isAnchorIssue(d) {
-  return d.message.includes("anchor") || d.message.includes("b\u1EB1ng ch\u1EE9ng");
+  return /^(?:\d+\.)?anchors(?:\.\d+)?:/.test(d.message);
+}
+function isTaskLinkIssue(d) {
+  return TASK_LINK_CODES.has(d.code);
 }
 function formatDiagnostics(diags) {
   return diags.map((d) => {
@@ -21090,14 +22042,26 @@ function shellLooksLikeWrite(command) {
   return SHELL_WRITE_HINTS.some((h) => command.includes(h));
 }
 function ruleForDiagnostics(diags) {
-  return diags.some(isAnchorIssue) ? "knowledge_anchor" : "schema";
+  if (diags.some(isAnchorIssue)) return "knowledge_anchor";
+  if (diags.some(isTaskLinkIssue)) return "task_link";
+  return "schema";
+}
+function ruleAdvice(rule) {
+  switch (rule) {
+    case "knowledge_anchor":
+      return "Kho tri th\u1EE9c ch\u1EC9 nh\u1EADn ph\xE1t bi\u1EC3u c\xF3 b\u1EB1ng ch\u1EE9ng. Th\xEAm anchor (`file:line`, `commit:sha`, ho\u1EB7c URL k\xE8m `fetched_at`), ho\u1EB7c b\u1ECF h\u1EB3n ph\xE1t bi\u1EC3u \u0111\xF3 ra v\xE0 ghi v\xE0o `open_questions` c\u1EE7a task.";
+    case "task_link":
+      return "Task ph\u1EA3i neo \u0111\u01B0\u1EE3c v\xE0o ph\u1EA1m vi v\xE0 goal: `serves` tr\u1ECF goal c\xF3 th\u1EADt, `implements` tr\u1ECF design c\xF3 th\u1EADt, `scope` t\u1ED3n t\u1EA1i, v\xE0 m\u1ECDi kh\u1ED1i trong `touches` ph\u1EA3i n\u1EB1m trong `scope.modules`. C\u1EA5p id b\u1EB1ng `ganas id`, v\xE0 `ganas scope` \u0111\u1EC3 xem ph\u1EA1m vi n\xE0o \u0111ang c\xF3.";
+    default:
+      return "S\u1EEDa l\u1EA1i cho \u0111\xFAng schema r\u1ED3i ghi l\u1EA1i. Xem `.claude/rules/ganas-knowledge.md`.";
+  }
 }
 function knowledgeWriteBody(rel, diags, rule, nudgeTail) {
   return `Ghi v\xE0o \`${rel}\` ch\u01B0a h\u1EE3p l\u1EC7:
 
 ${formatDiagnostics(diags)}
 
-` + (rule === "knowledge_anchor" ? `Kho tri th\u1EE9c ch\u1EC9 nh\u1EADn ph\xE1t bi\u1EC3u c\xF3 b\u1EB1ng ch\u1EE9ng. Th\xEAm anchor (\`file:line\`, \`commit:sha\`, ho\u1EB7c URL k\xE8m \`fetched_at\`), ho\u1EB7c b\u1ECF h\u1EB3n ph\xE1t bi\u1EC3u \u0111\xF3 ra v\xE0 ghi v\xE0o \`open_questions\` c\u1EE7a task.` : `S\u1EEDa l\u1EA1i cho \u0111\xFAng schema r\u1ED3i ghi l\u1EA1i. Xem \`.claude/rules/ganas-knowledge.md\`.`) + nudgeTail;
+` + ruleAdvice(rule) + nudgeTail;
 }
 function applyEnforcement(mode, body) {
   return mode === "enforce" ? { decision: "block", reason: body } : { systemMessage: `ganas (ch\u1EBF \u0111\u1ED9 warn \u2014 ch\u01B0a ch\u1EB7n):
@@ -21108,14 +22072,21 @@ function inRepoTree(rel) {
 }
 function locate(raw, cwd, root) {
   const abs = isAbsolute(raw) ? raw : resolve3(cwd, raw);
-  return { abs, rel: relative6(root, abs).split("\\").join("/") };
+  return { abs, rel: relative7(root, abs).split("\\").join("/") };
 }
-var WRITE_TOOLS, SHELL_WRITE_HINTS, LEDGER_REASON, CONFIG_REASON, SKILL_DIR, SKILL_WRITE_REASON, ENTITY_DIRS, ENTITY_OVERWRITE_REASON, PROPOSAL_DECISION_PATTERN, PROPOSAL_DECISION_REASON, PLAN_APPROVED_REASON, DISPATCH_NUDGE_REASON;
+var TASK_LINK_CODES, WRITE_TOOLS, SHELL_WRITE_HINTS, LEDGER_REASON, CONFIG_REASON, SKILL_DIR, SKILL_WRITE_REASON, ENTITY_DIRS, ENTITY_OVERWRITE_REASON, PROPOSAL_DECISION_PATTERN, PROPOSAL_DECISION_REASON, PLAN_APPROVED_REASON, DISPATCH_NUDGE_REASON;
 var init_policy = __esm({
   "src/hooks/policy/index.ts"() {
     "use strict";
     init_paths();
     init_model();
+    TASK_LINK_CODES = /* @__PURE__ */ new Set([
+      "spine/task-missing-goal",
+      "spine/task-missing-design",
+      "spine/task-goal-not-in-design",
+      "scope/task-scope-not-found",
+      "scope/task-touches-outside-scope"
+    ]);
     WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
     SHELL_WRITE_HINTS = [">", ">>", "tee", "sed -i", "truncate", "rm ", "mv ", "cp ", "dd "];
     LEDGER_REASON = `\`${LEDGER_FILE}\` l\xE0 s\u1ED5 c\xE1i x\xE1c minh \u2014 b\u1EB1ng ch\u1EE9ng r\u1EB1ng probe \u0111\xE3 th\u1EADt s\u1EF1 ch\u1EA1y. Ch\u1EC9 \`ganas verify\` m\u1EDBi \u0111\u01B0\u1EE3c ghi v\xE0o \u0111\xF3.
@@ -21174,7 +22145,7 @@ var init_types3 = __esm({
 });
 
 // src/hooks/io/handlers.ts
-import { relative as relative7 } from "node:path";
+import { relative as relative8 } from "node:path";
 async function sessionStart(input) {
   const root = findGanasRoot(input.cwd ?? process.cwd());
   if (!root) return ALLOW;
@@ -21368,7 +22339,7 @@ async function preCompact(input) {
   const handoff = await tryHandoff(root, input);
   const handoffNote = handoff ? `
 
-\u0110\xE3 ghi handoff: ${relative7(root, handoff.path)}.` : "";
+\u0110\xE3 ghi handoff: ${relative8(root, handoff.path)}.` : "";
   return {
     systemMessage: `ganas: context s\u1EAFp b\u1ECB n\xE9n. Tr\u01B0\u1EDBc khi m\u1EA5t chi ti\u1EBFt, ghi nh\u1EEFng g\xEC \u0111\xE3 x\xE1c l\u1EADp ra file: fact \u0111\xE3 verify v\xE0o .ganas/facts/, \u0111i\u1EC1u ch\u01B0a ki\u1EC3m ch\u1EE9ng v\xE0o .ganas/claims/ (k\xE8m anchor), c\xE2u h\u1ECFi c\xF2n m\u1EDF v\xE0o task ${taskId}.` + handoffNote
   };
@@ -21427,9 +22398,9 @@ var init_io = __esm({
 // src/commands/hook.ts
 var hook_exports = {};
 __export(hook_exports, {
-  run: () => run20
+  run: () => run21
 });
-async function run20(argv) {
+async function run21(argv) {
   const event = argv.positional[0];
   const handler = event ? HANDLERS[event] : void 0;
   if (!handler) {
@@ -21480,6 +22451,7 @@ var COMMANDS = {
   id: () => Promise.resolve().then(() => (init_id(), id_exports)),
   brief: () => Promise.resolve().then(() => (init_brief2(), brief_exports)),
   next: () => Promise.resolve().then(() => (init_next(), next_exports)),
+  design: () => Promise.resolve().then(() => (init_design2(), design_exports)),
   gate: () => Promise.resolve().then(() => (init_gate2(), gate_exports)),
   verify: () => Promise.resolve().then(() => (init_verify(), verify_exports)),
   trace: () => Promise.resolve().then(() => (init_trace2(), trace_exports)),
@@ -21506,6 +22478,9 @@ L\u1EC7nh:
   scope [new|assign]   Ph\u1EA1m vi c\xF4ng vi\u1EC7c: li\u1EC7t k\xEA, t\u1EA1o m\u1EDBi (ph\u1ECFng v\u1EA5n), v\xE1 ch\u1ED7 qu\xEAn khai
   id <lo\u1EA1i>            C\u1EA5p id k\u1EBF ti\u1EBFp (goal/design/task/claim/decision/fact)
   next                 Ch\u1ECDn task k\u1EBF ti\u1EBFp v\xE0 in brief \u0111\u1EA7y \u0111\u1EE7
+  design [list|new|show|check]
+                       Ch\u1EB7ng thi\u1EBFt k\u1EBF: li\u1EC7t k\xEA, ph\u1ECFng v\u1EA5n t\u1EA1o m\u1EDBi, xem chi ti\u1EBFt,
+                       ch\u1EA5m b\u1EA3n v\u1EBD (artifacts) v\u1EDBi code th\u1EADt
   brief [task]         In brief c\u1EE7a m\u1ED9t task
   gate [task]          Ch\u1EA5m \u0111i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh c\u1EE7a task
   verify [target...]   Ch\u1EA1y b\u1EB1ng ch\u1EE9ng: probe v\xE0 eval, ghi s\u1ED5 c\xE1i (--scope l\u1ECDc theo ph\u1EA1m vi)
