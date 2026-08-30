@@ -626,3 +626,24 @@
     - src/render/brief.ts:333
   scope: P-hook
   status: open
+- id: ICE-025
+  title: Cảnh báo giao việc bắn sai mỗi lần chạy ganas từ CLI trần
+  found_at: 2026-08-30T05:15:24.017Z
+  review_after_days: 30
+  weight: 3
+  ease: 4
+  why_deferred: "`subagentTouchedFor` (src/state.ts:206) trả false vô điều kiện
+    khi không có sessionId, và `ganas <lệnh>` gõ tay trong terminal thì không có
+    sessionId — đó chính là cách docs/WORKFLOW.md dạy dùng. Hệ quả: mọi task
+    tier scribe/verifier đều bị nhắc 'phiên chính đã tự làm thay vì giao việc',
+    kể cả khi đã giao thật cho sub-agent. Đo được trên repo này:
+    .ganas/state.json chỉ có một session cũ ghim T-051, phiên đang chạy không có
+    bản ghi nào. Cảnh báo thường trực là thứ người ta quen mắt rồi ngừng đọc —
+    chính lý lẽ mà validate.ts dùng để bỏ luật khối mồ côi một chiều. Hướng sửa
+    đáng cân nhắc: im lặng khi không xác định được session, thay vì mặc định kết
+    luận 'chưa giao'."
+  anchors:
+    - src/state.ts:206
+    - src/boundary.ts:298
+  scope: P-cli
+  status: open
