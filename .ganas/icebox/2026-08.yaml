@@ -668,3 +668,23 @@
     - src/model/common.ts:84
   scope: P-graph-core
   status: open
+- id: ICE-027
+  title: npm test thỉnh thoảng đỏ vì IPC của node test runner, không phải vì code
+  found_at: 2026-08-30T05:59:03.734Z
+  review_after_days: 30
+  weight: 3
+  ease: 2
+  why_deferred: "Gặp hai lần trong một phiên: `test/note.test.ts` trả `Error:
+    Unable to deserialize cloned data due to invalid or unsupported version` từ
+    `node:internal/test_runner/runner`, chạy lại thì xanh (7/7), và toàn bộ
+    suite chạy lại cũng xanh 893/893. Node v24.16.0. Đây không phải lỗi test —
+    nhưng `npm test` đang là tiêu chí `exit_contract` của D-011 và D-012, nên
+    một gate có thể đỏ ngẫu nhiên. Gate không tất định là gate người ta học cách
+    chạy lại cho tới khi xanh, và lúc đó nó hết tác dụng. Hướng cân nhắc: chạy
+    test theo lô nhỏ hơn trong tiêu chí gate, hoặc ghim node version, hoặc tách
+    `test/note.test.ts` ra chạy riêng."
+  anchors:
+    - test/note.test.ts:1
+    - package.json:1
+  scope: P-release
+  status: open
