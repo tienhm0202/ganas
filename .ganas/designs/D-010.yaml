@@ -113,5 +113,32 @@ exit_contract:
     run: "npm test"
     expect: exit_zero
 
-status: active
+status: done
+done_at: 2026-08-30T05:31:34Z
 created_at: 2026-08-30T00:00:00Z
+
+notes: |-
+  ĐÓNG CHẶNG 2026-08-30. Năm task, năm commit, cộng một commit mở chặng.
+
+  Điều đáng giữ lại: cơ chế phân biệt ba loại lệch KHÔNG có một dòng code so
+  sánh nào. Nó rơi ra từ việc đưa `shape` vào `statement`, vì
+  `defHash(definition, statement)` đã băm cả hai từ trước. Code đổi ⇒ `stale`;
+  bản vẽ đổi ⇒ `definition_changed`; code lệch bản vẽ ⇒ `failing`.
+
+  Cạm bẫy đã trả giá, đừng vấp lại: `definition` của target bản vẽ phải là
+  `a.probe`, KHÔNG phải cả object artifact — `runTarget` đọc
+  `(target.definition).run`, đặt sai thì `runShell(undefined)` hỏng CÂM.
+
+  Bài học về chính probe của bản vẽ: `grep` tên hàm là KHÔNG đủ. Ba probe đầu
+  chỉ tìm tên, nên đổi chữ ký mà giữ tên thì bản vẽ vẫn xanh — bản vẽ nói dối
+  mà không gì bắt được. Đã siết thành khớp nguyên chữ ký, và kiểm ngược bằng
+  cách thêm một tham số: probe đỏ đúng như phải thế.
+
+  Hai lỗ phát hiện giữa chặng, ghi icebox chứ chưa sửa: ICE-025 (cảnh báo giao
+  việc bắn sai khi ganas chạy không có session) và ICE-026 (tiêu chí trỏ file
+  test gõ sai thì xanh vĩnh viễn — node test runner bỏ qua file thiếu im lặng
+  khi nó đứng cùng file có thật).
+
+  Chưa làm, thuộc chặng sau: `kind: doc` cho bản vẽ không phải code (cần lấy độ
+  tươi từ `path` thay `module.paths`, tức một hình dạng artifact thứ hai) —
+  hoãn tới khi có ca dùng thật.
