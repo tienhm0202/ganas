@@ -42186,7 +42186,7 @@ var TOOLS = [
 function createServer() {
   const server = new McpServer({
     name: "ganas",
-    version: true ? "1.0.0" : "0.0.0"
+    version: true ? "1.1.0" : "0.0.0"
   });
   for (const tool of TOOLS) {
     server.registerTool(

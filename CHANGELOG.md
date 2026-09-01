@@ -9,7 +9,7 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
-## Chưa phát hành
+## v1.1.0 — 2026-09-01
 
 - **Design không nối tới code, nên thiết kế và code trôi khỏi nhau mà không ai
   báo.** Xương sống Goal→Design→Task vốn chỉ có một cạnh đi xuống, và nó ngược
