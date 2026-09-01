@@ -65,9 +65,26 @@ exit_contract:
     run: "npm test"
     expect: exit_zero
 
-status: active
+status: done
+done_at: 2026-09-01T05:02:44Z
 created_at: 2026-08-30T05:40:00Z
 notes: |-
+  ĐÓNG CHẶNG 2026-09-01. Hai task, không phải ba — T-079 xoá vì hai luật validate
+  của nó chỉ phục vụ vế đã bỏ.
+
+  Chặng này giao ÍT hơn kế hoạch, và đó là kết quả đúng: nửa "archive design"
+  bị bỏ sau khi hiện thực cho thấy nó tự mâu thuẫn. Ba lý do ghi trong summary.
+  Điều đáng giữ lại: phát hiện đó chỉ lộ ra khi CÀI THẬT, không lộ lúc lập kế
+  hoạch — và cái chặn nó lại là một luật validate có sẵn
+  (`spine/design-missing-supersede`), không phải ai đó nhớ ra.
+
+  Bất biến mới đã ghim thành test: kế hoạch dọn không được nhắc tới `designs/`.
+
+  Ngữ nghĩa `--scope` chốt theo CODE chứ không theo mô tả ban đầu: `Task.scope`
+  và `Proposal.scope` đều bắt buộc nên lọc được; `Icebox.scope` tuỳ chọn từng
+  bản ghi mà đơn vị archive là cả file, còn ephemeral không có đường tra ngược
+  phạm vi — hai nhóm sau bị LOẠI HẲN chứ không im lặng dọn kèm.
+
   Mở `active` 2026-08-30, sau khi D-011 đóng — trước đó để `draft` vì chặng này
   dọn thứ mà D-011 mới đẻ ra (khối `agent`), mở sớm là mở một chặng chưa có gì
   để dọn.
