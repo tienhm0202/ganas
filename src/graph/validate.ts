@@ -250,16 +250,28 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
       }
     });
 
+    // `done` miễn trừ vì đó là kết thúc ĐÚNG, không phải mồ côi: chặng đã đóng
+    // dưới một goal đã đóng là spine đi hết đường của nó, không phải bỏ dở.
+    // Luật này sinh ra trước khi `DESIGN_STATUS` có `"done"` (commit ee6c2d7,
+    // 2026-08-01); `"done"` thêm sau (commit 9aacff9, 2026-08-29) mà danh sách
+    // miễn trừ không được cập nhật theo — T-079 vá lại chỗ lệch đó.
     const allClosed =
       d.serves.length > 0 && d.serves.every((g) => graph.goals.get(g)?.value.status === "closed");
-    if (allClosed && d.status !== "archived" && d.status !== "superseded") {
+    if (
+      allClosed &&
+      d.status !== "archived" &&
+      d.status !== "superseded" &&
+      d.status !== "done"
+    ) {
       diags.push({
         severity: "warning",
         code: "spine/design-orphaned",
         message: `design ${d.id} mồ côi: mọi goal nó phục vụ đã closed`,
         file: design.file,
         line: at(graph, design, "status"),
-        hint: `Đặt status: archived, hoặc trỏ serves sang goal đang active.`,
+        hint:
+          `Chặng còn dang dở dưới goal đã đóng: đóng nó (status: done + done_at), ` +
+          `hoặc trỏ serves sang goal đang active.`,
       });
     }
 

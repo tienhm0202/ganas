@@ -1,0 +1,86 @@
+id: D-013
+title: "Đóng được một goal: luật mồ côi phải biết `done` tồn tại"
+serves:
+  - G-001
+summary: |-
+  G-001 đã đạt tiêu chí nghiệm thu của chính nó (`npm test` exit 0) và cả 12
+  chặng phục vụ nó đều `done`. Nhưng đóng nó lại thì phát ra 12 cảnh báo mới,
+  và lối thoát duy nhất mà cảnh báo gợi ý là thứ dự án đã chốt không làm.
+
+  Nguyên nhân là một luật trôi khỏi enum nằm dưới nó, không phải một quyết định
+  thiết kế nào:
+
+      if (allClosed && d.status !== "archived" && d.status !== "superseded")
+
+  Danh sách miễn trừ đó ra đời ở commit:ee6c2d7 (2026-08-01), lúc
+  `DESIGN_STATUS` mới có bốn giá trị và CHƯA có `"done"`. Trạng thái `done`
+  được T-062 thêm vào ngày 2026-08-29 (commit:9aacff9) — chính commit đó có sửa
+  `src/graph/validate.ts` (+61 dòng, thêm `spine/design-stalled` và
+  `spine/design-missing-exit-contract`) nhưng không đụng tới danh sách miễn trừ
+  này. Luật vì thế vẫn phân loại theo một enum đã không còn tồn tại.
+
+  Không ai phát hiện suốt một tháng vì luật này CHƯA TỪNG BẮN:
+  `git log -S 'status: closed' -- .ganas/goals/` rỗng — chưa goal nào từng được
+  đóng trong đời repo. Đây là lớp lỗi mà chỉ hành động đầu tiên thuộc loại của
+  nó mới lộ ra, và cái giá của việc lộ muộn là nó lộ đúng lúc người ta đang làm
+  việc khác.
+
+  Cách chữa là một vế: `d.status !== "done"`. Ý định của luật là bắt chặng CÒN
+  DANG DỞ dưới một mục tiêu đã chết — "hãy quyết xem làm gì với nó". Một chặng
+  `done` dưới goal `closed` không mồ côi; đó là trạng thái KẾT THÚC ĐÚNG của
+  mọi dự án đóng được mục tiêu. Giữ nguyên `archived`/`superseded` trong danh
+  sách, không đụng severity, không đụng `spine/design-stalled`.
+
+  KHÔNG mở rộng sang việc archive design: D-012 đã chốt design không bao giờ
+  archive, và gợi ý "Đặt status: archived" trong `hint` của luật này là tàn dư
+  của ý định đó. Sửa luôn `hint` cho khớp thực tế, vì một gợi ý dẫn người ta
+  tới việc đã bị cấm thì tệ hơn là không có gợi ý.
+
+exit_contract:
+  # Luật mới phải có test riêng, và test cũ (design `active` dưới goal closed
+  # VẪN phải mồ côi) không được vỡ — nếu vỡ thì đây là nới luật, không phải vá.
+  - kind: command
+    run: "npx tsx --test 'test/spine.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+  # Chấm trên DỮ LIỆU THẬT của chính repo này: G-001 đã `closed` và 12 chặng
+  # dưới nó đều `done` — không chặng nào được còn bị báo mồ côi. Đây là tiêu chí
+  # phân biệt "sửa luật" với "sửa luật rồi vẫn không đóng được goal".
+  #
+  # LOẠI TRỪ chính D-013: lúc `gate` chạy thì chặng này còn `active`, nên nó
+  # ĐÚNG là mồ côi và luật báo nó là báo đúng. Không loại trừ thì tiêu chí thành
+  # tự tham chiếu — chỉ xanh sau khi đã đóng, tức không bao giờ chấm được TRƯỚC
+  # khi đóng, đúng lúc gate cần dùng. Sau khi D-013 `done` thì cả hai cách viết
+  # cho cùng số 0; cách này thêm được là nó vẫn canh mọi chặng mồ côi về sau.
+  #
+  # `grep -vc` thoát 1 khi không còn dòng nào, nhưng vẫn IN ra "0" — nên phép so
+  # bên ngoài mới là thứ quyết định, không phải exit code của grep.
+  - kind: command
+    run: "test \"$(npx tsx src/cli.ts validate 2>&1 | grep design-orphaned | grep -vc D-013)\" = 0"
+    expect: exit_zero
+
+status: done
+done_at: 2026-09-01T05:45:51Z
+created_at: 2026-09-01T05:40:00Z
+notes: |-
+  ĐÓNG CHẶNG 2026-09-01, cùng ngày mở. Một task, T-079: thêm một vế điều kiện,
+  một test, và viết lại `hint`.
+
+  Bằng chứng bản vá có RĂNG, không chỉ là "test xanh": gỡ tạm vế
+  `d.status !== "done"` rồi chạy lại `test/spine.test.ts` cho 25 pass / 1 fail;
+  lắp lại cho 26 / 0. Test cũ ("design mồ côi khi mọi goal nó phục vụ đã
+  closed") vẫn xanh cả hai lần vì nó dùng design `active` — tức bản vá thu hẹp
+  đúng một trường hợp chứ không nới luật.
+
+  CẠM BẪY ĐÃ TRẢ GIÁ trong chính chặng này: `npx ganas validate` chạy bundle
+  `plugin/dist/cli.js` đã build, KHÔNG chạy cây làm việc. Ngay sau khi đóng
+  G-001, bundle cũ báo 13 cảnh báo mồ côi còn `npx tsx src/cli.ts validate` báo
+  1 — chênh 12, và cái sai là cái trông có thẩm quyền hơn. Suýt kết luận bản vá
+  không chạy. Ghi ICE-031. Mọi tiêu chí trong `exit_contract` trên vì thế đều
+  gọi thẳng `src/cli.ts`, không gọi `ganas`.
+
+  Tiêu chí thứ ba ban đầu viết là `grep -c design-orphaned = 0`, và nó SAI vì
+  tự tham chiếu: lúc gate chạy thì D-013 còn `active` nên chính nó bị đếm, tiêu
+  chí không bao giờ xanh trước khi đóng — đúng lúc gate cần dùng. Sửa thành loại
+  trừ id của chính chặng; lý do đầy đủ ghi ngay cạnh tiêu chí.

@@ -212,6 +212,23 @@ test("design mồ côi khi mọi goal nó phục vụ đã closed", async () => 
   assert.ok(codes.includes("spine/design-orphaned"));
 });
 
+test("design status: done dưới goal đã closed KHÔNG bị báo mồ côi — đó là kết thúc đúng", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal("G-001", "closed_at: 2026-02-01T00:00:00Z").replace(
+      "status: active",
+      "status: closed",
+    ),
+    ".ganas/designs/D-001.yaml": `id: D-001
+title: "Design thử"
+serves:
+  - G-001
+summary: "Cách tiếp cận"
+status: done
+done_at: 2026-02-02T00:00:00Z`,
+  });
+  assert.ok(!codes.includes("spine/design-orphaned"));
+});
+
 test("task ước lượng large bị cảnh báo phải chẻ nhỏ", async () => {
   const files = validSpine();
   files[".ganas/tasks/T-001.yaml"] = task("T-001", { extra: "estimated_context: large" });

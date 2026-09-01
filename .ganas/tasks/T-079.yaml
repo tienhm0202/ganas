@@ -1,0 +1,52 @@
+id: T-079
+title: "`spine/design-orphaned` miễn trừ `done`, và `hint` thôi chỉ tới việc đã
+  bị cấm"
+serves:
+  - G-001
+implements: D-013
+scope: P-graph-core
+status: done
+estimated_context: small
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/graph/validate.ts"
+      why: "luật nằm ngay trên `spine/design-missing-decision`; đọc cả chú thích của
+        `spine/design-stalled` ngay dưới để không sửa nhầm luật"
+    - path: ".ganas/designs/D-012.yaml"
+      why: "vì sao `hint` không được tiếp tục gợi ý `status: archived` — D-012 đã chốt
+        design không bao giờ archive"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-validate
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/spine.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+
+notes: |-
+  Một vế thêm vào điều kiện, cộng một test mới, cộng sửa `hint`.
+
+  Test CŨ (`test/spine.test.ts`, "design mồ côi khi mọi goal nó phục vụ đã
+  closed") dùng design ở trạng thái mặc định chứ không phải `done`, nên nó phải
+  VẪN XANH sau khi sửa. Nếu nó đỏ thì thay đổi này là nới luật chứ không phải
+  vá luật — dừng lại, đừng sửa test cho vừa.
+
+  Test MỚI phải khẳng định đúng vế vừa thêm: design `status: done` dưới goal
+  `closed` KHÔNG sinh `spine/design-orphaned`. Thiếu test này thì vế mới không
+  có gì canh và lần sau ai đó dọn điều kiện sẽ xoá nó lại.
+
+  `hint` hiện là "Đặt status: archived, hoặc trỏ serves sang goal đang active."
+  Vế đầu dẫn người ta tới việc D-012 đã cấm. Viết lại cho khớp thực tế: chặng
+  còn dang dở dưới goal đã đóng thì hoặc đóng nó (`done`), hoặc trỏ `serves`
+  sang goal đang active.
+
+  KHÔNG đụng `severity` (vẫn warning), KHÔNG đụng `spine/design-stalled`, KHÔNG
+  đụng `src/debt.ts` — trọng số của mã luật này không đổi.
+done_at: 2026-09-01T05:43:14.299Z

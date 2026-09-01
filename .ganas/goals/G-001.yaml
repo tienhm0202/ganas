@@ -9,6 +9,26 @@ acceptance:
     run: "npm test"
     expect: exit_zero
 
-status: active
+status: closed
+closed_at: 2026-09-01T05:43:50Z
 approved_by: "@tienhm"
 approved_at: "2026-08-14T00:00:00Z"
+notes: |-
+  ĐÓNG 2026-09-01 theo yêu cầu của @tienhm trong phiên làm việc cùng ngày.
+  `approved_by` phía trên vẫn là chữ ký lúc MỞ mục tiêu (2026-08-14); schema
+  không có trường `closed_by`, nên người quyết đóng ghi ở đây.
+
+  Căn cứ đóng: tiêu chí A-1 (`npm test` exit_zero) đạt — 911 test pass, 0 fail,
+  đo lúc 2026-09-01. Cả 13 chặng phục vụ mục tiêu này đều `done`, hai chặng
+  cuối (D-001, D-003) đóng ngược trong chính phiên này sau khi viết hợp đồng
+  từ cưỡng chế đang chạy.
+
+  GHI THẲNG MỘT ĐIỂM YẾU, vì nó ảnh hưởng tới cách đọc con số trên: A-1 là tiêu
+  chí ĐO YẾU. `npm test exit_zero` không phân biệt được ngày đầu dự án với hôm
+  nay — nó xanh suốt cả 13 chặng. Điều G-001 định phát biểu ("phiên sau nối
+  tiếp được phiên trước, không phải khám phá lại") không có tiêu chí nào bắt
+  được, và mục tiêu kế tiếp nên sửa đúng chỗ đó thay vì chép lại khuôn này.
+
+  Mục tiêu kế tiếp chưa mở — @tienhm hoãn sang phiên khác. Hệ quả đã biết và
+  chấp nhận: `ganas flow` sẽ tụt về chặng `goal` và đòi viết một mục tiêu thật,
+  vì `activeGoals()` rỗng (src/flow.ts:62). Đó là báo cáo đúng, không phải lỗi.
