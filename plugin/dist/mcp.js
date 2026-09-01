@@ -17463,6 +17463,10 @@ function formatDesignDriftWarning(task, graph, freshness) {
   }
   return out;
 }
+function designIdFromArtifactRef(ref) {
+  const slash = ref.indexOf("/");
+  return slash === -1 ? ref : ref.slice(0, slash);
+}
 function ownsGanasFile(task, relPath) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
   const prefix = `${GANAS_DIR}/`;
@@ -17470,7 +17474,7 @@ function ownsGanasFile(task, relPath) {
   const inner = p.slice(prefix.length);
   if (inner === LEDGER_FILE) return true;
   const stem = inner.replace(YAML_EXT, "");
-  return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`);
+  return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`) || task.produces.some((ref) => stem === `${DIRS.designs}/${designIdFromArtifactRef(ref)}`);
 }
 var GLOB_CHARS, YAML_EXT;
 var init_boundary = __esm({
@@ -25281,7 +25285,21 @@ var init_config = __esm({
 });
 
 // src/model/task.ts
-var TASK_STATUS, ESTIMATED_CONTEXT, TASK_ROLE, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
+function agentDispatchLines(agent) {
+  const lines = [];
+  if (agent.persona) lines.push(`Vai: ${agent.persona}`);
+  if (agent.objective) lines.push(`Xong ngh\u0129a l\xE0: ${agent.objective}`);
+  agent.steps.forEach((step, i) => lines.push(`B\u01B0\u1EDBc ${i + 1}: ${step}`));
+  for (const rail of agent.guardrails) lines.push(`Kh\xF4ng \u0111\u01B0\u1EE3c: ${rail}`);
+  for (const item of agent.self_check) lines.push(`T\u1EF1 ki\u1EC3m tr\u01B0\u1EDBc khi b\xE1o xong: ${item}`);
+  if (agent.tools.length > 0) {
+    lines.push(
+      `C\xF4ng c\u1EE5 n\xEAn d\xF9ng: ${agent.tools.join(", ")} \u2014 khuy\u1EBFn ngh\u1ECB th\xF4i, ganas kh\xF4ng ch\u1EB7n \u0111\u01B0\u1EE3c c\xF4ng c\u1EE5 n\u1EB1m ngo\xE0i danh s\xE1ch n\xE0y`
+    );
+  }
+  return lines;
+}
+var TASK_STATUS, ESTIMATED_CONTEXT, TASK_ROLE, zArtifactRef, zAgentSpec, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
 var init_task = __esm({
   "src/model/task.ts"() {
     "use strict";
@@ -25291,6 +25309,25 @@ var init_task = __esm({
     TASK_STATUS = ["todo", "in_progress", "done"];
     ESTIMATED_CONTEXT = ["small", "medium", "large"];
     TASK_ROLE = ["design", "build"];
+    zArtifactRef = external_exports.string().regex(
+      /^D-\d{3,}\/A-[A-Za-z0-9][A-Za-z0-9-]*$/,
+      "\u0111\u1ECBa ch\u1EC9 b\u1EA3n v\u1EBD ph\u1EA3i d\u1EA1ng `D-010/A-users-table` (id design, g\u1EA1ch ch\xE9o, id b\u1EA3n v\u1EBD)"
+    );
+    zAgentSpec = external_exports.object({
+      persona: zNonEmpty.optional().describe("agent n\xE0y \u0111\xF3ng vai g\xEC"),
+      objective: zNonEmpty.optional().describe("m\u1ED9t c\xE2u: xong ngh\u0129a l\xE0 g\xEC"),
+      steps: external_exports.array(zNonEmpty).default([]),
+      self_check: external_exports.array(zNonEmpty).default([]),
+      guardrails: external_exports.array(zNonEmpty).default([]),
+      /**
+       * Công cụ nên dùng. ganas KHÔNG cưỡng chế được danh sách này: tool sinh
+       * sub-agent không nhận allowlist từ ganas, nên đây là KHUYẾN NGHỊ in ra cho
+       * người đọc, không phải một hàng rào. Giả vờ cưỡng chế được là đúng lớp lỗi
+       * `test/no-dead-ends.test.ts` sinh ra để chặn — nên `agentDispatchLines()`
+       * tự khai là không kiểm được, ngay trên dòng nó in ra.
+       */
+      tools: external_exports.array(zNonEmpty).default([])
+    }).strict();
     zContextContract = external_exports.object({
       must_read: external_exports.array(
         external_exports.object({
@@ -25373,6 +25410,38 @@ var init_task = __esm({
        */
       role: external_exports.enum(TASK_ROLE).default("build"),
       /**
+       * Bản vẽ mà task này CẦN — hợp đồng vào (input_contract).
+       *
+       * Đây là thứ thay `context_contract.must_read` cho phần hợp đồng: brief bơm
+       * thẳng `shape` của đúng những bản vẽ này, thay vì đưa một danh sách ĐƯỜNG
+       * DẪN rồi bắt agent mở cả kho. Một design mười bản vẽ mà task chỉ dùng hai
+       * thì tám cái còn lại là nhiễu — và agent vẫn sẽ suy diễn theo nhiễu đó.
+       *
+       * `.default([])`: mọi task khai trước khi trường này ra đời phải adopt được
+       * mà không phải sửa file nào.
+       */
+      consumes: external_exports.array(zArtifactRef).default([]),
+      /**
+       * Bản vẽ mà task này SINH RA — vế ngược của `consumes`.
+       *
+       * Nhờ hai trường đó, câu "bước sau là task nào" SUY ĐƯỢC: task nào
+       * `consumes` thứ task này `produces` thì đó là bước sau. Vì vậy KHÔNG có
+       * trường `next`: hai câu trả lời cho một câu hỏi thì có ngày lệch nhau —
+       * đúng lý lẽ đã dùng cho `blocked_by` so với một `status: blocked` (xem
+       * docstring `TASK_STATUS` đầu file).
+       *
+       * Khai `produces` thì `exit_contract` phải có tiêu chí `verification` trỏ
+       * vào chính bản vẽ đó — luật `spine/task-produces-without-verification`,
+       * đúng khuôn `touches` → `spine/task-missing-verification`.
+       */
+      produces: external_exports.array(zArtifactRef).default([]),
+      /**
+       * Bản giao việc cho sub-agent. TUỲ CHỌN — chỉ điền khi task thật sự sẽ được
+       * giao đi. Điền cho đủ lệ vào mọi task đang mở là đưa văn xuôi chết vào
+       * đường nóng của `loadGraph`, chạy lại mỗi lần hook chạy.
+       */
+      agent: zAgentSpec.optional(),
+      /**
        * Khối trong sơ đồ mà task này chạm tới.
        *
        * Đây là điểm nối giữa trục VIỆC và trục HỆ THỐNG: chạm khối nào thì phải để
@@ -25415,7 +25484,7 @@ var init_task = __esm({
 
 // src/model/design.ts
 function artifactStatement(design, artifact) {
-  return `${design.id}/${artifact.id} (${artifact.kind}) trong ${artifact.module}: ${artifact.shape}`;
+  return `${design.id}/${artifact.id} (${artifact.kind}) trong ${artifact.module ?? artifact.path}: ${artifact.shape}`;
 }
 function artifactIssues(design, lookupModule) {
   const issues = [];
@@ -25423,6 +25492,16 @@ function artifactIssues(design, lookupModule) {
     const add = (code, message, hint) => {
       issues.push({ artifactId: a.id, index, code, message, hint });
     };
+    if (!a.module) {
+      if (!a.probe) {
+        add(
+          "missing-probe",
+          `b\u1EA3n v\u1EBD ${design.id}/${a.id} ch\u01B0a c\xF3 \`probe\` \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1ED1i chi\u1EBFu n\xF3 v\u1EDBi file th\u1EADt`,
+          'Th\xEAm `probe: { run: "...", expect: exit_zero }`. B\u1EA3n v\u1EBD kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c th\xEC n\xF3 l\xE0 v\u0103n xu\xF4i, ch\u1EC9 kh\xE1c ch\u1ED7 \u0111\u1EB7t.'
+        );
+      }
+      return;
+    }
     const mod = lookupModule(a.module);
     if (!mod) {
       add(
@@ -25469,7 +25548,7 @@ var init_design = __esm({
     init_common();
     init_task();
     DESIGN_STATUS = ["draft", "active", "superseded", "archived", "done"];
-    ARTIFACT_KIND = ["schema", "migration", "function", "api", "type"];
+    ARTIFACT_KIND = ["schema", "migration", "function", "api", "type", "doc"];
     zArtifactId = external_exports.string().regex(/^A-[a-z0-9][a-z0-9-]*$/i, "ID b\u1EA3n v\u1EBD ph\u1EA3i d\u1EA1ng A-users-table");
     zArtifactPort = external_exports.object({
       side: external_exports.enum(["in", "out"]),
@@ -25478,13 +25557,76 @@ var init_design = __esm({
     zDesignArtifact = external_exports.object({
       id: zArtifactId,
       kind: external_exports.enum(ARTIFACT_KIND),
-      /** Khối chứa code mà bản vẽ này mô tả. Cũng là nguồn tính STALE. */
-      module: zModuleId,
+      /**
+       * Khối chứa code mà bản vẽ này mô tả. Cũng là nguồn tính STALE.
+       *
+       * `.optional()` chỉ vì `kind: doc` neo bằng `path` thay vì bằng khối — với
+       * mọi kind khác nó vẫn BẮT BUỘC, và `superRefine` bên dưới ép điều đó thành
+       * lỗi PARSE.
+       */
+      module: zModuleId.optional(),
+      /**
+       * File tài liệu mà bản vẽ `doc` mô tả — nguồn tính STALE thay cho
+       * `module.paths`.
+       *
+       * Phải là ĐƯỜNG DẪN có thư mục (`docs/CONCEPTS.md`), không phải một tên
+       * file trần: `globsOf()` (`src/graph/freshness.ts`) chỉ nhận phần tử có
+       * `*` hoặc `/`, nên một `path` trần khiến context rỗng và bản vẽ XANH VĨNH
+       * VIỄN — đúng cái bẫy mà docstring `scopeTargets()` (`src/verify/run.ts`)
+       * đã trả giá một lần.
+       */
+      path: zNonEmpty.optional(),
       shape: zNonEmpty.describe('h\xECnh d\u1EA1ng, vd "(userId: string) => Date | null"'),
       port: zArtifactPort.optional(),
       probe: zProbe.optional(),
       notes: external_exports.string().optional()
-    }).strict();
+    }).strict().superRefine((a, ctx) => {
+      if (a.kind === "doc") {
+        if (!a.path) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["path"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc n\xEAn ph\u1EA3i c\xF3 \`path\` \u2014 t\xE0i li\u1EC7u neo v\xE0o m\u1ED9t file, kh\xF4ng v\xE0o kh\u1ED1i`
+          });
+        }
+        if (a.module) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["module"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc th\xEC kh\xF4ng \u0111\u01B0\u1EE3c khai \`module\` \u2014 ch\u1ECDn m\u1ED9t trong hai, \`path\` cho t\xE0i li\u1EC7u`
+          });
+        }
+        if (a.path && !a.path.includes("/")) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["path"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai \`path: ${a.path}\` \u2014 t\xEAn file tr\u1EA7n kh\xF4ng t\xEDnh \u0111\u01B0\u1EE3c \u0111\u1ED9 t\u01B0\u01A1i, b\u1EA3n v\u1EBD s\u1EBD xanh v\u0129nh vi\u1EC5n d\xF9 t\xE0i li\u1EC7u \u0111\xE3 \u0111\u1ED5i. \u0110\u1EB7t t\xE0i li\u1EC7u trong m\u1ED9t th\u01B0 m\u1EE5c, vd \`docs/${a.path}\`.`
+          });
+        }
+        if (a.port) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["port"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc th\xEC kh\xF4ng \u0111\u01B0\u1EE3c khai \`port\` \u2014 c\u1ED5ng l\xE0 c\u1EE7a kh\u1ED1i, m\xE0 b\u1EA3n v\u1EBD doc kh\xF4ng neo v\xE0o kh\u1ED1i n\xE0o`
+          });
+        }
+        return;
+      }
+      if (!a.module) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["module"],
+          message: `b\u1EA3n v\u1EBD ${a.id} (kind: ${a.kind}) ph\u1EA3i khai \`module\` \u2014 ch\u1EC9 kind: doc m\u1EDBi neo b\u1EB1ng \`path\``
+        });
+      }
+      if (a.path) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["path"],
+          message: `b\u1EA3n v\u1EBD ${a.id} (kind: ${a.kind}) m\xF4 t\u1EA3 CODE n\xEAn neo b\u1EB1ng \`module\`, kh\xF4ng b\u1EB1ng \`path\``
+        });
+      }
+    });
     zDesign = external_exports.object({
       id: zDesignId,
       title: zNonEmpty,
@@ -26663,14 +26805,14 @@ function artifactTargets(sourced, graph) {
   const targets = [];
   for (const a of d.artifacts) {
     if (!a.probe) continue;
-    const m = graph.modules.get(a.module)?.value;
+    const m = a.module ? graph.modules.get(a.module)?.value : void 0;
     targets.push({
       id: `${d.id}/${a.id}`,
       label: `${d.id}/${a.id}`,
       kind: "probe",
       definition: a.probe,
       statement: artifactStatement(d, a),
-      context: m ? [...m.paths, ...m.entrypoints] : [],
+      context: m ? [...m.paths, ...m.entrypoints] : a.path ? [a.path] : [],
       ttlDays: 0
     });
   }
@@ -26684,7 +26826,8 @@ function scopeOfTarget(target, graph) {
   if (design) {
     const artifactId = target.id.slice(owner.length + 1);
     const artifact = design.artifacts.find((a) => a.id === artifactId);
-    if (artifact) return graph.modules.get(artifact.module)?.value.scope;
+    if (artifact)
+      return artifact.module ? graph.modules.get(artifact.module)?.value.scope : void 0;
     return void 0;
   }
   return graph.modules.get(owner)?.value.scope;
@@ -38067,6 +38210,10 @@ var SCORES = {
   // "đóng được chưa" — cùng hạng `scope/module-missing-guide`. ease thấp hơn vì
   // phải nghĩ ra tiêu chí kiểm chứng được, không phải chép một dòng.
   "spine/design-missing-exit-contract": { weight: 2, ease: 3 },
+  // Bản vẽ không task nào nhận dựng: chặng chốt một hình dạng rồi bỏ đó — cùng
+  // hạng `design-stalled` ở chỗ bảng vẫn trông như đang chạy. Sửa cần QUYẾT ai
+  // dựng (hoặc bỏ bản vẽ), không phải chép một dòng.
+  "spine/artifact-unproduced": { weight: 2, ease: 3 },
   /* --- spine: task -------------------------------------------------------- */
   "spine/task-missing-goal": { weight: 3, ease: 5 },
   "spine/task-missing-design": { weight: 3, ease: 5 },
@@ -38096,6 +38243,20 @@ var SCORES = {
   // sai" bằng cách im lặng. ease thấp hơn `design-task-touches-code` vì phải
   // thêm đúng một tiêu chí trỏ đúng path, không chỉ xoá một dòng.
   "spine/design-task-without-artifact-criterion": { weight: 4, ease: 4 },
+  // Địa chỉ bản vẽ trong `consumes`/`produces` trỏ vào hư không: cùng lớp với
+  // `exit-verification-target-not-found` — brief sẽ bơm hợp đồng vào từ một
+  // bản vẽ không tồn tại, tức là bơm ra rỗng mà không ai biết. Sửa = gõ lại
+  // một chuỗi.
+  "spine/task-produces-unknown-artifact": { weight: 4, ease: 5 },
+  // Khai `produces` mà không có tiêu chí `verification` cho chính bản vẽ đó —
+  // đúng lớp `task-missing-verification` cho trục bản vẽ: task "done" được mà
+  // hình dạng nó vừa hứa dựng chưa ai chạy probe. Sửa = thêm một mục
+  // exit_contract, đôi khi phải viết probe cho bản vẽ trước.
+  "spine/task-produces-without-verification": { weight: 3, ease: 3 },
+  // `agent` khai mà rỗng ruột: không sai dữ liệu, nhưng làm người đọc tưởng
+  // task đã được giao việc tử tế trong khi bản giao việc không nói gì. Sửa
+  // bằng một dòng YAML (điền `objective`, hoặc bỏ khối `agent`).
+  "spine/agent-empty": { weight: 1, ease: 5 },
   /* --- scope: task/module/phạm vi ----------------------------------------- */
   "scope/task-scope-not-found": { weight: 3, ease: 5 },
   // Có cả lối sửa nhanh (thêm khối vào phạm vi) lẫn lối phải chẻ task — chấm
@@ -38641,6 +38802,10 @@ function validateGraph(graph, opts = {}) {
     if (t.value.status !== "done") c.open += 1;
     taskCountOf.set(t.value.implements, c);
   }
+  const producedArtifacts = /* @__PURE__ */ new Set();
+  for (const t of graph.tasks.values()) {
+    for (const ref of t.value.produces) producedArtifacts.add(ref);
+  }
   for (const design of graph.designs.values()) {
     const d = design.value;
     d.serves.forEach((goalId, i) => {
@@ -38738,14 +38903,28 @@ function validateGraph(graph, opts = {}) {
         hint: issue2.hint
       });
     }
+    if (d.status === "active") {
+      d.artifacts.forEach((a, i) => {
+        if (producedArtifacts.has(`${d.id}/${a.id}`)) return;
+        diags.push({
+          severity: "warning",
+          code: "spine/artifact-unproduced",
+          message: `b\u1EA3n v\u1EBD ${d.id}/${a.id} kh\xF4ng task n\xE0o khai \`produces\` \u2014 ch\u01B0a ai nh\u1EADn d\u1EF1ng n\xF3`,
+          file: design.file,
+          line: at(graph, design, "artifacts", i),
+          hint: `Th\xEAm \`produces: ["${d.id}/${a.id}"]\` v\xE0o task s\u1EBD d\u1EF1ng b\u1EA3n v\u1EBD n\xE0y, ho\u1EB7c b\u1ECF b\u1EA3n v\u1EBD n\u1EBFu ch\u1EB7ng kh\xF4ng c\xF2n ch\u1ED1t h\xECnh d\u1EA1ng \u0111\xF3 n\u1EEFa.`
+        });
+      });
+    }
     d.artifacts.forEach((a, i) => {
       if (!a.probe) return;
-      const mod = graph.modules.get(a.module)?.value;
-      if (!mod) return;
+      const mod = a.module ? graph.modules.get(a.module)?.value : void 0;
+      const context = mod ? [...mod.paths, ...mod.entrypoints] : a.path ? [a.path] : [];
+      if (context.length === 0) return;
       for (const f of lintProbe({
         run: a.probe.run,
         statement: artifactStatement(d, a),
-        context: [...mod.paths, ...mod.entrypoints]
+        context
       })) {
         diags.push({
           severity: f.severity,
@@ -38842,6 +39021,43 @@ function validateGraph(graph, opts = {}) {
         hint: "Target h\u1EE3p l\u1EC7 c\xF3 b\u1ED1n d\u1EA1ng: `F-ACC-001` (fact), `M-intent` (m\u1ECDi b\u1EB1ng ch\u1EE9ng c\u1EE7a kh\u1ED1i), `M-intent/V-intent-smoke` (m\u1ED9t b\u1EB1ng ch\u1EE9ng), `D-010/A-users-table` (m\u1ED9t b\u1EA3n v\u1EBD)."
       });
     });
+    [
+      ["consumes", t.consumes],
+      ["produces", t.produces]
+    ].forEach(([field, refs]) => {
+      refs.forEach((ref, i) => {
+        if (resolvesTarget(graph, ref)) return;
+        diags.push({
+          severity: "error",
+          code: "spine/task-produces-unknown-artifact",
+          message: `task ${t.id} khai \`${field}\` tr\u1ECF b\u1EA3n v\u1EBD \`${ref}\` nh\u01B0ng kh\xF4ng c\xF3 b\u1EA3n v\u1EBD n\xE0o mang t\xEAn \u0111\xF3`,
+          file: task.file,
+          line: at(graph, task, field, i),
+          hint: `\u0110\u1ECBa ch\u1EC9 b\u1EA3n v\u1EBD c\xF3 d\u1EA1ng \`D-010/A-users-table\`: id design, g\u1EA1ch ch\xE9o, id b\u1EA3n v\u1EBD khai trong \`artifacts\` c\u1EE7a design \u0111\xF3. Ki\u1EC3m l\u1EA1i b\u1EB1ng \`ganas design show <id>\`.`
+        });
+      });
+    });
+    t.produces.forEach((ref, i) => {
+      if (verifiedTargets.includes(ref)) return;
+      diags.push({
+        severity: "warning",
+        code: "spine/task-produces-without-verification",
+        message: `task ${t.id} khai d\u1EF1ng b\u1EA3n v\u1EBD ${ref} nh\u01B0ng \`exit_contract\` kh\xF4ng c\xF3 ti\xEAu ch\xED \`kind: verification\` n\xE0o ki\u1EC3m b\u1EA3n v\u1EBD \u0111\xF3`,
+        file: task.file,
+        line: at(graph, task, "produces", i),
+        hint: `Th\xEAm v\xE0o exit_contract: { kind: verification, target: "${ref}" }`
+      });
+    });
+    if (t.agent && agentDispatchLines(t.agent).length === 0) {
+      diags.push({
+        severity: "warning",
+        code: "spine/agent-empty",
+        message: `task ${t.id} khai \`agent\` nh\u01B0ng kh\xF4ng tr\u01B0\u1EDDng n\xE0o c\xF3 n\u1ED9i dung \u2014 b\u1EA3n giao vi\u1EC7c r\u1ED7ng`,
+        file: task.file,
+        line: at(graph, task, "agent"),
+        hint: `\u0110i\u1EC1n \xEDt nh\u1EA5t \`objective\` (m\u1ED9t c\xE2u: xong ngh\u0129a l\xE0 g\xEC), ho\u1EB7c b\u1ECF h\u1EB3n \`agent\`. M\u1ED9t kh\u1ED1i r\u1ED7ng l\xE0m ng\u01B0\u1EDDi \u0111\u1ECDc t\u01B0\u1EDFng task \u0111\xE3 \u0111\u01B0\u1EE3c giao vi\u1EC7c t\u1EED t\u1EBF.`
+      });
+    }
     t.touches.forEach((moduleId, i) => {
       const mod = graph.modules.get(moduleId);
       if (!mod) {
@@ -40571,10 +40787,49 @@ function findSupersededBy(graph, designId) {
   }
   return void 0;
 }
+function agentInstructionBlock(t) {
+  if (!t.agent) return "";
+  const lines = agentDispatchLines(t.agent);
+  if (lines.length === 0) return "";
+  return `**B\u1EA3n giao vi\u1EC7c chi ti\u1EBFt (\`task.agent\`):**
+
+${bullet(lines)}`;
+}
+function consumesBlock(graph, t) {
+  if (t.consumes.length === 0) return "";
+  const items = t.consumes.map((ref) => {
+    const [designId, artifactId] = ref.split("/");
+    const artifact = graph.designs.get(designId)?.value.artifacts.find((a) => a.id === artifactId);
+    if (!artifact) {
+      return `\`${ref}\` \u2014 \u26A0 **KH\xD4NG T\xCCM TH\u1EA4Y** b\u1EA3n v\u1EBD n\xE0y (design ho\u1EB7c artifact kh\xF4ng t\u1ED3n t\u1EA1i)`;
+    }
+    return `\`${ref}\` (${artifact.kind}) \u2014 \`${artifact.shape}\``;
+  });
+  return `**B\u1EA3n v\u1EBD c\u1EA7n d\xF9ng (h\u1EE3p \u0111\u1ED3ng v\xE0o \u2014 \`consumes\`):** ch\u1EC9 \u0111\u1ECDc \`shape\` d\u01B0\u1EDBi \u0111\xE2y, kh\xF4ng c\u1EA7n m\u1EDF c\u1EA3 design:
+
+${bullet(items)}`;
+}
+function producesBlock(graph, t) {
+  if (t.produces.length === 0) return "";
+  const items = t.produces.map((ref) => `\`${ref}\``);
+  const next = [...graph.tasks.values()].map((s) => s.value).filter((other) => other.id !== t.id && other.consumes.some((ref) => t.produces.includes(ref))).sort((a, b) => a.id.localeCompare(b.id)).map((other) => `\`${other.id}\` \u2014 ${other.title}`);
+  return `**B\u1EA3n v\u1EBD task n\xE0y sinh ra (\`produces\`):**
+
+${bullet(items)}` + (next.length > 0 ? `
+
+**B\u01B0\u1EDBc k\u1EBF (suy t\u1EEB task kh\xE1c \`consumes\` \u0111\xFAng b\u1EA3n v\u1EBD tr\xEAn, kh\xF4ng khai tay):**
+
+${bullet(next)}` : "");
+}
 function dispatchSection(graph, t) {
   const H = `## Giao vi\u1EC7c`;
+  const extra = [agentInstructionBlock(t), consumesBlock(graph, t), producesBlock(graph, t)].filter((s) => s.length > 0).join("\n\n");
+  const withExtra = (body) => extra ? `${body}
+
+${extra}` : body;
   if (!t.model) {
-    return `${H} \u2014 \u26A0 ch\u01B0a ai quy\u1EBFt ai l\xE0m
+    return withExtra(
+      `${H} \u2014 \u26A0 ch\u01B0a ai quy\u1EBFt ai l\xE0m
 
 Task n\xE0y ch\u01B0a g\xE1n \`model\`. Ngh\u0129a l\xE0 l\xFAc ch\u1EBB task kh\xF4ng ai quy\u1EBFt n\xF3 kh\xF3 t\u1EDBi \u0111\xE2u, n\xEAn m\u1EB7c \u0111\u1ECBnh phi\xEAn ch\xEDnh \xF4m h\u1EBFt b\u1EB1ng model m\u1EA1nh nh\u1EA5t \u2014 k\u1EC3 c\u1EA3 vi\u1EC7c c\u01A1 h\u1ECDc.
 
@@ -40584,35 +40839,40 @@ S\u1EEDa file task trong \`.ganas/tasks/\`, th\xEAm m\u1ED9t d\xF2ng:
 model: main   # main = kh\xF3/m\u01A1 h\u1ED3 \xB7 verifier = kho\u1EA3ng gi\u1EEFa \xB7 scribe = c\u01A1 h\u1ECDc
 \`\`\`
 
-R\u1ED3i \`ganas validate\` (lu\u1EADt \`spine/task-missing-model\`). Kh\xF4ng \u0111o\xE1n h\u1ED9 \u1EDF \u0111\xE2y: heuristic suy tier kh\xF4ng \u0111\xE1ng tin b\u1EB1ng ng\u01B0\u1EDDi v\u1EEBa ch\u1EBB task.`;
+R\u1ED3i \`ganas validate\` (lu\u1EADt \`spine/task-missing-model\`). Kh\xF4ng \u0111o\xE1n h\u1ED9 \u1EDF \u0111\xE2y: heuristic suy tier kh\xF4ng \u0111\xE1ng tin b\u1EB1ng ng\u01B0\u1EDDi v\u1EEBa ch\u1EBB task.`
+    );
   }
   const modelId = graph.config.models[t.model];
   if (!canDispatchSubagent(graph.config.harness)) {
-    return `${H}
+    return withExtra(
+      `${H}
 
 Tier \`${t.model}\` \u2192 model \`${modelId}\`.
 
 Harness khai trong \`config.yaml\` l\xE0 \`${graph.config.harness}\`: ganas n\u1ED1i v\xE0o \u0111\xF3 qua MCP, m\xE0 MCP kh\xF4ng t\u1EA1o \u0111\u01B0\u1EE3c agent con v\xE0 kh\xF4ng \u0111\u1ED5i \u0111\u01B0\u1EE3c model c\u1EE7a phi\xEAn. \u0110\u1ED5i model sang \`${modelId}\` trong picker tr\u01B0\u1EDBc khi l\xE0m, ho\u1EB7c m\u1EDF m\u1ED9t phi\xEAn ri\xEAng b\u1EB1ng model \u0111\xF3.
 
-> **\u0110\xE2y l\xE0 khuy\u1EBFn ngh\u1ECB, kh\xF4ng ph\u1EA3i h\xE0ng r\xE0o** \u2014 ganas kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c b\u1EA1n c\xF3 \u0111\u1ED5i hay kh\xF4ng. \u0110\u1EEBng ghi v\xE0o \`.ganas/\` r\u1EB1ng task \u0111\xE3 ch\u1EA1y \u0111\xFAng tier.`;
+> **\u0110\xE2y l\xE0 khuy\u1EBFn ngh\u1ECB, kh\xF4ng ph\u1EA3i h\xE0ng r\xE0o** \u2014 ganas kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c b\u1EA1n c\xF3 \u0111\u1ED5i hay kh\xF4ng. \u0110\u1EEBng ghi v\xE0o \`.ganas/\` r\u1EB1ng task \u0111\xE3 ch\u1EA1y \u0111\xFAng tier.`
+    );
   }
   const alias = agentModelAlias(modelId);
   const modelArg = alias ? `\`model: "${alias}"\`` : `model \`${modelId}\``;
-  return `${H} \u2014 task n\xE0y KH\xD4NG ch\u1EA1y th\u1EB3ng \u1EDF phi\xEAn ch\xEDnh
+  return withExtra(
+    `${H} \u2014 task n\xE0y KH\xD4NG ch\u1EA1y th\u1EB3ng \u1EDF phi\xEAn ch\xEDnh
 
 Tier \`${t.model}\` \u2192 model \`${modelId}\` (${modelArg}).
 
 Phi\xEAn ch\xEDnh l\xE0 ng\u01B0\u1EDDi \u0110I\u1EC0U PH\u1ED0I: ch\u1ECDn task, \u0111\u1ECDc brief, giao vi\u1EC7c, ch\u1EA5m gate, commit. Ph\u1EA7n s\u1EEDa code c\u1EE7a task n\xE0y ch\u1EA1y trong sub-agent ri\xEAng:
 
 ` + bullet([
-    `T\u1EA1o sub-agent v\u1EDBi ${modelArg}.`,
-    `Prompt m\u1EDF \u0111\u1EA7u b\u1EB1ng \`ganas brief ${t.id}\` \u2014 \u0111\u1EC3 sub-agent t\u1EF1 l\u1EA5y \u0111\xFAng brief n\xE0y, \u0111\u1EEBng ch\xE9p tay l\u1EA1i (ch\xE9p tay l\xE0 ch\u1ED7 brief b\u1ECB b\xF3p m\xE9o).`,
-    `Sub-agent xong th\xEC phi\xEAn ch\xEDnh ch\u1EA1y \`ganas gate\` \u0111\u1EC3 ch\u1EA5m. Ch\u1EA5m b\u1EB1ng l\u1EC7nh, kh\xF4ng b\u1EB1ng l\u1EDDi t\u1ED5ng k\u1EBFt c\u1EE7a sub-agent.`
-  ]) + `
+      `T\u1EA1o sub-agent v\u1EDBi ${modelArg}.`,
+      `Prompt m\u1EDF \u0111\u1EA7u b\u1EB1ng \`ganas brief ${t.id}\` \u2014 \u0111\u1EC3 sub-agent t\u1EF1 l\u1EA5y \u0111\xFAng brief n\xE0y, \u0111\u1EEBng ch\xE9p tay l\u1EA1i (ch\xE9p tay l\xE0 ch\u1ED7 brief b\u1ECB b\xF3p m\xE9o).`,
+      `Sub-agent xong th\xEC phi\xEAn ch\xEDnh ch\u1EA1y \`ganas gate\` \u0111\u1EC3 ch\u1EA5m. Ch\u1EA5m b\u1EB1ng l\u1EC7nh, kh\xF4ng b\u1EB1ng l\u1EDDi t\u1ED5ng k\u1EBFt c\u1EE7a sub-agent.`
+    ]) + `
 
 Hai l\xFD do, kh\xF4ng ph\u1EA3i m\u1ED9t: context phi\xEAn ch\xEDnh kh\xF4ng b\u1ECB chi ti\u1EBFt th\u1EF1c thi nu\u1ED1t m\u1EA5t, v\xE0 tier th\u1EA5p kh\xF4ng ngh\u0129 qu\xE1 tay cho vi\u1EC7c c\u01A1 h\u1ECDc.
 
-` + parallelBlock(graph, t) + `> N\u1EBFu B\u1EA0N \u0110ANG L\xC0 sub-agent nh\u1EADn ch\xEDnh task n\xE0y: l\xE0m lu\xF4n, \u0111\u1EEBng giao ti\u1EBFp n\u1EEFa.`;
+` + parallelBlock(graph, t) + `> N\u1EBFu B\u1EA0N \u0110ANG L\xC0 sub-agent nh\u1EADn ch\xEDnh task n\xE0y: l\xE0m lu\xF4n, \u0111\u1EEBng giao ti\u1EBFp n\u1EEFa.`
+  );
 }
 function parallelBlock(graph, t) {
   const others = parallelCandidates(graph, t);
