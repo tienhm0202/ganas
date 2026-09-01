@@ -9,7 +9,6 @@ estimated_context: small
 model: verifier
 blocked_by:
   - T-077
-  - T-079
 
 context_contract:
   must_read:
@@ -39,9 +38,9 @@ exit_contract:
 notes: |-
   `--scope P-x` để quét đúng một phạm vi vừa release. Giữ mặc định dry-run.
 
-  Hai luật validate KHÔNG nằm ở đây mà ở T-079: `src/graph/validate.ts` thuộc
-  khối M-validate của phạm vi P-graph-core, và một task không được chạm khối của
-  hai phạm vi (`scope/task-touches-outside-scope`, mức error).
+  KHÔNG còn luật validate nào trong chặng này: hai luật dự kiến (`design-archivable`
+  và luật cấm archive khi còn canh code) chỉ phục vụ việc archive design, mà việc
+  đó đã bị bỏ — xem summary D-012. T-079 vì thế cũng bị xoá.
 
   Tiêu chí `artifact` trỏ `docs/COMMANDS.md` là thứ DUY NHẤT kéo file đó vào
   ranh giới — nó không thuộc `paths` của khối nào. Thiếu nó thì `ganas commit`

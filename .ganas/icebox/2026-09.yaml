@@ -1,0 +1,21 @@
+- id: ICE-028
+  title: "Bỏ archive design: .ganas/designs/ sẽ phình dần, chưa đo được cost"
+  found_at: 2026-09-01T04:50:38.769Z
+  review_after_days: 30
+  weight: 2
+  ease: 2
+  why_deferred: "D-012 định archive design `superseded` sang `designs/archived/`
+    rồi bỏ giữa chừng vì cơ chế tự mâu thuẫn: đường duy nhất để một design thành
+    `superseded` là được design khác khai `supersedes`, mà archive nó lại làm
+    `spine/design-missing-supersede` (validate.ts:278-288) báo lỗi. Muốn chạy
+    thật thì loader cộng ba validator phải cùng biết một tập 'đã archive' — hai
+    bản đồ song song. Hệ quả để lại: mọi design sống mãi trong graph và được
+    parse mỗi lần hook chạy. Hiện 12 design, vài KB, chưa đáng lo. Đáng mở lại
+    khi đo được thật: nếu số design lên hàng trăm thì cân nhắc cho `listYaml`
+    đọc thêm thư mục con vào một tập chỉ-đọc riêng, thay vì dời file ra khỏi tầm
+    mắt của validator."
+  anchors:
+    - src/graph/load.ts:93-100
+    - src/graph/validate.ts:278
+  scope: P-graph-core
+  status: open
