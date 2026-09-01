@@ -9,6 +9,65 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
+## Chưa phát hành
+
+- **Design không nối tới code, nên thiết kế và code trôi khỏi nhau mà không ai
+  báo.** Xương sống Goal→Design→Task vốn chỉ có một cạnh đi xuống, và nó ngược
+  chiều: `task.implements`. Design vì thế không nói được nó CHỐT cái gì, chỉ nói
+  được ai đang làm nó — nội dung thiết kế phải nhét vào `summary` văn xuôi, và
+  D-008/D-009 đã nhét ~30 dòng vào đúng một trường. Nặng hơn: `portIssues()` chỉ
+  so `shape` khối này với `shape` khối kia, **chưa bao giờ so với code thật**.
+  `scripts/gen-ports.mjs` có đọc chữ ký bằng TypeScript compiler API nhưng cố ý
+  chỉ IN RA để người dán — sau lúc dán thì không còn gì canh.
+
+  Nay Design có **`artifacts`**: mỗi bản vẽ khai `kind`, khối (hoặc `path` với
+  `kind: doc`), `shape`, và một `probe` đối chiếu bản vẽ với CODE THẬT. Toàn bộ
+  điểm nối là **một hàm** `artifactTargets()` cắm vào `allTargets()` — khe duy
+  nhất mà `computeFreshness()` lấy đầu vào — nên `ganas verify D-010` chạy được
+  ngay và nhánh `verification` của gate không phải sửa một dòng.
+
+  Điểm làm tính năng này rẻ: `defHash(definition, statement)` băm **cả**
+  `statement`. Đưa `shape` vào đó thì **ba loại lệch tự phân biệt, không một
+  dòng code so sánh nào**: code trong khối đổi ⇒ `stale`; `shape` trong YAML đổi
+  ⇒ `definition_changed`; code lệch thật bản vẽ ⇒ `failing`. Đó đúng là phân
+  biệt "sửa code giữ hợp đồng" với "sửa hợp đồng".
+
+  Cạm bẫy đã trả giá ngay trong chặng: ba probe dogfood đầu tiên chỉ `grep` TÊN
+  hàm, nên đổi chữ ký mà giữ tên thì bản vẽ vẫn xanh — bản vẽ nói dối mà chính
+  cơ chế chống nói dối không bắt được. Siết thành khớp nguyên chữ ký, kiểm ngược
+  bằng cách thêm một tham số: probe đỏ đúng như phải thế.
+
+- **Task không đủ để giao việc cho một agent.** `context_contract.must_read` đưa
+  agent một danh sách ĐƯỜNG DẪN rồi bắt nó mở cả file: với một design mười bản
+  vẽ, agent đọc cả mười để dùng hai, tám cái còn lại là nhiễu mà nó vẫn suy diễn
+  theo. `consumes` khai địa chỉ bản vẽ (`D-010/A-x`, cùng khuôn địa chỉ với
+  `M-intent/V-intent-smoke`) và brief bơm thẳng `shape` — **hợp đồng, không phải
+  file**; có test riêng khẳng định brief KHÔNG in shape của bản vẽ khác cùng
+  design. `produces` là vế ngược, và nhờ hai trường đó câu "bước sau là task
+  nào" **suy được**, nên không có trường `next` khai tay.
+
+  Cộng khối `agent` (persona, objective, steps, self_check, guardrails, tools)
+  và `Task.role` (`design`/`build`). Vai `design` không cần hook mới: `touches`
+  rỗng cộng một tiêu chí `kind: artifact` trỏ file design làm `taskBoundary`
+  khác rỗng mà không chứa dòng code nào. `tools` khai được nhưng brief **tự khai
+  là không cưỡng chế được** — tool sinh sub-agent không nhận allowlist từ ganas.
+
+- **Vòng đời: dọn dàn giáo, giữ hàng rào.** Task `done` thuộc phạm vi
+  `status: delivered` archive được ngay, không đợi `--older-than`; `ganas prune
+  --scope P-x` quét đúng một phạm vi vừa release. Ngữ nghĩa lọc chốt theo CODE:
+  `Task.scope` và `Proposal.scope` đều bắt buộc nên lọc được, còn file icebox
+  theo tháng và ephemeral thì bị LOẠI HẲN chứ không im lặng dọn kèm.
+
+  **Design thì không bao giờ archive** — ý định ban đầu có, và đã bỏ sau khi cài
+  ra: đường DUY NHẤT để một design thành `superseded` là được design khác khai
+  `supersedes`, mà archive nó lại làm chính luật `spine/design-missing-supersede`
+  báo lỗi. Muốn chạy thật thì loader cộng ba validator phải cùng biết một tập
+  "đã archive" — hai bản đồ song song, đúng thứ repo này tránh. Bất biến đó nay
+  là một test: kế hoạch dọn không được nhắc tới `designs/`.
+
+- Lệnh mới `ganas design [list|new|show|check]`; 11 luật validate mới; mã chẩn
+  đoán tĩnh 62 → 69. Bộ test 838 → 911.
+
 ## v1.0.0 — 2026-08-25
 
 - **Sơ đồ khối thôi là niềm tin có cấu trúc.** Lần chẻ bản đồ ở bản trước để
