@@ -1,10 +1,10 @@
 id: T-078
-title: "`ganas prune --scope` và hai luật vòng đời của design"
+title: "`ganas prune --scope`: dọn đúng một phạm vi vừa bàn giao"
 serves:
   - G-001
 implements: D-012
 scope: P-cli
-status: todo
+status: done
 estimated_context: small
 model: verifier
 blocked_by:
@@ -15,7 +15,8 @@ context_contract:
     - path: "src/commands/prune.ts"
       why: "khuôn cờ và cách in xem-trước; và bất biến `lệnh chỉ đọc thì không ghi`"
     - path: "src/commands/CLAUDE.md"
-      why: "thêm cờ cho lệnh đã có vẫn phải cập nhật docs/COMMANDS.md — hai test đòi cái đó"
+      why: "thêm cờ cho lệnh đã có vẫn phải cập nhật docs/COMMANDS.md — hai test đòi
+        cái đó"
   facts: []
   open_questions: []
 
@@ -45,3 +46,4 @@ notes: |-
   Tiêu chí `artifact` trỏ `docs/COMMANDS.md` là thứ DUY NHẤT kéo file đó vào
   ranh giới — nó không thuộc `paths` của khối nào. Thiếu nó thì `ganas commit`
   bỏ lại tài liệu trong khi `cli-help.test.ts` lại đòi mục trong đó.
+done_at: 2026-09-01T05:02:02.669Z

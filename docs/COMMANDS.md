@@ -1038,27 +1038,41 @@ ganas handoff --session sess-42 --task T-014 --transcript ./transcript.jsonl
 ### `ganas prune`
 
 Dọn `.ganas/`: **xoá thẳng** ephemeral cục bộ (handoff cũ của phiên đã kết
-thúc trong `runs/`, session mồ côi trong `state.json`); **archive** (dời
-file, giữ git history) task `done` sang `tasks/done/` nếu đủ tuổi và không
-còn bị tham chiếu (`blocked_by`). Không đụng tới dữ liệu vĩnh viễn
-(`verify-ledger.jsonl`, `claims/`, `decisions/`, `facts/`, phạm vi công việc
-dù đã `delivered`). **Mặc định chỉ xem trước (dry-run)**, không đụng đĩa.
+thúc trong `runs/`, note cũ trong `runs/notes/`, session mồ côi trong
+`state.json`, lock mồ côi trong `.locks/`); **archive** (dời file, giữ git
+history, không xoá) task `done`, file icebox theo tháng đã đóng hết mọi bản
+ghi, và đề xuất đã quyết (`approved`/`rejected`) — ba loại này archive khi đủ
+tuổi VÀ không còn bị tham chiếu (`blocked_by`, `promoted_to`, design chưa
+đóng). **Task của một phạm vi đã `delivered` archive được NGAY, không cần
+đợi `--older-than`** — bàn giao xong thì task là dàn giáo, hết việc; các
+hàng rào chống treo tham chiếu vẫn giữ nguyên dù phạm vi đã bàn giao.
+
+Không đụng tới dữ liệu vĩnh viễn (`verify-ledger.jsonl`, `claims/`,
+`decisions/`, `facts/`) và **không bao giờ** archive phạm vi công việc hay
+design — bản vẽ của một chặng đã đóng vẫn đang canh code đang chạy thật, nên
+nó ở lại cùng hạng với phạm vi, không phải hạng dàn giáo. **Mặc định chỉ xem
+trước (dry-run)**, không đụng đĩa.
 
 Không có đối số định vị.
 
 | Tuỳ chọn | Ý nghĩa |
 |---|---|
-| `--older-than <ngày>` | Ngưỡng tuổi để coi là "cũ" đủ để dọn/archive. Mặc định `7`. |
+| `--older-than <ngày>` | Ngưỡng tuổi để coi là "cũ" đủ để dọn/archive. Mặc định `7`. Không áp cho task của phạm vi `delivered` (archive ngay). |
+| `--scope <P-xxx>` | Lọc kế hoạch dọn về đúng MỘT phạm vi. Task và đề xuất khai thẳng `scope` (`Task.scope`/`Proposal.scope` đều bắt buộc) được lọc trực tiếp. File icebox theo tháng và mục ephemeral (run/note/lock/session mồ côi) không mang một phạm vi suy được ở mức mục — bị loại HẲN khỏi kế hoạch khi có `--scope`, và số lượng bị loại luôn được in ra, không im lặng. Phạm vi không tồn tại ⇒ lỗi (`1`, `GanasError`), liệt kê phạm vi có thật trong dự án. |
 | `--yes, -y` | Thực thi thật kế hoạch dọn dẹp thay vì chỉ in ra (mặc định). |
-| `--json` | Xuất kế hoạch dọn dẹp (`staleRuns`, `deadSessions`, `doneTasks`) kèm `applied`. |
+| `--json` | Xuất kế hoạch dọn dẹp (`staleRuns`, `deadSessions`, `doneTasks`, ...) kèm `scope` và `applied`. |
 
-**Mã thoát:** luôn `0` — kể cả dry-run và kể cả khi không có gì cần dọn.
+**Mã thoát:** luôn `0` — kể cả dry-run và kể cả khi không có gì cần dọn; `1`
+(`GanasError`) nếu `--older-than` không phải số ngày hợp lệ, hoặc `--scope`
+trỏ một phạm vi không tồn tại.
 
 **Ví dụ:**
 ```
 ganas prune                           # chỉ xem trước
 ganas prune --yes                     # dọn thật
 ganas prune --older-than 14 --yes
+ganas prune --scope P-cli             # chỉ xem trước, đúng MỘT phạm vi
+ganas prune --scope P-cli --yes       # dọn thật, đúng phạm vi đó
 ```
 
 ### `ganas ledger`
