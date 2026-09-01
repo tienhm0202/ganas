@@ -7,4 +7,61 @@ summary: >-
   (probe/eval) mới được phiên sau coi là sự thật. Việc chưa quyết làm thì ghi
   vào sổ icebox riêng, không được giả làm task để có đủ serves/implements/
   exit_contract bịa ra.
-status: active
+exit_contract:
+  # (1) Tri thức neo phạm vi + (2) không anchor thì không phải tri thức.
+  # `zFact.scope`/`zClaim.scope` là trường BẮT BUỘC, `zAnchors` đòi min(1).
+  - kind: command
+    run: "npx tsx --test 'test/knowledge.test.ts' 'test/anchor.test.ts' 'test/anchor-issue-code.test.ts'"
+    expect: exit_zero
+  # (2) Khối gọi LLM phải mang eval, không được chỉ có probe cấu trúc.
+  - kind: command
+    run: "npx tsx --test 'test/module.test.ts'"
+    expect: exit_zero
+  # (3) Việc chưa quyết ghi icebox, và icebox KHÔNG bịa được thành task:
+  # `zIcebox` là `.strict()` và không hề có serves/implements/exit_contract.
+  - kind: command
+    run: "npx tsx --test 'test/icebox-model.test.ts' 'test/icebox-validate.test.ts' 'test/icebox-cmd.test.ts'"
+    expect: exit_zero
+  # (2) Lớp cưỡng chế THẬT, không phải kỷ luật: hook PostToolUse chặn ghi
+  # fact/claim thiếu anchor. Đây là luật duy nhất của dự án có hook chặn.
+  - kind: command
+    run: "npx tsx --test 'test/hooks.test.ts' 'test/hook-policy.test.ts' 'test/e2e-hook.test.ts'"
+    expect: exit_zero
+  # Chấm trên DỮ LIỆU THẬT chứ không chỉ trên test dựng sẵn: 8 fact và 2 claim
+  # đang có trong `.ganas/` đều phải qua được chính các luật trên.
+  - kind: command
+    run: "npx tsx src/cli.ts validate"
+    expect: exit_zero
+
+status: done
+done_at: 2026-09-01T05:35:01Z
+notes: |-
+  ĐÓNG NGƯỢC 2026-09-01, với 0 task khai `implements: D-001`. Ghi rõ con số đó
+  ở đây vì nó trông như chặng bỏ dở nhưng không phải: D-001 là chặng NỀN, được
+  hiện thực bởi chính codebase trước khi ganas theo dõi được chính mình. Không
+  có task nào để trỏ vào, và dựng task giả lúc này chỉ để bảng cho đẹp thì vi
+  phạm đúng điều (3) mà chính chặng này khẳng định.
+
+  `spine/design-stalled` không bắn cho nó vì luật đòi `total > 0` — chặng chưa
+  có task nào là "CHƯA BẮT ĐẦU", trạng thái ngược hẳn với bỏ dở
+  (`validate.ts`, chú thích ngay trên luật). Nên thứ giữ nó `active` suốt là
+  `spine/design-missing-exit-contract`, và đó chính là thứ vừa được trả.
+
+  Hợp đồng viết ngược từ cưỡng chế ĐANG CHẠY, không phải từ trí nhớ. Ba khẳng
+  định của summary ánh xạ thẳng vào code: (1) `zFact.scope`/`zClaim.scope` là
+  trường bắt buộc — `src/model/knowledge.ts:51`; (2) `zFact.verify: zProbe` bắt
+  buộc, `zAnchors.min(1)`, và hook PostToolUse deny khi thiếu anchor
+  (`src/hooks/policy/index.ts:303`); (3) `zIcebox` là `.strict()` và KHÔNG có
+  trường `serves`/`implements`/`exit_contract` — icebox không bịa thành task
+  được về mặt cấu trúc, không phải nhờ ai đó nhớ luật.
+
+  Tiêu chí cuối chấm trên DỮ LIỆU THẬT chứ không chỉ test dựng sẵn: 8 fact và
+  2 claim hiện có trong `.ganas/` đều đủ `scope`, và fact đều đủ
+  `verify.run` + `verify.expect`.
+
+  KHE HỞ CÒN LẠI, không vá trong chặng này: luật "khối `nature: llm` phải có
+  bằng chứng `kind: eval`" (`src/model/module.ts:116`) chỉ bắn khi
+  `verify.length > 0`. Khối LLM khai `verify: []` rỗng hẳn thì né được luật —
+  nó chỉ nhận cảnh báo `unverified` (warning), tức khai ÍT bằng chứng lại nhẹ
+  tội hơn khai bằng chứng sai loại. Ghi ICE-029 thay vì lặng lẽ đóng, và cũng
+  không giữ chặng mở vì một khe hở chưa ai đo được tác hại.

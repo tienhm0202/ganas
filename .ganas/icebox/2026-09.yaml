@@ -19,3 +19,96 @@
     - src/graph/validate.ts:278
   scope: P-graph-core
   status: open
+- id: ICE-029
+  title: "Khối nature: llm khai verify rỗng thì né được luật bắt buộc có eval"
+  found_at: 2026-09-01T05:35:37.727Z
+  review_after_days: 30
+  weight: 3
+  ease: 4
+  why_deferred: 'Luật "khối gọi LLM phải có bằng chứng kind: eval" chỉ bắn khi
+    verify.length > 0. Khối khai nature: llm với verify: [] rỗng hẳn thì không
+    vi phạm gì — chỉ nhận cảnh báo unverified (warning). Tức khai ÍT bằng chứng
+    lại NHẸ TỘI hơn khai bằng chứng sai loại, đúng chiều khuyến khích ngược.
+    Phát hiện lúc viết ngược exit_contract cho D-001 (2026-09-01) khi đối chiếu
+    từng khẳng định của summary với cưỡng chế thật. Chưa vá ngay vì chưa đo được
+    tác hại: hiện KHÔNG khối nào trong .ganas/modules/ khai nature: llm, nên khe
+    hở đang rỗng người dùng. Đáng mở lại đúng lúc khối llm đầu tiên được khai.
+    Cách vá rẻ nhất nếu mở lại: bỏ vế verify.length > 0, cho luật bắn cả khi
+    verify rỗng — nhưng phải kiểm trước xem nó có làm mọi khối llm mới tạo đỏ
+    ngay từ dòng đầu không.'
+  anchors:
+    - src/model/module.ts:116
+    - src/model/module.ts:104
+  scope: P-graph-core
+  status: open
+- id: ICE-030
+  title: Ba chỗ văn xuôi trỏ tới scripts/sync-version.mjs và
+    test/version-sync.test.ts — cả hai không tồn tại
+  found_at: 2026-09-01T05:35:57.766Z
+  review_after_days: 30
+  weight: 3
+  ease: 5
+  why_deferred: Tên thật là release/version.mjs (lệnh con sync/stamp) và
+    release/version.test.ts. Ba chỗ còn nhắc tên cũ đã chết. Chỗ đau nhất là
+    release/version.test.ts:45 vì đó là THÔNG ĐIỆP LỖI của assertion, chỉ hiện
+    lên đúng lúc ai đó bump version mà quên npm run build — rồi chỉ họ chạy
+    `node scripts/sync-version.mjs`, một file không tồn tại. Tức hướng dẫn sai
+    xuất hiện đúng lúc người ta cần hướng dẫn đúng nhất. CHANGELOG.md:9 nằm
+    trong phần đầu file, được đọc mỗi lần mở. Không vá trong lúc đóng D-003 vì
+    đó là sửa văn xuôi, nằm ngoài hợp đồng chặng, và gộp vào sẽ làm commit đóng
+    chặng lẫn hai loại thay đổi. Sửa chỉ là đổi chuỗi, không đụng logic — ease
+    5. Phát hiện 2026-09-01 lúc đối chiếu summary D-003 với code thật.
+  anchors:
+    - CHANGELOG.md:9
+    - release/version.test.ts:23
+    - release/version.test.ts:45
+  scope: P-release
+  status: open
+- id: ICE-031
+  title: npx ganas chạy bundle plugin/dist đã cũ, nên validate cây làm việc trả
+    kết quả sai
+  found_at: 2026-09-01T05:45:10.561Z
+  review_after_days: 30
+  weight: 4
+  ease: 3
+  why_deferred: "Trong chính repo ganas, `npx ganas <lệnh>` phân giải ra bundle đã
+    build (plugin/dist/cli.js, v1.1.0) chứ KHÔNG phải cây làm việc. Sửa src/ rồi
+    chạy `ganas validate` thì đang chấm bằng CODE CŨ mà không có dấu hiệu nào
+    báo. Đo được ngay trong phiên 2026-09-01 lúc đóng D-013: sau khi sửa luật
+    spine/design-orphaned trong src/graph/validate.ts và đóng G-001, `npx ganas
+    validate` báo 13 cảnh báo mồ côi (bundle cũ), còn `npx tsx src/cli.ts
+    validate` báo 1 (đúng). Chênh 12 cảnh báo, và cái sai là cái trông có thẩm
+    quyền hơn. Suýt kết luận bản vá không chạy. Quy ước hiện tại chống đỡ một
+    phần: có commit riêng kiểu 'Build lại plugin/dist sau chặng D-xxx' (ef5e456,
+    858f009), nhưng nó chỉ chạy CUỐI chặng, trong khi cái bẫy bắn suốt lúc đang
+    làm. Hướng đáng cân nhắc: cho lệnh in cảnh báo khi cwd chính là repo ganas
+    mà binary đang chạy là bundle, hoặc thêm script npm `dev:validate` rồi sửa
+    docs/WORKFLOW.md dùng nó. Chưa vá ngay vì chỉ hại người phát triển CHÍNH
+    ganas, không hại dự án dùng ganas — nhưng weight 4 vì nó tạo kết luận sai
+    một cách im lặng, đúng lớp lỗi mà dự án này sinh ra để chống."
+  anchors:
+    - plugin/dist/cli.js
+    - plugin/.claude-plugin/plugin.json:4
+  scope: P-release
+  status: open
+- id: ICE-032
+  title: flow chặng goal khoá cứng G-001, bảo ghi đè lên chính mục tiêu vừa đóng
+  found_at: 2026-09-01T05:46:34.901Z
+  review_after_days: 30
+  weight: 3
+  ease: 4
+  why_deferred: "Chặng `goal` của dòng chảy chấm bằng activeGoals().length > 0,
+    nên nó bật lên lại mỗi khi mọi goal đã closed — đúng. Nhưng cả `action` lẫn
+    `template` khoá cứng chuỗi 'G-001', vốn viết cho dự án TRỐNG vừa chạy ganas
+    init. Ở dự án đã đóng được mục tiêu đầu tiên, lời khuyên đó thành 'ghi đè
+    lên bản ghi G-001 vừa khép' — mất lịch sử mục tiêu, đúng thứ mà luật
+    bản-ghi-trung-thực chống. Đo được ngay 2026-09-01 sau khi đóng G-001: flow
+    in 'Sửa .ganas/goals/G-001.yaml thành mục tiêu thật'. Sửa rẻ: dùng `ganas id
+    goal` để lấy id kế tiếp (G-002) thay vì hằng số, và đổi lời khi graph đã có
+    goal closed thành 'tạo goal mới' chứ không phải 'sửa'. Chưa vá ngay vì chỉ
+    bắn ở dự án đã đóng hết goal — hiện mới đúng repo này."
+  anchors:
+    - src/flow.ts:111
+    - src/flow.ts:112
+  scope: P-cli
+  status: open

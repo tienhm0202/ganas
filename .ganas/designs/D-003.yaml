@@ -13,4 +13,43 @@ summary: >-
   vì người viết — tiêu đề CHANGELOG — thì để mục "Chưa phát hành" trong lúc
   làm và đổi tên tự động lúc `npm version`. Lớp cưỡng chế thật là một test
   chạy trong `npm test`, không phải kỷ luật của người nhớ bump đủ bốn chỗ.
-status: active
+exit_contract:
+  # Cả năm khẳng định của summary quy về một file test: nó đọc package.json làm
+  # nguồn, rồi đối chiếu ngược ra manifest plugin, package-lock và CHÍNH bundle
+  # đã build (`plugin/dist/cli.js --version`) — tức bắt được cả ca khó nhất là
+  # bump version mà quên `npm run build`.
+  - kind: command
+    run: "npx tsx --test 'release/version.test.ts'"
+    expect: exit_zero
+  # Bằng chứng ở tầng khối, để chặng không chỉ dựa vào một lệnh test rời.
+  - kind: verification
+    target: "M-build/V-build-version-sync"
+
+status: done
+done_at: 2026-09-01T05:35:01Z
+notes: |-
+  ĐÓNG NGƯỢC 2026-09-01. Một task, T-005, đã done từ 2026-08-20 — nội dung
+  chặng chạy thật từ lúc đó; thứ còn thiếu chỉ là hợp đồng để chấm, vì D-003
+  ra đời trước khi D-008 thêm `exit_contract` cho Design.
+
+  Cả năm khẳng định của summary đã đối chiếu lại với code hôm nay, không lấy
+  từ T-005: `package.json` là nguồn duy nhất (`release/version.mjs:37`);
+  manifest plugin sinh ra từ đó (`syncPluginManifest`, gọi trong
+  `scripts/build.mjs` và qua `npm run version`); bundle nhúng số lúc build
+  (`define: __GANAS_VERSION__` trong `scripts/build.mjs`); tiêu đề CHANGELOG
+  đóng dấu bằng `release/version.mjs stamp`, có chặn đóng dấu hai lần; và lớp
+  cưỡng chế là `release/version.test.ts` — nằm trong glob `npm test`
+  (`"test": "tsx --test test/**/*.test.ts release/*.test.ts"`).
+
+  Hợp đồng KHÔNG dùng `npm test` trần dù summary nhắc tới nó. Lý do là thứ đo
+  được, không phải sở thích: `npm test` đang đỏ chập chờn vì IPC của node test
+  runner ("Unable to deserialize cloned data"), không phải vì assertion sai —
+  đã ghi ICE-011 và ICE-027. Tiêu chí chặng phải đo chặng, không đo độ may của
+  hạ tầng test. `release/version.test.ts` chạy riêng thì tất định.
+
+  NỢ ĐỂ LẠI, không thuộc phạm vi chặng: ba chỗ văn xuôi còn nhắc hai file
+  KHÔNG TỒN TẠI (`scripts/sync-version.mjs`, `test/version-sync.test.ts`) —
+  `CHANGELOG.md:9`, `release/version.test.ts:23` (comment) và
+  `release/version.test.ts:45` (thông điệp lỗi). Chỗ thứ ba đau nhất vì nó chỉ
+  hiện đúng lúc ai đó quên `npm run build`, rồi chỉ họ tới một lệnh không chạy
+  được. Ghi ICE-030.
