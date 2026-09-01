@@ -4,6 +4,7 @@ import { basename, dirname, join, relative } from "node:path";
 import type { Claim } from "./graph/claim.js";
 import { DIRS, ganasPath } from "./graph/paths.js";
 import type { Graph, Sourced } from "./graph/types.js";
+import type { Design } from "./model/design.js";
 import type { Icebox } from "./model/icebox.js";
 import { ID_PATTERNS } from "./model/index.js";
 import { readState, type State, writeState } from "./state.js";
@@ -45,9 +46,19 @@ export function notePath(root: string, sessionId: string): string {
  *     không cần sửa `load.ts`. Giữ trong git history. Ba thứ nằm ở tầng này:
  *     task `done`, file icebox theo tháng mà MỌI bản ghi trong đó đã
  *     `status !== "open"` (đóng hoặc đã thăng cấp) — xem `Icebox` ở
- *     `src/model/icebox.ts` — và đề xuất (`proposals/PR-00N.yaml`) đã
+ *     `src/model/icebox.ts` —, đề xuất (`proposals/PR-00N.yaml`) đã
  *     `approved`/`rejected` đủ tuổi tính từ `decided_at`, xem `zProposal` ở
- *     `src/model/proposal.ts`.
+ *     `src/model/proposal.ts`. Ba thứ, một tiêu chí chung: KHÔNG CÒN AI DÙNG,
+ *     và archive nó không làm treo tham chiếu nào còn sống.
+ *
+ *     DESIGN KHÔNG BAO GIỜ ĐƯỢC ARCHIVE, cùng lý do phạm vi không bao giờ bị
+ *     archive: bản vẽ của một chặng đã đóng vẫn đang canh code đang chạy, và
+ *     probe của nó là hàng rào chống hồi quy duy nhất cho hợp đồng đó. Đã thử
+ *     và bỏ ở D-012 — đường duy nhất để một design thành `superseded` là được
+ *     một design khác khai `supersedes`, mà archive nó lại làm chính luật
+ *     `spine/design-missing-supersede` đỏ. Muốn chạy được thì loader và ba
+ *     validator phải cùng biết về một tập "đã archive" — tức hai bản đồ song
+ *     song, đúng thứ repo này tránh.
  *  3. Vĩnh viễn, không đụng (`verify-ledger.jsonl`, `claims/`, `decisions/`,
  *     `facts/`) — module này không có đường dẫn code nào chạm vào chúng.
  */
@@ -145,6 +156,14 @@ export interface PlanPruneOptions {
  * Phạm vi công việc KHÔNG bao giờ được archive, kể cả khi đã `delivered`: khối
  * vẫn khai `scope:` trỏ vào nó và fact vẫn còn hiệu lực trong nó. Phạm vi là
  * ranh giới của tri thức, mà tri thức sống lâu hơn đợt bàn giao.
+ *
+ * Điều `delivered` ĐỔI là NGƯỠNG TUỔI của task trong phạm vi đó, không phải các
+ * hàng rào trên. Task là dàn giáo: bàn giao xong thì nó đã hết việc, không cần
+ * chờ thêm `--older-than` ngày nữa mới được dọn. Mọi guard chống treo tham
+ * chiếu (`blocked_by`, `promoted_to`, design chưa đóng) vẫn giữ nguyên — nới
+ * ngưỡng tuổi là nới thời điểm, nới guard là nới ĐÚNG chỗ hệ sẽ hỏng. Khối
+ * `agent` của task đi theo file task nên không có đường dọn riêng: archive task
+ * là nó đi cùng.
  */
 export async function planPrune(
   root: string,
@@ -201,16 +220,24 @@ export async function planPrune(
     if (target && ID_PATTERNS.task.test(target)) promotedTargets.add(target);
   }
 
+  // Phạm vi đã bàn giao — task trong đó không phải chờ đủ tuổi nữa.
+  const deliveredScopes = new Set<string>();
+  for (const rec of graph.scopes.values()) {
+    if (rec.value.status === "delivered") deliveredScopes.add(rec.value.id);
+  }
+
   const doneTasks: ArchivableRecord[] = [];
   for (const t of graph.tasks.values()) {
     if (t.value.status !== "done") continue;
-    if (!t.value.done_at) continue; // không nên xảy ra (schema đòi), nhưng đừng đoán tuổi nếu thiếu
-    if (Date.parse(t.value.done_at) > cutoff) continue;
+    if (!deliveredScopes.has(t.value.scope)) {
+      if (!t.value.done_at) continue; // không nên xảy ra (schema đòi), nhưng đừng đoán tuổi nếu thiếu
+      if (Date.parse(t.value.done_at) > cutoff) continue;
+    }
     if (blockedByTargets.has(t.value.id)) continue; // còn task khác đang chờ nó
     if (promotedTargets.has(t.value.id)) continue; // còn mục icebox đang trỏ tới nó
     // Design chưa đóng: archive task này có thể xoá đúng bằng chứng mà
     // spine/design-stalled cần để bắt chặng bỏ dở — xem docstring hàm này.
-    if (graph.designs.get(t.value.implements)?.value.status !== "done") continue;
+    if (!isClosedDesign(graph.designs.get(t.value.implements)?.value)) continue;
     doneTasks.push({ id: t.value.id, file: t.file });
   }
 
@@ -226,6 +253,8 @@ export async function planPrune(
 
   const closedProposals = collectClosedProposals(graph.proposals, cutoff);
 
+
+
   return {
     staleRuns,
     deadSessions,
@@ -236,6 +265,26 @@ export async function planPrune(
     cutoffAt: new Date(cutoff).toISOString(),
   };
 }
+
+/**
+ * Design đã ĐÓNG — hiểu theo nghĩa "không còn là chặng đang chạy".
+ *
+ * Guard "design chưa đóng thì giữ task lại" (`planPrune`) sinh ra để không xoá
+ * mất bằng chứng mà `spine/design-stalled` (graph/validate.ts) cần, mà luật đó
+ * CHỈ chấm design `status: "active"`. Nên ba trạng thái dưới đây đều là "đóng":
+ * `done` (xong), `superseded` (người kế nhiệm đã cầm bản vẽ), `archived`. Thiếu
+ * hai giá trị sau thì task của một chặng đã bị thay không bao giờ archive được,
+ * và vì task còn trong graph nên chính design đó cũng kẹt lại theo — hai thứ
+ * giữ chân nhau vĩnh viễn.
+ *
+ * `draft` KHÔNG nằm ở đây: chặng chưa bắt đầu vẫn có thể chạy tới.
+ */
+function isClosedDesign(design: Design | undefined): boolean {
+  if (!design) return false;
+  return design.status === "done" || design.status === "superseded" || design.status === "archived";
+}
+
+
 
 /**
  * File icebox (`.ganas/icebox/YYYY-MM.yaml`) chứa NHIỀU bản ghi — `Sourced.file`

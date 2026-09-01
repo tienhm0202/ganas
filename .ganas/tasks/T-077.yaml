@@ -1,10 +1,10 @@
 id: T-077
-title: "Vòng đời: archive theo bàn giao, và chặn archive design còn canh code"
+title: "Vòng đời: archive task theo bàn giao; design không bao giờ archive"
 serves:
   - G-001
 implements: D-012
 scope: P-cli
-status: todo
+status: done
 estimated_context: medium
 model: main
 blocked_by:
@@ -13,12 +13,16 @@ blocked_by:
 context_contract:
   must_read:
     - path: "src/prune.ts"
-      why: "ba tầng dọn dẹp đã khai sẵn trong docstring đầu file — thêm trigger mới phải nằm ĐÚNG tầng 2, không được chạm tầng 3"
+      why: "ba tầng dọn dẹp đã khai sẵn trong docstring đầu file — thêm trigger mới
+        phải nằm ĐÚNG tầng 2, không được chạm tầng 3"
     - path: "src/graph/load.ts"
-      why: "listYaml lọc isFile() và không đệ quy — đó là lý do archive vào thư mục con cắt được đường nóng mà vẫn giữ git history"
+      why: "listYaml lọc isFile() và không đệ quy — đó là lý do archive vào thư mục
+        con cắt được đường nóng mà vẫn giữ git history"
   facts: []
   open_questions:
-    - "Design `superseded` archive sang `designs/archived/` — có nên archive cả design `done` mà mọi bản vẽ của nó đã bị design khác thay không, hay để `superseded` là điều kiện duy nhất?"
+    - "Design `superseded` archive sang `designs/archived/` — có nên archive cả
+      design `done` mà mọi bản vẽ của nó đã bị design khác thay không, hay để
+      `superseded` là điều kiện duy nhất?"
 
 touches:
   - M-workflow
@@ -34,16 +38,24 @@ exit_contract:
     target: "M-workflow/V-workflow-commit"
 
 notes: |-
-  Hai chiều, và chiều thứ hai mới là chiều khó:
+  Chỉ còn MỘT chiều so với ý định ban đầu: task `done` thuộc phạm vi
+  `status: delivered` archive được ngay, không cần đợi `--older-than`. Bàn giao
+  xong thì task là dàn giáo, và khối `agent` đi theo task nên không dọn riêng.
 
-  1. Archive ĐƯỢC: task thuộc phạm vi `status: delivered` (không cần đợi đủ
-     tuổi), và design `status: superseded` sang `designs/archived/`.
-  2. Archive KHÔNG ĐƯỢC: design mà bản vẽ của nó vẫn là target của một
-     `exit_contract` đang mở, hoặc vẫn đang canh code sống. Archive nó là gỡ
-     hàng rào chống hồi quy đúng lúc nó bắt đầu có giá trị.
+  Chiều thứ hai (archive design `superseded`) ĐÃ BỎ giữa chừng — xem summary
+  của D-012 cho ba lý do. Ngắn gọn: người dùng nói design phải được lưu lại,
+  và cơ chế tự mâu thuẫn vì archive một design làm `spine/design-missing-supersede`
+  của chính người kế nhiệm báo lỗi.
+
+  Câu hỏi mở cũ ("archive cả design `done` đã bị thay?") vì thế cũng hết ý
+  nghĩa: không archive design nào cả.
+
+  Đổi lại có một bất biến MỚI phải giữ, đã ghim thành test: `planPrune` không
+  được nhắc tới `designs/` trong kế hoạch dọn. Ghim vì đây đúng thứ sẽ bị "tối
+  ưu" lại sau này bằng lý lẽ "thư mục designs/ đang phình".
 
   TUYỆT ĐỐI không đụng tầng 3: `verify-ledger.jsonl`, `facts/`, `claims/`,
-  `decisions/`. Sổ cái có hash-chain — xoá một dòng là gãy chuỗi và mọi bằng
-  chứng sau đó mất giá trị.
+  `decisions/`. Sổ cái có hash-chain — xoá một dòng là gãy chuỗi.
 
   Giữ mặc định DRY-RUN. `ganas prune` không được ghi gì khi chưa có `--yes`.
+done_at: 2026-09-01T04:51:31.547Z

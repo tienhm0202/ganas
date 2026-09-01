@@ -24,11 +24,27 @@ summary: |-
 
   - Task và khối `agent` của nó — dàn giáo, archive được khi phạm vi
     `delivered`, không cần đợi đủ tuổi. `agent` đi theo task, không dọn riêng.
-  - Design `superseded` — archive được, người kế nhiệm đã cầm bản vẽ.
-  - Design còn bản vẽ đang canh code sống — KHÔNG archive, kể cả khi phạm vi đã
-    `delivered`.
+  - Design — KHÔNG BAO GIỜ archive, cùng hạng với phạm vi. Xem mục dưới: ý định
+    ban đầu có archive design `superseded`, đã thử và bỏ.
   - Phạm vi, khối, fact, decision, sổ cái — tầng 3, không đụng. Sổ cái tuyệt
     đối: xoá một dòng là gãy hash-chain.
+
+  ĐÃ THỬ VÀ BỎ: archive design `superseded` sang `designs/archived/`. Ba lý do,
+  phát hiện lúc hiện thực T-077 chứ không phải lúc lập kế hoạch:
+
+  1. Người dùng nói thẳng từ đầu là "các design sẽ được lưu lại". Archive design
+     là thứ chặng này tự thêm vào, không phải điều được yêu cầu.
+  2. Nó tự mâu thuẫn về mặt cơ chế. Đường DUY NHẤT để một design thành
+     `superseded` là được một design khác khai `supersedes`, mà archive nó lại
+     làm chính luật `spine/design-missing-supersede` (`validate.ts:278-288`)
+     báo lỗi "thay thế design không tồn tại". Muốn chạy thật thì loader cộng ba
+     validator phải cùng biết về một tập "đã archive" — tức hai bản đồ song
+     song, đúng thứ repo này tránh.
+  3. Vế "còn canh code sống" khi cài ra thì gần như luôn đúng (bản vẽ trỏ khối
+     còn tồn tại), nên tính năng thành vô dụng cho mọi design có bản vẽ code.
+
+  Cái giá của việc bỏ: `.ganas/designs/` phình dần theo số chặng. Chưa đo được
+  là bao nhiêu — 12 design hiện tại chỉ vài KB. Ghi icebox, không đoán trước.
 
   Không strip trường nào lúc archive. `agent` hết tác dụng khi task xong, nhưng
   archive đã đưa nó ra khỏi graph rồi — xoá thêm chỉ là làm đẹp lịch sử, đổi lấy
