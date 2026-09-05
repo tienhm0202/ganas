@@ -222,7 +222,12 @@
   anchors:
     - src/model/task.ts:216
     - commit:14ea014
-  status: open
+  status: closed
+  closed_at: 2026-09-05T16:04:30.145Z
+  closed_reason: "Đã sửa ở D-018/T-097: commit_type thành optional (mặc định chore chuyển
+    xuống commitSubject, nơi đọc), cộng warning spine/task-missing-commit-type
+    cùng khuôn spine/task-missing-model. ganas validate vẫn đúng 11 cảnh báo sau
+    khi sửa — 72 task cũ không khai commit_type đều done nên không ồn."
 - id: ICE-038
   title: Không có lệnh xem trạng thái auto_loop (rounds/halted) của một phiên
   found_at: 2026-09-05T15:10:52.927Z

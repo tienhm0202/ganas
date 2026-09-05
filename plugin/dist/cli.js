@@ -5022,7 +5022,7 @@ function agentDispatchLines(agent) {
   return lines;
 }
 function commitSubject(task, designId) {
-  return `${task.commit_type}(${designId}/${task.id}): ${task.title}`;
+  return `${task.commit_type ?? "chore"}(${designId}/${task.id}): ${task.title}`;
 }
 var TASK_STATUS, ESTIMATED_CONTEXT, TASK_ROLE, zArtifactRef, zAgentSpec, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
 var init_task = __esm({
@@ -5139,10 +5139,14 @@ var init_task = __esm({
        * Áp dụng khi gọi `ganas commit`. Gán lúc chẻ task — quyết định của
        * người thiết kế biết task này sửa lỗi, thêm tính năng hay refactor.
        *
-       * Mặc định `chore`: hầu hết commit là công việc hành chính (cập nhật
-       * `.ganas/`, ghi fact, chẻ task).
+       * `.optional()`, KHÔNG `.default()`: một task khai `chore` và một task
+       * không khai gì phải ra hai giá trị khác nhau sau khi parse, nếu không
+       * thì thông tin "chưa ai quyết" bị xoá ngay ở tầng schema và không
+       * validator nào cảnh báo được điều nó không còn nhìn thấy (xem D-018).
+       * Mặc định `chore` chuyển xuống tầng ĐỌC — `commitSubject()` bên dưới —
+       * chứ không còn ở đây.
        */
-      commit_type: external_exports.enum(["feat", "fix", "refactor", "docs", "test", "chore", "perf", "build", "ci"]).default("chore"),
+      commit_type: external_exports.enum(["feat", "fix", "refactor", "docs", "test", "chore", "perf", "build", "ci"]).optional(),
       /**
        * Bản vẽ mà task này CẦN — hợp đồng vào (input_contract).
        *
@@ -14405,6 +14409,16 @@ function validateGraph(graph, opts = {}) {
         hint: `Th\xEAm \`model: main|verifier|scribe\` (main = kh\xF3/m\u01A1 h\u1ED3, verifier = kho\u1EA3ng gi\u1EEFa, scribe = c\u01A1 h\u1ECDc). Thi\u1EBFu n\xF3, brief kh\xF4ng giao \u0111\u01B0\u1EE3c task cho sub-agent n\xE0o.`
       });
     }
+    if (!t.commit_type && t.status !== "done") {
+      diags.push({
+        severity: "warning",
+        code: "spine/task-missing-commit-type",
+        message: `task ${t.id} ch\u01B0a khai \`commit_type\` \u2014 ch\u01B0a ai quy\u1EBFt lo\u1EA1i commit n\xE0o cho vi\u1EC7c n\xE0y`,
+        file: task.file,
+        line: at(graph, task, "status"),
+        hint: `Th\xEAm \`commit_type: feat|fix|refactor|docs|test|chore|perf|build|ci\`. Thi\u1EBFu n\xF3, commit r\u01A1i v\u1EC1 m\u1EB7c \u0111\u1ECBnh "chore" d\xF9 task c\xF3 th\u1EC3 l\xE0 m\u1ED9t t\xEDnh n\u0103ng th\u1EADt.`
+      });
+    }
     if (t.estimated_context === "large") {
       diags.push({
         severity: "warning",
@@ -20545,6 +20559,9 @@ var init_debt = __esm({
       "spine/exit-verification-target-not-found": { weight: 4, ease: 5 },
       // Thiếu `model`: không ai quyết tier — không sai lệch dữ liệu, chỉ là ngỏ.
       "spine/task-missing-model": { weight: 1, ease: 5 },
+      // Thiếu `commit_type`: không ai quyết loại commit — cùng lớp với
+      // task-missing-model, sửa nhanh y hệt (khai thêm một trường).
+      "spine/task-missing-commit-type": { weight: 1, ease: 5 },
       // "large": rủi ro compact giữa chừng làm tri thức mất/méo — hỏng nền của
       // chính phiên đó. Sửa = chẻ nhỏ task, một việc thiết kế lại thật sự.
       "spine/task-too-large": { weight: 3, ease: 1 },
