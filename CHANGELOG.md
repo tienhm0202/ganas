@@ -9,7 +9,7 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
-## Chưa phát hành
+## v1.2.1 — 2026-09-05
 
 Ba chặng sửa lỗi, cùng một họ và cùng một câu: **một phép kiểm im lặng thì
 không phải phép kiểm.** Cả ba đều tìm ra bằng cách CHẠY luồng mới của 1.2.0 chứ
