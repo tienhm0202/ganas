@@ -1,0 +1,64 @@
+id: T-091
+title: "Auto-loop: chạy hết task của một chặng, với bốn phanh không cái nào dựa
+  vào harness"
+serves: [ G-003 ]
+implements: D-015
+scope: P-hook
+status: done
+estimated_context: medium
+model: main
+commit_type: feat
+blocked_by: [ T-087, T-088, T-090, T-092 ]
+
+context_contract:
+  must_read:
+    - path: "src/hooks/io/handlers.ts"
+      why: "`stop` (:332-394): nhánh mới đặt SAU `evaluateGate`, đúng chỗ hiện đang
+        `return ALLOW` ở :368 — đặt trước là phá luôn G-002"
+    - path: ".ganas/claims/C-003.yaml"
+      why: "kết quả probe của T-082 về `stop_hook_active` — đọc trước khi dựa vào bất
+        cứ giả định nào về hành vi cờ đó"
+  facts: []
+  open_questions:
+    - "Nếu C-003 kết luận `stop_hook_active` không đáng tin theo chiều 'không có
+      phanh', trần trong state có đủ một mình không, hay cần thêm một lớp nữa?"
+
+touches: [ M-hook-io ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/hooks/io/handlers.ts"
+    must_contain: "autoLoopFor"
+  - kind: command
+    run: "npx tsx --test 'test/auto-loop.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Nhánh chỉ chạy khi TẤT CẢ đúng: `auto_loop.enabled`, gate xanh, `pendingHuman`
+  rỗng, còn task chưa done cùng `task.implements` và không bị chặn, không có cờ
+  halt, và số vòng chưa chạm trần. Khi đó tăng đếm và trả `decision: block` với
+  `reason` là LỆNH cụ thể (`ganas commit <id>` rồi `ganas next --session <id>`),
+  kèm "vòng N/M".
+
+  Năm điều kiện dừng cứng, mỗi cái ⇒ ALLOW + `systemMessage` nói rõ vì sao dừng:
+  chạm trần; cùng một task đỏ hai lượt liên tiếp; cờ halt do T-089 đặt khi báo
+  cáo có `CHẶN:`; hết task chưa done trong cùng chặng; `stop_hook_active` true.
+
+  Dòng `:335` (`stop_hook_active` ⇒ nhả) GIỮ NGUYÊN làm phanh ngoài cùng. Đừng
+  "dọn dẹp" nó cho gọn.
+
+  `pendingHuman` khác rỗng ⇒ DỪNG. Tiêu chí `kind: manual` cần người xác nhận, và
+  đây là chỗ tuyệt đối không được nới cho vòng lặp chạy mượt — nới nó là biến
+  auto-loop thành đúng thứ G-002 sinh ra để chặn.
+
+  Ranh giới chặng tính bằng quét `graph.tasks` theo `implements`. KHÔNG thêm
+  trường nào: Design đã là "phase".
+
+  Test hồi quy quan trọng nhất của cả chặng: `enabled: false` ⇒ hành vi Stop
+  hook y hệt hôm nay, không lệch một byte.
+done_at: 2026-09-05T14:27:41.945Z

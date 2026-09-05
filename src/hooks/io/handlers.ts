@@ -5,20 +5,26 @@ import { claimNextTask, claimTask, releaseClaimsForSession } from "../../graph/c
 import { computeFreshness } from "../../graph/freshness.js";
 import { loadGraph } from "../../graph/load.js";
 import { CONFIG_FILE, findGanasRoot, GANAS_DIR, ganasPath } from "../../graph/paths.js";
-import { type Candidate, rankedCandidates, selectNextTask } from "../../graph/select.js";
+import { type Candidate, openBlockers, rankedCandidates, selectNextTask } from "../../graph/select.js";
+import type { Graph } from "../../graph/types.js";
 import { validateGraph } from "../../graph/validate.js";
 import { generateHandoff } from "../../handoff.js";
-import { enforcementFor } from "../../model/index.js";
+import { autoLoopFor as autoLoopConfigFor, enforcementFor } from "../../model/index.js";
+import type { Task } from "../../model/index.js";
 import { generateNote } from "../../note.js";
 import { REPORT_SECTIONS, renderBrief } from "../../render/brief.js";
 import {
   agentReportedFor,
+  autoLoopFor as autoLoopStateFor,
+  autoLoopHaltedFor,
   bindSession,
   clearTouched,
   dispatchNudgedFor,
   haltAutoLoop,
+  incrementAutoLoopRounds,
   markAgentReported,
   markDispatchNudged,
+  markRedTask,
   markTouched,
   releaseSession,
   sessionRecord,
@@ -330,6 +336,99 @@ export async function postToolUse(input: HookInput): Promise<HookOutput> {
 }
 
 /* ------------------------------------------------------------------------- *
+ * Auto-loop — D-015 vế 2: gate xanh thì tự mồi lượt kế, phanh nằm ở ganas
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Còn task nào KHÁC `task`, cùng chặng (`task.implements`), chưa `done` và
+ * không còn blocker mở hay không.
+ *
+ * Đây là câu hỏi mà điều kiện dừng cứng #4 ("hết task chưa done trong cùng
+ * chặng") cần trả lời. Cố ý loại trừ CHÍNH `task`: ngay lúc hàm này chạy, gate
+ * của `task` đã xanh nhưng nó CHƯA `done` (việc đó chỉ xảy ra sau `ganas
+ * commit`) — tính cả nó thì điều kiện luôn đúng, vô hiệu hoá hẳn điểm dừng.
+ *
+ * Duyệt thẳng `graph.tasks` theo `implements` — KHÔNG thêm khái niệm
+ * "phase"/"sprint" mới, `Design` đã là chặng (xem D-015).
+ */
+function hasMoreWorkInDesign(graph: Graph, task: Task): boolean {
+  return [...graph.tasks.values()].some(
+    (t) =>
+      t.value.implements === task.implements &&
+      t.value.id !== task.id &&
+      t.value.status !== "done" &&
+      openBlockers(graph, t.value).length === 0,
+  );
+}
+
+/**
+ * Quyết định của auto-loop SAU KHI gate của `task` đã xanh (mọi tiêu chí tự
+ * động đạt, `pendingHuman` rỗng) — chỉ được gọi từ đúng chỗ đó trong `stop()`.
+ * Đặt nhánh này TRƯỚC `evaluateGate` là phá luôn G-002 ("hàng rào không xanh
+ * được khi chưa kiểm gì"); thứ tự gọi ở `stop()` là bắt buộc, không phải sở
+ * thích — xem brief T-091.
+ *
+ * Kiểm theo đúng thứ tự "Năm điều kiện dừng cứng" của brief (bỏ #2 — task đỏ
+ * hai lượt liên tiếp — vì điều đó chỉ có nghĩa ở NHÁNH GATE ĐỎ, không phải ở
+ * đây; và bỏ #5 — `stop_hook_active` — vì `stop()` đã xử lý nó làm phanh
+ * ngoài cùng trước khi gọi tới hàm này):
+ *
+ * 1. `enabled: false` ⇒ ALLOW im lặng, y hệt hành vi hôm nay (đây là test
+ *    quan trọng nhất của cả chặng — xem `test/auto-loop.test.ts`).
+ * 2. chạm trần `max_iterations` ⇒ ALLOW kèm lý do.
+ * 3. cờ halt (do `subagentStop` đặt khi báo cáo có "CHẶN:") ⇒ ALLOW kèm lý do.
+ * 4. hết task chưa `done` cùng chặng ⇒ ALLOW kèm lý do.
+ * 5. còn đủ cả bốn ⇒ tăng đếm, `decision: "block"` với lệnh cụ thể.
+ */
+async function autoLoopDecision(
+  root: string,
+  graph: Graph,
+  task: Task,
+  sessionId: string,
+): Promise<HookOutput> {
+  const loopConfig = autoLoopConfigFor(graph.config);
+  if (!loopConfig.enabled) return ALLOW;
+
+  const loopState = await autoLoopStateFor(root, sessionId);
+  const rounds = loopState?.rounds ?? 0;
+  if (rounds >= loopConfig.max_iterations) {
+    return {
+      systemMessage:
+        `ganas: auto-loop dừng — đã chạm trần ${loopConfig.max_iterations} vòng liên tiếp ` +
+        `của phiên này. Kiểm lại tiến độ; muốn tiếp tục thì tự chạy \`ganas commit ${task.id}\` ` +
+        `rồi \`ganas next --session ${sessionId}\`.`,
+    };
+  }
+
+  if (await autoLoopHaltedFor(root, sessionId)) {
+    return {
+      systemMessage:
+        `ganas: auto-loop đang bị dừng (một sub-agent trước đã báo "CHẶN:" trong kết luận — ` +
+        `xem \`runs/notes/${sessionId}.md\`). Xử lý xong thì tự chạy \`ganas next\` để mở lại; ` +
+        `state.json chỉ tự reset khi người can thiệp.`,
+    };
+  }
+
+  if (!hasMoreWorkInDesign(graph, task)) {
+    return {
+      systemMessage:
+        `ganas: auto-loop dừng — hết task chưa xong trong chặng ${task.implements}. ` +
+        `Chạy \`ganas commit ${task.id}\` để đóng nốt task này, rồi \`ganas gate --design ${task.implements}\` ` +
+        `để xác nhận cả chặng đã đóng.`,
+    };
+  }
+
+  const nextRound = await incrementAutoLoopRounds(root, sessionId);
+  return {
+    decision: "block",
+    reason:
+      `${task.id}: mọi tiêu chí tự động đã đạt (vòng ${nextRound}/${loopConfig.max_iterations}). ` +
+      `Chạy \`ganas commit ${task.id}\` rồi \`ganas next --session ${sessionId}\` để giao sub-agent kế tiếp — ` +
+      `chặng ${task.implements} còn việc, đừng dừng lại hỏi người.`,
+  };
+}
+
+/* ------------------------------------------------------------------------- *
  * Stop — không cho kết thúc khi việc chưa xong
  * ------------------------------------------------------------------------- */
 
@@ -369,7 +468,12 @@ export async function stop(input: HookInput): Promise<HookOutput> {
 
   const freshness = await computeFreshness(graph);
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
-  if (result.ok && result.pendingHuman.length === 0) return ALLOW;
+  // Gate xanh VÀ không còn mục chờ người: đúng điều kiện auto-loop cần biết.
+  // Nhánh trong `autoLoopDecision` tự trả ALLOW nguyên vẹn khi `enabled: false`
+  // — hành vi hôm nay không đổi một byte.
+  if (result.ok && result.pendingHuman.length === 0) {
+    return autoLoopDecision(root, graph, task.value, sessionId);
+  }
 
   const unmetText = result.unmet
     .map((u) => `  ✗ ${u.label}${u.reason ? `\n      ${u.reason}` : ""}`)
@@ -383,6 +487,22 @@ export async function stop(input: HookInput): Promise<HookOutput> {
         `cần người xác nhận trước khi đánh dấu task done:\n` +
         result.pendingHuman.map((p) => `  … ${p.label}`).join("\n"),
     };
+  }
+
+  // Gate đỏ: điều kiện dừng cứng #2 của auto-loop ("cùng một task đỏ hai lượt
+  // liên tiếp") chỉ có nghĩa ở đây, không phải ở nhánh gate xanh. CHỈ đếm khi
+  // auto-loop đang bật — tắt thì không đụng `state.json`, giữ đúng "y hệt hôm
+  // nay" cho phần còn lại của test.
+  if (autoLoopConfigFor(graph.config).enabled) {
+    const redCount = await markRedTask(root, sessionId, taskId);
+    if (redCount >= 2) {
+      return {
+        systemMessage:
+          `ganas: auto-loop dừng — task ${taskId} vẫn đỏ sau ${redCount} lượt liên tiếp, ` +
+          `không thấy tiến triển:\n\n${unmetText}\n\n` +
+          `Xử lý xong thì tự chạy \`ganas next --session ${sessionId}\` để mở lại.`,
+      };
+    }
   }
 
   const mode = enforcementFor(graph.config, "exit_contract");
