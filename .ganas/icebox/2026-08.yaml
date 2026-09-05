@@ -576,7 +576,21 @@
     - src/boundary.ts:250-267
     - commit:9e36155
   scope: P-cli
-  status: open
+  status: closed
+  closed_at: 2026-09-05T17:06:13.311Z
+  closed_reason: "Đóng ở D-019 với phạm vi thu hẹp CÓ CHỦ Ý — hai trong ba nhánh. T-098:
+    taskBoundary gộp probe của mọi verification kind probe|eval thuộc khối trong
+    touches (kind contract bị loại sau khi đo thấy nó gây rò chéo khối 27/73
+    task), và ownsGanasFile nhận fact có verified_by trỏ về phiên đang làm.
+    T-099: ganas commit từ chối khi file bị bỏ lại là file test, kèm cờ thoát
+    --allow-outside-tests tự khai trong thông báo. T-100: sửa --no-recheck đọc
+    sai khoá parser cộng một test canh chặn cả lớp lỗi đó. NHÁNH DOCS CỐ Ý KHÔNG
+    LÀM: docs/COMMANDS.md nói về mọi lệnh nên không suy được máy móc docs nào
+    thuộc task nào, mọi cách chữa tự động đều phải đoán, và đoán sai nghĩa là
+    kéo nhầm file người khác đang sửa vào commit của mình — tiêu chí artifact
+    khai tay vẫn là câu trả lời đúng cho docs. Ca gốc test/prune.test.ts vẫn
+    chưa tự hết vì M-workflow chỉ khai một probe: đó là ICE-042, dữ liệu khối
+    thiếu chứ không phải hàm sai."
 - id: ICE-023
   title: M-workflow có năm file mà bằng chứng chỉ kiểm một — V-workflow-commit
     không chạm prune/flow/handoff/gate
