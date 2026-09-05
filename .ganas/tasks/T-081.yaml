@@ -1,0 +1,60 @@
+id: T-081
+title: "Bằng chứng chứng tại commit đã rời lịch sử thì hết hiệu lực — nối dây
+  trường `git` của sổ cái"
+serves:
+  - G-002
+implements: D-014
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/verify/ledger.ts"
+      why: "dòng 292 ghi trường `git`; cần biết nó ghi dạng short sha để phép tra tổ
+        tiên dùng đúng dạng"
+    - path: "src/graph/freshness.ts"
+      why: "mô hình độ tươi đang chạy — commit chỉ THÊM một lý do hết hiệu lực, không
+        thay `depends_on`/`ttl_days`"
+  facts: []
+  open_questions: []
+
+touches:
+  - M-verify
+  # `decide()`/`computeFreshness()` ở `src/graph/freshness.ts` là nơi trạng thái
+  # commit được ĐỌC — khai thiếu khối này thì file đó nằm ngoài ranh giới và
+  # `ganas commit` bỏ lại đúng nửa việc.
+  - M-freshness
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/ledger-commit.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+  - kind: verification
+    target: "M-verify/V-verify-run"
+  - kind: verification
+    target: "M-freshness/V-freshness-staleness"
+
+notes: |-
+  Ba trạng thái, KHÔNG PHẢI hai — gộp lại là chỗ hỏng của cả tính năng:
+
+    1. commit có trong lịch sử của HEAD  → bằng chứng còn hiệu lực
+    2. commit repo BIẾT nhưng không phải tổ tiên → hết hiệu lực (rebase/amend/đổi nhánh)
+    3. commit repo KHÔNG BIẾT (clone nông, đã gc, chưa fetch) → IM LẶNG bỏ qua
+
+  Ca 3 fail open có chủ ý. Gộp 3 vào 2 thì mọi clone nông đỏ rực, và hàng rào
+  đỏ oan là hàng rào bị tắt — chính lý lẽ mà `src/graph/validate.ts` đã dùng để
+  bỏ luật khối mồ côi một chiều, và mà `.ganas/modules/M-validate.yaml` dùng để
+  khai cổng bằng nhãn loại thay vì chép nguyên thân kiểu.
+
+  Test phải phủ cả ba ca bằng repo git tạm dựng trong test, không phải bằng
+  chính repo này — chấm trên repo thật thì kết quả đổi theo lịch sử máy chạy.
+
+  Gọi git nằm trong `M-verify` (`nature: io`) nên không phá luật kiến trúc.
+  ĐỪNG đưa phép gọi này vào `validateGraph()` — hàm đó thuần, nhận graph trả
+  diagnostic; nhét shell vào là biến lõi thành vỏ.
+done_at: 2026-09-05T12:50:15.768Z

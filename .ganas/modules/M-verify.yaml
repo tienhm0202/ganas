@@ -76,6 +76,10 @@ contract:
       shape: "(graph: Graph) => Target[]"
     - name: appendEntry
       shape: "(root: string, entry: LedgerEntry) => Promise<void>"
+    - name: commitStatus
+      shape: "(root: string, sha: string) => Promise<CommitStatus>"
+    - name: CommitStatus
+      shape: '"ancestor" | "rewritten" | "unknown"'
     - name: defHash
       shape: "(definition: unknown, statement?: string) => string"
     - name: depsHash
@@ -146,6 +150,8 @@ verify:
     to: M-freshness
     run: >-
       grep -qF "export function allTargets(" src/verify/run.ts &&
+      grep -qF "export async function commitStatus(" src/verify/ledger.ts &&
+      grep -qF "export type CommitStatus = \"ancestor\" | \"rewritten\" | \"unknown\";" src/verify/ledger.ts &&
       grep -qF "export function defHash(" src/verify/ledger.ts &&
       grep -qF "export async function depsHash(" src/verify/run.ts &&
       grep -qF "export async function fileHash(" src/verify/ledger.ts &&

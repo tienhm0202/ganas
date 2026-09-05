@@ -38,6 +38,10 @@ contract:
     # từ M-verify (src/verify/ledger.ts, src/verify/run.ts)
     - name: allTargets
       shape: "(graph: Graph) => Target[]"
+    - name: commitStatus
+      shape: "(root: string, sha: string) => Promise<CommitStatus>"
+    - name: CommitStatus
+      shape: '"ancestor" | "rewritten" | "unknown"'
     - name: defHash
       shape: "(definition: unknown, statement?: string) => string"
     - name: depsHash

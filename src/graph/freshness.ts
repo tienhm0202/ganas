@@ -3,7 +3,14 @@ import { join } from "node:path";
 import type { Fact, Freshness } from "../model/index.js";
 import { mtimeMs } from "../util/fsprobe.js";
 import { listProjectFiles, matchesAny } from "../util/glob.js";
-import { defHash, fileHash, historyFor, lastFor } from "../verify/ledger.js";
+import {
+  type CommitStatus,
+  commitStatus,
+  defHash,
+  fileHash,
+  historyFor,
+  lastFor,
+} from "../verify/ledger.js";
 import { allTargets, depsHash, type Target } from "../verify/run.js";
 import type { Graph, LedgerEntry } from "./types.js";
 
@@ -73,9 +80,26 @@ function decide(args: {
   changedFile?: string | undefined;
   /** Vân tay nội dung file phụ thuộc HIỆN TẠI (undefined = target không khai glob). */
   depsNow?: string | undefined;
+  /**
+   * Trạng thái của `entry.git` so với HEAD hiện tại — `undefined` khi dòng sổ
+   * cái không có `git` (bản ghi cũ, hoặc `runContext` không lấy được HEAD lúc
+   * ghi). `"unknown"` (repo không biết sha) cố ý KHÔNG làm bằng chứng cũ —
+   * xem docstring `CommitStatus` ở `verify/ledger.ts`.
+   */
+  entryCommitStatus?: CommitStatus | undefined;
   now: number;
 }): { freshness: Freshness; reason: string; action?: string } {
-  const { entry, currentDef, current, ttlDays, depsChangedAt, changedFile, depsNow, now } = args;
+  const {
+    entry,
+    currentDef,
+    current,
+    ttlDays,
+    depsChangedAt,
+    changedFile,
+    depsNow,
+    entryCommitStatus,
+    now,
+  } = args;
 
   if (!entry) {
     return {
@@ -157,6 +181,19 @@ function decide(args: {
   }
 
   const verifiedAt = Date.parse(entry.at);
+
+  // Commit chứng tại đã rời lịch sử của HEAD (rebase/amend/đổi nhánh) — bằng
+  // chứng đo một cây khác, không còn nói về cây hiện tại. Chỉ `"rewritten"`
+  // (repo BIẾT sha, và biết nó không phải tổ tiên) mới hạ bậc; `"unknown"`
+  // (clone nông, đã gc, chưa fetch) và `undefined` (không có `git` để tra) đều
+  // đi qua không nói gì — fail open có chủ đích, xem `CommitStatus`.
+  if (entryCommitStatus === "rewritten") {
+    return {
+      freshness: "stale",
+      reason: `bằng chứng chứng tại commit \`${entry.git}\` — commit đó không còn nằm trong lịch sử của HEAD (rebase/amend/đổi nhánh)`,
+      action: "chạy lại `ganas verify`",
+    };
+  }
 
   // Ưu tiên vân tay NỘI DUNG: `mtime` lùi được bằng `touch -d`, hash thì không.
   // Chỉ rơi về so mtime với bản ghi cũ (trước P2 N24) chưa có trường `deps`.
@@ -242,6 +279,20 @@ export async function computeFreshness(
     return value;
   };
 
+  /**
+   * Memo cho `commitStatus` theo sha — nhiều target có thể chứng tại cùng một
+   * commit (mọi verify chạy trong cùng một lượt `ganas verify` ghi cùng
+   * `entry.git`), và mỗi tra cứu là hai lệnh git.
+   */
+  const commitCache = new Map<string, Promise<CommitStatus>>();
+  const commitStatusOf = (sha: string): Promise<CommitStatus> => {
+    const cached = commitCache.get(sha);
+    if (cached) return cached;
+    const value = commitStatus(graph.root, sha);
+    commitCache.set(sha, value);
+    return value;
+  };
+
   for (const target of targets) {
     const entry = lastFor(graph.ledger, target.id);
     const globs = globsOf(target);
@@ -267,6 +318,7 @@ export async function computeFreshness(
       ttlDays: target.ttlDays,
       depsChangedAt,
       changedFile,
+      entryCommitStatus: entry?.git !== undefined ? await commitStatusOf(entry.git) : undefined,
       now,
     });
 

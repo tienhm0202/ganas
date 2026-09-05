@@ -296,3 +296,49 @@ export async function runContext(
     host: hostname(),
   };
 }
+
+/** Dạng short/full sha hex hợp lệ — chặn trước khi chuỗi này đi vào lệnh shell. */
+const SHA_SHAPE = /^[0-9a-f]{4,40}$/i;
+
+/**
+ * BA trạng thái của một commit đã ghi trong sổ cái, so với HEAD hiện tại —
+ * KHÔNG PHẢI hai. Gộp `"rewritten"` và `"unknown"` làm một là chỗ hỏng của cả
+ * tính năng: mọi clone nông (chưa biết tới sha đó) sẽ đỏ y hệt một rebase thật.
+ *
+ * - `"ancestor"` — sha nằm trong lịch sử của HEAD. Bằng chứng còn hiệu lực.
+ * - `"rewritten"` — repo BIẾT sha (object tồn tại) nhưng KHÔNG phải tổ tiên
+ *   của HEAD: rebase, amend, hoặc đổi nhánh đã bỏ nó lại phía sau. Bằng
+ *   chứng hết hiệu lực.
+ * - `"unknown"` — repo KHÔNG BIẾT sha này (clone nông, đã gc, chưa fetch).
+ *   IM LẶNG bỏ qua — **fail open có chủ ý**: gộp ca này vào `"rewritten"`
+ *   thì mọi clone nông đỏ rực, và hàng rào đỏ oan là hàng rào bị tắt.
+ */
+export type CommitStatus = "ancestor" | "rewritten" | "unknown";
+
+/**
+ * Tra một sha đã ghi trong sổ cái còn nằm trong lịch sử của HEAD hay không.
+ *
+ * Hai lệnh git, theo đúng thứ tự — không đảo được:
+ *   1. `git cat-file -e <sha>^{commit}` — sha này repo có biết tới không.
+ *      Thoát khác 0 với CẢ hai lý do "không phải tổ tiên" lẫn "chưa từng
+ *      nghe tới", nên phải tách ca "chưa từng nghe tới" ra TRƯỚC bằng lệnh
+ *      này, rồi mới hỏi tổ tiên ở sha đã biết là có tồn tại.
+ *   2. `git merge-base --is-ancestor <sha> HEAD` — chỉ gọi khi (1) đã xác
+ *      nhận sha tồn tại; kết quả lúc này phân biệt được thật giữa tổ tiên và
+ *      không phải tổ tiên.
+ *
+ * sha hình dạng không hợp lệ (không phải hex) không bao giờ chạm tới shell —
+ * trả `"unknown"` ngay, cùng lý lẽ fail-open với ca "repo không biết".
+ */
+export async function commitStatus(root: string, sha: string): Promise<CommitStatus> {
+  if (!SHA_SHAPE.test(sha)) return "unknown";
+
+  const known = await runShell(`git cat-file -e ${sha}^{commit}`, { cwd: root, timeoutMs: 5000 });
+  if (known.code !== 0) return "unknown";
+
+  const ancestor = await runShell(`git merge-base --is-ancestor ${sha} HEAD`, {
+    cwd: root,
+    timeoutMs: 5000,
+  });
+  return ancestor.code === 0 ? "ancestor" : "rewritten";
+}
