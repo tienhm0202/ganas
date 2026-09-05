@@ -9,7 +9,7 @@ import { gitTouchedPaths } from "../commit.js";
 import { alreadyGreen, evaluateExitContract, evaluateGate, formatGate } from "../gate.js";
 import type { FactFreshness } from "../graph/freshness.js";
 import type { Graph } from "../graph/types.js";
-import { baselineFor, subagentTouchedFor, taskForSession } from "../state.js";
+import { baselineFor, sessionRecord, subagentTouchedFor, taskForSession } from "../state.js";
 import { type Argv, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { openProject } from "./_common.js";
@@ -74,8 +74,24 @@ export async function run(argv: Argv): Promise<number> {
   const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
   if (boundaryWarning) process.stdout.write(`${boundaryWarning}\n`);
 
-  const subagentTouched = await subagentTouchedFor(root, sessionId, taskId);
-  const dispatchWarning = formatDispatchWarning(taskId, task.value.model, subagentTouched);
+  // Cảnh báo giao việc chỉ có nghĩa khi TASK ĐANG CHẤM đúng là task mà PHIÊN
+  // NÀY đang bind vào (T-096, sửa ICE-033). `subagentTouchedFor` trả `false`
+  // cho một task đi ngang MỘT CÁCH CÓ CHỦ Ý (xem docstring của nó trong
+  // state.ts) — nhưng gọi nó rồi phát cảnh báo cho task mà phiên không bind
+  // vào thì tiền đề của cảnh báo sai ngay từ đầu: ganas không biết gì về việc
+  // giao sub-agent cho một task đi ngang, và "không biết" phải im chứ không
+  // được đoán. Không có `sessionId` cũng xếp vào "không biết" — im, KHÔNG rơi
+  // về hành vi cũ (luôn nổ khi thiếu session): thiếu session nghĩa là không
+  // có phiên nào để nói "phiên này đã bind vào task đó".
+  const boundTaskId = sessionId ? (await sessionRecord(root, sessionId))?.task : undefined;
+  const dispatchWarning =
+    boundTaskId === taskId
+      ? formatDispatchWarning(
+          taskId,
+          task.value.model,
+          await subagentTouchedFor(root, sessionId, taskId),
+        )
+      : "";
   if (dispatchWarning) process.stdout.write(`${dispatchWarning}\n`);
 
   const driftWarning = formatDesignDriftWarning(task.value, graph, freshness);

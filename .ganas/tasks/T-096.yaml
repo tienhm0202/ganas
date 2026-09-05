@@ -1,0 +1,63 @@
+id: T-096
+title: "Cảnh báo giao việc chỉ nổ cho task mà phiên thật sự bind, không nổ cho
+  task đi ngang"
+serves: [ G-002 ]
+implements: D-017
+scope: P-cli
+status: done
+estimated_context: small
+model: verifier
+commit_type: fix
+
+context_contract:
+  must_read:
+    - path: "src/state.ts"
+      why: "`subagentTouchedFor` (:250) trả false khi `rec.task !== taskId` — CÓ CHỦ
+        Ý, cùng lý do với `touchedPathsFor`; đừng sửa hàm này"
+    - path: "src/commands/gate.ts"
+      why: "dòng 77 gọi nó rồi phát cảnh báo — đây mới là chỗ sai: cảnh báo phát cho
+        một task mà phiên không bind vào"
+    - path: "src/boundary.ts"
+      why: "`formatDispatchWarning` dựng chữ của cảnh báo"
+  facts: []
+  open_questions: []
+
+touches: [ M-commands, M-cli-core ]
+
+exit_contract:
+  - kind: artifact
+    path: "test/gate-dispatch-warning.test.ts"
+    must_contain: "bind"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Quan sát thật ngày 2026-09-05, năm task liên tiếp: phiên bind T-080, chấm gate
+  T-083/T-084/T-089/T-090/T-092, lần nào cũng ra "cả phiên không có lượt sửa nào
+  từ sub-agent" — trong khi `state.json` ghi `subagent_touched: true` và sub-agent
+  đúng là đã làm.
+
+  Chỗ sai KHÔNG nằm ở `subagentTouchedFor`. Hàm đó gắn theo cặp (session, task)
+  có chủ ý. Chỗ sai là nơi gọi: phát một cảnh báo mà tiền đề của nó không đúng.
+
+  Hướng chữa rẻ nhất: chỉ phát cảnh báo khi task đang chấm ĐÚNG LÀ task phiên
+  bind vào. Task đi ngang thì im — ganas không biết gì về việc giao sub-agent
+  cho task đó, và "không biết" phải im chứ không được đoán.
+
+  Cân nhắc hướng thứ hai trước khi chọn, rồi ghi lý do vào docstring: cho cờ
+  gắn theo task mà sub-agent THẬT SỰ sửa, chứ không theo task đang bind. Đắt
+  hơn và đụng `state.json`; chỉ chọn nếu hướng một để lọt một ca thật.
+
+  Luồng 1.2.0 làm ca này thành thường trực: auto-loop có phiên chính điều phối
+  nhiều task, nên cảnh báo sai sẽ nổ mỗi vòng lặp. Cảnh báo sai nguy hiểm hơn
+  không có cảnh báo — nó dạy người đọc bỏ qua, và đúng lúc nó kêu thật thì
+  không ai nhìn nữa.
+
+  Đừng đổi hành vi khi task chấm ĐÚNG là task bind: ca đó cảnh báo vẫn phải nổ
+  y như hôm nay. Test phải phủ cả hai chiều.
+done_at: 2026-09-05T15:46:01.814Z
