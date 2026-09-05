@@ -23,7 +23,7 @@ import { alreadyGreen, evaluateGate, formatGate, type GateResult } from "../gate
 import { GANAS_DIR } from "../graph/paths.js";
 import type { Sourced } from "../graph/types.js";
 import type { Task } from "../model/index.js";
-import { baselineFor, taskForSession } from "../state.js";
+import { baselineFor, releaseSession, taskForSession } from "../state.js";
 import { type Argv, enabled, flag, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
@@ -36,6 +36,25 @@ import { commitDebtSummary } from "./debt.js";
 /** Bọc pathspec cho `git add`: đủ để chống một dấu nháy đơn trong path lạ. */
 function quote(p: string): string {
   return `'${p.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Gỡ khỏi index đúng những đường dẫn vừa `git add` — dùng khi recheck (xem
+ * `checkStagedTree`) đỏ, để lệnh `ganas commit` KẾ TIẾP không vô tình commit
+ * cả những gì task này vừa stage (ICE-036, xem `commit:abb3cf8`).
+ *
+ * Không dời `git add` xuống SAU recheck (phương án còn lại): `checkStagedTree`
+ * chạy `git write-tree`, tức nó ĐỌC INDEX đã dựng sẵn — không có gì để đọc nếu
+ * chưa `git add`. Nên chỗ đúng là dọn NGƯỢC lại khi recheck từ chối, không
+ * phải tránh bẩn index từ đầu.
+ *
+ * Best-effort từng path, khuôn theo vòng `git add` phía trên: một pattern
+ * không khớp gì (hoặc đã bị reset trước đó) không được làm cả việc dọn hỏng.
+ */
+async function resetStagedPaths(root: string, paths: readonly string[]): Promise<void> {
+  for (const p of paths) {
+    await runShell(`git reset -- ${quote(p)}`, { cwd: root, timeoutMs: 15_000 });
+  }
 }
 
 // Re-export: chỗ khác trong repo (kể cả test) từng nhập hai cái này từ đây.
@@ -169,9 +188,13 @@ export async function run(argv: Argv): Promise<number> {
   const owned = ownedPaths(task, ganasChanged);
   const foreign = foreignPaths(task, ganasChanged);
 
+  // Giữ lại đúng danh sách đã add — cần cho `resetStagedPaths` nếu recheck bên
+  // dưới từ chối cây này.
+  const addedPaths = [...(allGanas ? [GANAS_DIR] : owned), ...codePaths];
+
   // Best-effort: một pattern không khớp file nào (khối chưa có code thật) không
   // được làm cả lệnh add hỏng — bỏ qua lỗi từng pattern, không bỏ qua cả việc add.
-  for (const p of [...(allGanas ? [GANAS_DIR] : owned), ...codePaths]) {
+  for (const p of addedPaths) {
     await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15_000 });
   }
 
@@ -202,11 +225,13 @@ export async function run(argv: Argv): Promise<number> {
 
     if (recheck.status === "failed") {
       // Trả file task về nguyên trạng: task CHƯA xong, đánh dấu done là nói dối.
-      // Nhưng KHÔNG gỡ khỏi index — sửa xong chạy lại là commit được ngay, không
-      // phải stage lại từ đầu.
       if (originalTaskFile !== null) {
         await writeFile(join(root, sourced.file), originalTaskFile, "utf8");
       }
+      // Dọn index: gỡ đúng những đường dẫn vừa add ở trên (ICE-036). Không dọn
+      // thì `ganas commit` của task KẾ TIẾP thấy index còn bẩn, add tiếp phần
+      // của nó rồi commit gộp cả hai — nuốt trọn file của task này.
+      await resetStagedPaths(root, addedPaths);
       throw new GanasError(
         report.trimStart() +
           `\n  Thật sự cần bỏ qua thì \`ganas commit ${taskId} --no-recheck\` — nhưng biết rõ là ` +
@@ -233,6 +258,13 @@ export async function run(argv: Argv): Promise<number> {
       }
       throw new GanasError(`git commit thất bại:\n${result.stderr || result.stdout}`);
     }
+
+    // Nhả bind NGAY khi task đóng thật (ICE-034): không nhả thì `state.json`
+    // vẫn giữ session trỏ vào task vừa done, Stop hook đọc `session.task` rồi
+    // chấm exit_contract của một task đã xong — chặn phiên vì lý do không
+    // liên quan. `releaseSession` đã có sẵn ở `src/state.ts` — không viết hàm
+    // nhả thứ hai.
+    if (willClose && sessionId) await releaseSession(root, sessionId);
 
     process.stdout.write(
       `✓ Đã commit cho ${taskId}.\n\n${message}` +

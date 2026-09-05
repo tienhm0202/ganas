@@ -1,0 +1,68 @@
+id: T-092
+title: "ganas commit nhả bind khi đóng task, và dọn index khi recheck từ chối commit"
+serves: [ G-003 ]
+implements: D-015
+scope: P-cli
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/commands/commit.ts"
+      why: "hai chỗ phải sửa nằm cùng file: vòng `git add` (:174) chạy TRƯỚC recheck
+        và không có đường lùi, và nhánh đóng task (`willClose`) không nhả bind"
+    - path: "src/state.ts"
+      why: "`releaseSession` (:199) đã có sẵn — dùng nó, đừng viết hàm nhả thứ hai"
+  facts: []
+  open_questions: []
+
+touches: [ M-commands ]
+
+exit_contract:
+  - kind: artifact
+    path: "test/commit-release.test.ts"
+    must_contain: "releaseSession"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Hai nợ ICE-034 và ICE-036, gộp một task vì cùng một file, cùng một khối, và
+  cùng một câu hỏi: `ganas commit` phải để lại trạng thái gì sau khi chạy xong.
+  Chẻ đôi ở đây là chẻ theo triệu chứng chứ không theo chỗ sửa.
+
+  ## Vế 1 — nhả bind khi đóng task (ICE-034)
+
+  `ganas commit` đặt `status: done` nhưng `state.json` vẫn giữ `current_task` và
+  `sessions[id].task` trỏ task vừa đóng. Stop hook đọc `session.task` rồi chấm
+  hợp đồng của một task đã commit xong — nó đỏ vì lý do không liên quan gì tới
+  task đó, và chặn phiên. Đã xảy ra thật nhiều lần trong phiên 2026-09-05.
+
+  Chữa GỐC là nhả bind, không phải dạy Stop hook bỏ qua task `done`. Hai cách
+  cùng chữa một triệu chứng, và luật repo cấm thêm câu trả lời thứ hai cho câu
+  hỏi đã có. Nhả bind đúng hơn vì sau khi đóng task thì phiên THẬT SỰ không còn
+  làm task nào — `ganas next` là bước kế tiếp đúng.
+
+  Dùng `releaseSession` đã có. Đừng viết hàm nhả thứ hai.
+
+  ## Vế 2 — dọn index khi recheck từ chối (ICE-036)
+
+  Vòng `git add` chạy trước recheck; recheck đỏ thì lệnh trả về mà KHÔNG dọn
+  những đường dẫn vừa add. Lệnh `ganas commit` kế tiếp commit cả index, nên nó
+  nuốt trọn file của task trước. Hàng rào recheck vì thế tự phá mục tiêu của
+  nó: chặn đúng một commit sai rồi giao nguyên liệu sai cho commit sau.
+
+  Hai cách đều được, chọn một và ghi lý do: `git reset` đúng các đường dẫn vừa
+  add khi recheck đỏ, hoặc chuyển vòng `git add` xuống SAU khi recheck xanh.
+  Cách sau sạch hơn nếu recheck không cần index đã dựng — kiểm trước khi chọn,
+  đừng đoán.
+
+  ## Vì sao task này chặn T-091
+
+  Auto-loop đóng task rồi mở task kế NGAY trong cùng phiên, và commit tự động
+  mỗi vòng. Vế 1 làm mỗi vòng chấm lại hợp đồng của vòng trước; vế 2 làm một
+  vòng đỏ đầu độc vòng sau. Cả hai đều nằm đúng trên đường auto-loop sẽ đi.
+done_at: 2026-09-05T14:17:53.947Z
