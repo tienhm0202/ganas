@@ -9,6 +9,66 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
+## Chưa phát hành
+
+Ba chặng sửa lỗi, cùng một họ và cùng một câu: **một phép kiểm im lặng thì
+không phải phép kiểm.** Cả ba đều tìm ra bằng cách CHẠY luồng mới của 1.2.0 chứ
+không phải đọc code — đó cũng là bằng chứng đầu tiên rằng luồng đó đáng dùng.
+
+- **Bộ dò ngõ cụt có một vùng không soi tới** (D-017). `schemaFields()` khớp
+  `z.object({...})` bằng regex non-greedy dừng ở `})` đầu tiên, nên khối lồng
+  đầu tiên cắt ngang khối ngoài cùng và mọi trường sau nó tuột khỏi tầm soi. Đo
+  được: trên `src/model/` nó thấy 112 tên thay vì 134; `session_start` và
+  `claim` không bao giờ được soi, thay vào đó là trường BÊN TRONG chúng. Hệ quả
+  đúng bằng thứ test này sinh ra để chặn — và nó đã buộc một task trước đó phải
+  xếp lại thứ tự khối trong schema cho vừa tầm soi, tức chiều theo khiếm khuyết.
+
+  Sửa xong, hàng rào lập tức làm việc của nó: ba trường khai rồi không ai đọc
+  hiện ra ngay (`created_at`, `approved_by`/`approved_at`, `Claim.verdict.evidence`
+  — ICE-039/040/041). `approved_by` đáng chú ý nhất: chữ ký người duyệt mục
+  tiêu, thứ ganas bắt buộc phải có, mà không màn hình nào hiển thị lại.
+
+- **Cảnh báo giao việc kêu nhầm** (D-017). `subagentTouchedFor` trả `false` khi
+  task đang chấm khác task phiên bind vào — đúng theo thiết kế — nhưng nơi gọi
+  vẫn phát cảnh báo, nên tiền đề của nó sai ngay từ đầu. Quan sát thật: năm task
+  liên tiếp bị báo "cả phiên không có lượt sửa nào từ sub-agent" trong khi
+  `state.json` ghi rõ ngược lại. Luồng 1.2.0 làm ca này thành thường trực vì
+  phiên chính điều phối nhiều task. Cảnh báo sai nguy hiểm hơn không có cảnh
+  báo: nó dạy người đọc bỏ qua, rồi đúng lúc nó kêu thật thì không ai nhìn nữa.
+
+- **`commit_type` không phân biệt được "khai chore" với "chưa ai khai"** (D-018).
+  `.default("chore")` xoá thông tin ngay ở tầng schema, nên không validator nào
+  cảnh báo được điều nó không còn nhìn thấy. Đã cắn một lần: task hiện thực
+  auto-loop — một tính năng — ra `chore(...)` và phải amend tay. Nay `optional`
+  ở schema, mặc định quyết tại nơi ĐỌC, cộng warning `spine/task-missing-commit-type`
+  chỉ nổ cho task chưa `done`. Bằng chứng không force cứng lên dữ liệu cũ:
+  `ganas validate` giữ nguyên số cảnh báo, 72 task cũ im lặng.
+
+- **Ranh giới task tự biết file kề cận** (D-019). Bốn task liên tiếp trong 1.2.0
+  đều phải thêm tiêu chí `artifact` vá tay SAU KHI việc đã xong, vì `test/`
+  không thuộc `paths` của khối nào. `taskBoundary()` nay gộp probe của MỌI
+  verification thuộc khối trong `touches`, và `ownsGanasFile` nhận fact vừa sinh
+  trong phiên. `ganas commit` từ chối khi file bị bỏ lại là file TEST — ca gây
+  hỏng thật, vì commit mang code mới mà bỏ test cũ thì `npm test` trên HEAD đó
+  đỏ; cửa thoát `--allow-outside-tests` tự khai trong chính thông báo lỗi.
+
+  Chỉ gộp `kind: probe|eval`, KHÔNG gộp `contract`: đo trên 73 task thấy contract
+  kéo nhầm file khối khác vào 27/73 (vì `run` của nó grep cả khối nguồn lẫn
+  đích để so cổng); thu hẹp lại thì rò về 0/73 mà lợi ích thật vẫn giữ 8/73.
+
+  Nhánh `docs` CỐ Ý không làm: `docs/COMMANDS.md` nói về mọi lệnh nên không suy
+  được máy móc docs nào thuộc task nào, và đoán sai nghĩa là kéo nhầm file người
+  khác đang sửa vào commit của mình.
+
+- **`--no-recheck` chưa từng hoạt động** (D-019). `parseArgs` sinh
+  `flags.recheck = false` cho token `--no-recheck`, nhưng code đọc
+  `flags["no-recheck"]` — luôn `undefined`, nên recheck luôn chạy, trong khi
+  thông báo lỗi vẫn chỉ người dùng tới cửa thoát đó. Test cũ không bắt được vì
+  chúng dựng `argv` bằng tay, đi vòng qua đúng lớp hỏng. Kèm một test canh quét
+  `src/` chặn cả lớp lỗi này, không riêng ca đã biết.
+
+- Số đo: test 954 → 969, mã chẩn đoán tĩnh 69 → 70.
+
 ## v1.2.0 — 2026-09-05
 
 - **Báo cáo của sub-agent bay qua phiên cha rồi tan, và không gì đòi nó nói
