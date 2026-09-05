@@ -1,17 +1,20 @@
 ---
 name: plan-to-tasks
-description: Chẻ một plan Claude Code Plan Mode vừa được duyệt thành Design/Task của ganas, gán `model` (main/verifier/scribe) cho từng task ngay lúc chẻ. Dùng ngay sau khi plan được duyệt qua ExitPlanMode — nội dung plan đã có sẵn trong context, không cần đọc lại file nào.
+description: Chẻ một plan Claude Code Plan Mode vừa được duyệt thành Design/Task của ganas, gán `model` (main/verifier/scribe) cho từng task ngay lúc chẻ. Nếu được đưa đường dẫn file plan, skill sẽ đọc toàn bộ file đó trước khi chẻ; nếu được kích hoạt vừa sau ExitPlanMode không có file, dùng nội dung plan đã có sẵn trong context.
 when_to_use: "plan vừa được duyệt qua ExitPlanMode, sắp bắt đầu hiện thực một plan nhiều bước"
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/ganas.mjs" *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/ganas.mjs" *), Read
 ---
 
 # Chẻ plan thành task
 
-Plan Mode là tính năng CỦA Claude Code, không phải của ganas — ganas không đọc
-file plan. Không cần đọc lại gì: nội dung plan vừa duyệt đã nằm sẵn trong
-context của phiên này.
+Plan Mode là tính năng CỦA Claude Code. Skill này hỗ trợ hai cách dùng:
+- Khi được đưa đường dẫn file plan, skill sẽ đọc toàn bộ file đó làm nội dung chuẩn trước khi chẻ.
+- Khi được kích hoạt mà không có file, nội dung plan đã duyệt trong context của phiên này sẽ được dùng.
+Không tự đi tìm file plan — nếu không ai đưa đường dẫn thì chỉ dùng context.
 
 ## Các bước
+
+0. **Đọc file plan nếu được đưa đường dẫn.** Nếu được đưa đường dẫn file plan, `Read` toàn bộ file đó — nội dung file thay cho nội dung plan trong context của phiên này. Nếu vừa được kích hoạt qua ExitPlanMode (không có file), bỏ qua bước này và dùng nội dung plan đã có sẵn. **Không tự đi tìm file plan**: chỉ đọc khi ai đó đưa đường dẫn file plan rõ ràng.
 
 1. **Gắn vào Design.** Nếu plan hiện thực một hướng đã có `.ganas/designs/`
    phù hợp, dùng lại nó (`implements` trỏ vào đó). Nếu plan là một hướng
@@ -85,6 +88,10 @@ context của phiên này.
    - `main` — việc thật sự khó/mơ hồ, cần phán đoán nhiều.
    - `scribe` — việc cơ học, đơn giản, ít quyết định.
    - `verifier` — khoảng giữa hai loại trên.
+
+   Gán `commit_type` cùng lúc với `model`: một trong các conventional commits
+   (`feat|fix|refactor|docs|test|chore|perf|build|ci`), mặc định `chore`. Field
+   này dùng để dựng commit message dạng `<commit_type>(<design>/<task>): <title>`.
 
    Đây là quyết định của agent NGAY LÚC THIẾT KẾ — lúc này agent hiểu độ khó
    từng phần rõ hơn bất kỳ heuristic nào suy sau (vd suy từ `module.nature`).

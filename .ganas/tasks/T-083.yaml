@@ -1,0 +1,46 @@
+id: T-083
+title: "Skill plan-to-tasks nhận đường dẫn file plan, và gán commit_type cùng
+  lúc với model"
+serves: [ G-003 ]
+implements: D-015
+scope: P-cli
+status: done
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: "plugin/skills/plan-to-tasks/SKILL.md"
+      why: "frontmatter `allowed-tools` hiện KHÔNG có `Read`, nên skill không mở được
+        file plan — đây là điểm hỏng thật, không phải hình thức"
+  facts: []
+  open_questions: []
+
+touches: []
+
+exit_contract:
+  - kind: artifact
+    path: "plugin/skills/plan-to-tasks/SKILL.md"
+    must_contain: "đường dẫn file plan"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Ba sửa đổi, không hơn:
+  1. `allowed-tools` thêm `Read`.
+  2. `description`/`when_to_use` hiện KHẲNG ĐỊNH "không cần đọc lại file nào" —
+     câu đó sẽ SAI sau thay đổi, phải sửa chứ không phải thêm câu mới bên cạnh.
+  3. Một bước 0: được đưa đường dẫn ⇒ `Read` toàn bộ file trước, nội dung file
+     thay cho context Plan Mode; vừa duyệt qua ExitPlanMode ⇒ bỏ qua bước này;
+     KHÔNG tự đi tìm file plan khi không ai đưa đường dẫn.
+
+  Cộng một câu ở mục 5: gán `commit_type` cùng lúc với `model`.
+
+  `touches: []` vì `plugin/skills/**` không nằm trong `paths` của khối nào —
+  cùng ca với `test/` ở ICE-017/ICE-022. Tiêu chí `artifact` là thứ duy nhất kéo
+  file vào ranh giới của `ganas commit`.
+
+  KHÔNG chạm mục 3 và mục 5 phần tier model: đó chính là thứ làm `ganas brief`
+  đủ rõ cho Sonnet/Haiku, và nó đang đúng.
+done_at: 2026-09-05T12:43:10.098Z
