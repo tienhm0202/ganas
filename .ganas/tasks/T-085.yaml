@@ -1,0 +1,54 @@
+id: T-085
+title: "Task.commit_type và commitSubject(), người đọc thật ở phạm vi khác nên
+  đi qua READ_VIA"
+serves: [ G-003 ]
+implements: D-015
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: scribe
+
+context_contract:
+  must_read:
+    - path: "src/model/task.ts"
+      why: "`agentDispatchLines()` (:107-125) là khuôn có sẵn: hàm dựng CHỮ sống trong
+        model, nơi khác chỉ gọi — `commitSubject()` phải cùng hình dạng"
+    - path: "test/no-dead-ends.test.ts"
+      why: "bảng `READ_VIA` và comment của nó nói thẳng vì sao khuôn này tồn tại:
+        người đọc thật thuộc phạm vi khác nên KHÔNG ship cùng task với schema"
+  facts: []
+  open_questions: []
+
+touches: [ M-model ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/model/task.ts"
+    must_contain: "commit_type"
+  - kind: artifact
+    path: "test/no-dead-ends.test.ts"
+    must_contain: "commitSubject"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: command
+    run: "npm run typecheck"
+    expect: exit_zero
+
+notes: |-
+  `commit_type`: enum conventional (`feat|fix|refactor|docs|test|chore|perf|build|ci`),
+  optional, DEFAULT `chore` — mọi task cũ trong `.ganas/tasks/` phải parse được
+  mà không sửa một file YAML nào.
+
+  `commitSubject(task, design)` dựng `<type>(<design>/<task>): <title>`, ví dụ
+  `feat(D-015/T-085): ...`. Nó là nơi DUY NHẤT quyết subject trông thế nào.
+
+  CỐ Ý KHÔNG có `npm test` trong exit_contract của task này. `commitSubject` chưa
+  ai gọi từ ngoài `src/model/` cho tới T-086, nên vế thứ ba của `READ_VIA`
+  ("accessor phải được gọi từ NGOÀI src/model/") còn đỏ. Đây là khoảng đỏ ĐÃ BIẾT
+  và đã có tiền lệ — khối `agent` được thêm y hệt vậy. Gate của task này là
+  `typecheck`; `npm test` quay lại ở T-086.
+
+  Đừng nhét `commit_type` vào `EXEMPT` của no-dead-ends. `EXEMPT` là cho trường
+  cố ý không ai đọc; đây là trường CÓ người đọc, chỉ ở phạm vi khác — đúng chỗ
+  của `READ_VIA`, và comment trong file đã cảnh báo chuyện nhét bừa vào miễn trừ.
+done_at: 2026-09-05T13:13:56.178Z

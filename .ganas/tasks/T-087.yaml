@@ -1,0 +1,56 @@
+id: T-087
+title: "Config biết tới luật subagent_report và khối auto_loop, cả hai mặc định
+  không làm gì"
+serves: [ G-003 ]
+implements: D-015
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/model/config.ts"
+      why: "`ENFORCEMENT_RULES` (:20-28) và `enforcementFor()` — khuôn của một luật
+        quy trình mới; và `session_start` (:162) là khuôn của một khối config có
+        `.default()` để dữ liệu cũ adopt được"
+    - path: "test/no-dead-ends.test.ts"
+      why: "`READ_VIA` đã khai `enforcement`/`enforcement_rules` đi qua
+        `enforcementFor` — khối `auto_loop` cần một accessor cùng kiểu"
+  facts: []
+  open_questions: []
+
+touches: [ M-model ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/model/config.ts"
+    must_contain: "auto_loop"
+  - kind: artifact
+    path: "src/model/config.ts"
+    must_contain: "subagent_report"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: command
+    run: "npm run typecheck"
+    expect: exit_zero
+
+notes: |-
+  Hai thứ, cả hai phải KHÔNG đổi hành vi của bất kỳ dự án nào đang chạy:
+
+  1. `"subagent_report"` thêm vào `ENFORCEMENT_RULES`. Đây là luật QUY TRÌNH nên
+     đi qua `enforcementFor()`, KHÔNG được vào nhóm bốn ngoại lệ chặn vô điều kiện
+     (bốn cái đó đều là luật bảo toàn DỮ LIỆU — xem `src/hooks/io/CLAUDE.md`).
+
+  2. `auto_loop: { enabled: false, max_iterations: 5 }` với `.default()` đủ cả
+     hai cấp. Cộng một accessor `autoLoopFor(config)` trong chính file này, khai
+     vào `READ_VIA` — người đọc thật là hook, thuộc phạm vi khác.
+
+  Vì sao `auto_loop` KHÔNG đi qua `enforcementFor()` dù nó gác một nhánh CHẶN:
+  cổng bật/tắt của nó chính là `enabled`, mặc định `false` — nghiêm hơn cả `warn`.
+  Ghi lý lẽ này vào docstring, nếu không người đọc sau tưởng đã quên
+  `enforcementFor` và "sửa" lại thành sai.
+
+  Như T-085, gate ở đây là `typecheck` chứ không phải `npm test`: `autoLoopFor`
+  chưa có người gọi ngoài model cho tới T-091.
+done_at: 2026-09-05T13:14:07.172Z

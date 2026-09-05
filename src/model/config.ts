@@ -25,6 +25,16 @@ export const ENFORCEMENT_RULES = [
   "task_link",
   /** Model tự đặt status: approved/rejected cho proposal thay vì `ganas proposal approve/reject`. */
   "proposal_decision",
+  /**
+   * Sub-agent kết thúc mà báo cáo (SubagentStop) thiếu tiêu đề bắt buộc.
+   *
+   * Đây là luật QUY TRÌNH (kiểm soát cách một lượt giao việc kết thúc), không
+   * phải luật bảo toàn DỮ LIỆU — khác bốn ngoại lệ chặn vô điều kiện liệt kê ở
+   * `src/hooks/io/CLAUDE.md` (sổ cái xác minh, `config.yaml`, thư mục skill,
+   * ghi đè thực thể). Luật quy trình phải đi qua `enforcementFor()` để dự án
+   * có sẵn adopt được mà không bị chặn cứng ngay từ lần cài đầu tiên.
+   */
+  "subagent_report",
 ] as const;
 export type EnforcementRule = (typeof ENFORCEMENT_RULES)[number];
 
@@ -160,6 +170,33 @@ export const zConfig = z.object({
     } satisfies Record<ModelTier, z.ZodDefault<z.ZodString>>)
     .default({}),
 
+  /**
+   * Vòng lặp tự động: gate xanh → commit → next → giao sub-agent kế, không
+   * đợi người gõ lệnh giữa hai task. Xem D-015 vế 2.
+   *
+   * Mặc định TẮT (`enabled: false`) — nghiêm hơn cả `warn`, vì nhánh này
+   * KHÔNG đi qua `enforcementFor()` dù nó gác một hành vi có thể coi là
+   * "chặn": khi tắt, ganas không tự mồi lượt kế tiếp, y hệt hành vi hiện tại
+   * của mọi dự án chưa khai field này (`.default({})` ở cả hai cấp). Cổng
+   * bật/tắt của nhánh này chính là `enabled`, không phải một luật trong
+   * `ENFORCEMENT_RULES` — không có gì để "nới" thành `warn`, vì loop chỉ có
+   * hai trạng thái sinh ra một hành động (mồi lượt kế) hoặc không, không có
+   * trạng thái trung gian kiểu "cảnh báo nhưng vẫn mồi". Đưa nó qua
+   * `enforcementFor()` sẽ tạo ảo giác có mức `warn` cho một thứ không có
+   * hành vi cảnh báo nào để chạy.
+   */
+  auto_loop: z
+    .object({
+      enabled: z.boolean().default(false),
+      /**
+       * Trần số vòng lặp liên tiếp trong CÙNG một task trước khi loop tự
+       * dừng — phanh thật nằm ở bộ đếm riêng trong `state.json`, NGOÀI
+       * `SessionRecord` (xem D-015 vế 2), field này chỉ là ngưỡng.
+       */
+      max_iterations: z.number().int().positive().default(5),
+    })
+    .default({}),
+
   session_start: z
     .object({
       /**
@@ -204,4 +241,22 @@ export type Config = z.infer<typeof zConfig>;
 /** Mức cưỡng chế hiệu lực cho một luật cụ thể. */
 export function enforcementFor(config: Config, rule: EnforcementRule): Enforcement {
   return config.enforcement_rules[rule] ?? config.enforcement;
+}
+
+/**
+ * Cấu hình vòng lặp tự động hiệu lực cho phiên.
+ *
+ * KHÔNG đi qua `enforcementFor()` dù nhánh nó gác (mồi lượt kế tiếp hay
+ * không) là một nhánh CHẶN — xem docstring của `auto_loop` trong `zConfig` để
+ * biết lý do đầy đủ: cổng của nó là `enabled` (mặc định `false`, nghiêm hơn
+ * cả `warn`), và loop không có trạng thái trung gian kiểu "cảnh báo nhưng vẫn
+ * chạy" để `enforcementFor()` có chỗ đứng. Đây không phải quên nối dây —
+ * đừng "sửa" lại thành `enforcementFor(config, "auto_loop" as EnforcementRule)`.
+ *
+ * Chưa có người gọi ngoài `src/model/` tại chặng này (T-087) — nối dây thật ở
+ * `src/hooks/io/**`/`src/state.ts` thuộc T-091. Khoảng đỏ này đã biết và được
+ * chấp nhận, xem notes của D-015/T-087.
+ */
+export function autoLoopFor(config: Config): Config["auto_loop"] {
+  return config.auto_loop;
 }

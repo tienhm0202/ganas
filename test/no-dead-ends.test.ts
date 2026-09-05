@@ -168,6 +168,10 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
   const READ_VIA: Record<string, string> = {
     enforcement: "enforcementFor",
     enforcement_rules: "enforcementFor",
+    // Vòng lặp tự động: người đọc thật là hook (`src/hooks/io/**`), thuộc
+    // phạm vi khác nên không ship cùng task với schema (T-091, xem D-015 vế
+    // 2). `autoLoopFor()` là accessor công khai của chính model.
+    auto_loop: "autoLoopFor",
     url: "formatAnchor",
     fetched_at: "formatAnchor",
     line_end: "formatAnchor",
@@ -185,6 +189,8 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
     self_check: "agentDispatchLines",
     guardrails: "agentDispatchLines",
     tools: "agentDispatchLines",
+    // Loại commit theo conventional commits: người quyết duy nhất là `commitSubject()`.
+    commit_type: "commitSubject",
   };
   const modelText = all
     .filter((x) => x.path.startsWith("src/model/"))
@@ -301,7 +307,7 @@ test("⭐ mọi accessor khai trong READ_VIA đều có thật và được gọ
 
   // Giữ ĐỒNG BỘ với READ_VIA của test trên. Hai chỗ khai vì hai test chạy độc
   // lập; lệch nhau thì test này đỏ trước, đó là chủ ý.
-  const ACCESSORS = ["enforcementFor", "formatAnchor", "artifactIssues", "agentDispatchLines"];
+  const ACCESSORS = ["enforcementFor", "formatAnchor", "artifactIssues", "agentDispatchLines", "commitSubject"];
 
   const broken: string[] = [];
   for (const fn of ACCESSORS) {
