@@ -241,3 +241,54 @@
     - src/commands
   scope: P-hook
   status: open
+- id: ICE-039
+  title: created_at khai ở Design/Goal/Task nhưng không code nào ngoài src/model/ đọc
+  found_at: 2026-09-05T15:35:07.424Z
+  review_after_days: 30
+  weight: 2
+  ease: 4
+  why_deferred: "test/no-dead-ends.test.ts (T-095) mới soi tới được toàn bộ
+    z.object của zDesign/zGoal/zTask, phát hiện created_at khai optional ở cả ba
+    nhưng không có accessor/render/validate nào đọc lại giá trị — grep toàn src/
+    ngoài src/model/ ra 0 kết quả. Cần quyết: hiển thị nó ở đâu đó (vd
+    brief/debt) hay bỏ hẳn."
+  anchors:
+    - src/model/design.ts:191
+    - src/model/goal.ts:49
+    - src/model/task.ts:320
+  scope: P-graph-core
+  status: open
+- id: ICE-040
+  title: approved_by/approved_at của Goal chỉ được đọc NỘI BỘ (superRefine), không
+    nơi nào ngoài src/model/ hiển thị lại
+  found_at: 2026-09-05T15:35:16.699Z
+  review_after_days: 30
+  weight: 2
+  ease: 3
+  why_deferred: zGoal.superRefine tự đọc hai trường này để bắt lỗi 'active mà chưa
+    duyệt', nhưng đó là đọc TRONG src/model/ — không nơi nào khác (brief, debt,
+    render) hiển thị lại ai duyệt/duyệt lúc nào. test/no-dead-ends.test.ts
+    (T-095) đòi người đọc NGOÀI src/model/ nên báo hai trường này chết; grep
+    approved_by/approved_at ngoài src/model/ chỉ ra chuỗi hint/template tĩnh,
+    không phải field access thật.
+  anchors:
+    - src/model/goal.ts:47
+    - src/model/goal.ts:48
+    - src/graph/validate.ts:248
+  scope: P-graph-core
+  status: open
+- id: ICE-041
+  title: Claim.verdict.evidence khai rồi không code nào ngoài src/model/ đọc
+  found_at: 2026-09-05T15:35:25.650Z
+  review_after_days: 30
+  weight: 2
+  ease: 4
+  why_deferred: "test/no-dead-ends.test.ts (T-095, sau khi sửa schemaFields soi
+    hết mọi z.object lồng) phát hiện verdict.evidence (bằng chứng dẫn tới kết
+    luận verify claim) không có accessor/render nào đọc lại — probe và at (hai
+    trường còn lại của verdict) đều có người đọc, riêng evidence thì không. Cần
+    quyết: hiển thị nó ở đâu (vd khi in kết quả ganas verify) hay bỏ."
+  anchors:
+    - src/model/knowledge.ts:121
+  scope: P-graph-core
+  status: open
