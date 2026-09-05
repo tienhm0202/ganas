@@ -467,3 +467,110 @@ test("⭐ verificationPathRefs: produces + tiêu chí verification trỏ đúng 
     await cleanup(root);
   }
 });
+
+/* --- taskBoundary: gộp probe của mọi verification thuộc khối (D-019, nhánh 1)
+ *
+ * Còn hở sau T-067: T-067 cho `taskBoundary` đọc probe của verification mà
+ * `exit_contract` TRỎ TỚI, nhưng một khối thường khai NHIỀU verification, còn
+ * `exit_contract` của một task chỉ trỏ vài cái trong số đó. Ca gốc:
+ * `M-workflow` gom `commit/flow/gate/handoff/prune`, `V-workflow-commit` chỉ
+ * chạy `test/commit-staging.test.ts`, nên `test/prune.test.ts` không có đường
+ * nào vào ranh giới dù sửa nó là việc bình thường khi sửa khối đó. Khối đã
+ * khai `verify` nào thì file mà verification ấy chạy là phần của khối, bất kể
+ * exit_contract của task này có nhắc tới nó hay không. */
+
+test("⭐ taskBoundary: gộp probe của mọi verification thuộc khối trong touches, không chỉ cái exit_contract trỏ tới", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/modules/M-w.yaml": `id: M-w
+title: "Khối vỏ workflow, gom nhiều lệnh"
+nature: io
+paths: ["src/w.ts"]
+status: implemented
+verify:
+  - id: V-w-a
+    kind: probe
+    run: "npx tsx --test 'test/w-a.test.ts'"
+  - id: V-w-b
+    kind: probe
+    run: "npx tsx --test 'test/w-b.test.ts'"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const task = zTask.parse({
+      id: "T-001",
+      title: "t",
+      serves: ["G-001"],
+      implements: "D-001",
+      scope: "P-thu",
+      touches: ["M-w"],
+      // exit_contract chỉ trỏ V-w-a — V-w-b hoàn toàn không được nhắc tới,
+      // đúng hình dạng ca gốc M-workflow/V-workflow-commit.
+      exit_contract: [{ kind: "verification", target: "M-w/V-w-a" }],
+    });
+    const boundary = taskBoundary(task, graph);
+    assert.ok(
+      boundary.includes("test/w-a.test.ts"),
+      `boundary phải chứa probe mà exit_contract trỏ tới, thực tế: ${JSON.stringify(boundary)}`,
+    );
+    assert.ok(
+      boundary.includes("test/w-b.test.ts"),
+      `boundary phải chứa probe của verification KHÁC mà exit_contract KHÔNG trỏ tới, thực tế: ${JSON.stringify(boundary)}`,
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+/* --- ownsGanasFile: fact SINH RA trong lúc làm task (D-019, nhánh 2) -------
+ *
+ * `ownsGanasFile` trước đây chỉ nhận fact đã khai sẵn ở
+ * `context_contract.facts` — fact MỚI thì chưa thể có ở đó, nó vừa sinh ra vì
+ * task này chạy verify (`F-FLOW-001` đã bị vậy: không task nào nhận, `ganas
+ * commit` bỏ lại working tree). Nhận diện thay bằng `verified_by`: fact ghi
+ * `verified_by` đúng bằng sessionId của phiên đang làm task thì coi là fact
+ * của phiên đó. */
+
+test("⭐ ownsGanasFile: nhận fact có verified_by trỏ về phiên đang làm task, dù task không khai fact đó", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/facts/F-MOI-001.yaml": `- id: F-MOI-001
+  statement: "phát biểu vừa verify xong trong chính phiên này"
+  scope: P-thu
+  verify:
+    run: "true"
+    expect: exit_zero
+  verified_by: "session-abc"
+  anchors:
+    - "src/a/index.ts#L1"
+`,
+  });
+  try {
+    const graph = await loadGraph(root);
+    const task = zTask.parse({
+      id: "T-001",
+      title: "t",
+      serves: ["G-001"],
+      implements: "D-001",
+      scope: "P-thu",
+      exit_contract: [{ kind: "command", run: "true" }],
+    });
+
+    assert.ok(
+      !ownsGanasFile(task, ".ganas/facts/F-MOI-001.yaml"),
+      "không truyền graph/sessionId thì giữ hành vi cũ — không sở hữu",
+    );
+    assert.ok(
+      ownsGanasFile(task, ".ganas/facts/F-MOI-001.yaml", graph, "session-abc"),
+      "fact.verified_by khớp sessionId đang làm task thì phải được sở hữu",
+    );
+    assert.ok(
+      !ownsGanasFile(task, ".ganas/facts/F-MOI-001.yaml", graph, "session-khac"),
+      "sessionId khác thì KHÔNG được nhận nhầm fact của phiên khác",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});

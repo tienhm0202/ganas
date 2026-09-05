@@ -151,6 +151,53 @@ export function verificationPathRefs(task: Task, graph: Graph): ContractPathRef[
   return refs;
 }
 
+/**
+ * Đường dẫn mà RUN của MỌI verification thuộc khối trong `touches` chạy —
+ * không chỉ verification mà `exit_contract` TRỎ TỚI (đó là việc của
+ * `verificationPathRefs` ở trên).
+ *
+ * Đây là nhánh 1 của D-019, lỗ hổng còn hở sau T-067: một khối thường khai
+ * NHIỀU verification, còn `exit_contract` của một task chỉ trỏ vài cái trong
+ * số đó. Ca gốc: `M-workflow` gom `commit/flow/gate/handoff/prune`, còn
+ * `V-workflow-commit` chỉ chạy `test/commit-staging.test.ts` — nên
+ * `test/prune.test.ts` không có đường nào vào ranh giới, dù sửa nó là việc
+ * bình thường khi sửa khối đó. Khối đã khai `verify` nào thì file mà
+ * verification ấy CHẠY là phần của khối, bất kể `exit_contract` của task này
+ * có nhắc tới nó hay không.
+ *
+ * Dùng lại `pathsFromCommand` — cùng một bộ rút đường dẫn với
+ * `verificationPathRefs`, không viết bộ thứ hai.
+ *
+ * CHỈ gộp `kind: probe`/`kind: eval`, KHÔNG gộp `kind: contract` — đo thật
+ * trên chính repo này (so `taskBoundary` của 73 task `done` trước/sau bản vá)
+ * cho thấy `kind: contract` là nguồn DUY NHẤT gây rò khối: `run` của một
+ * contract luôn `grep` cả file phía khối NGUỒN lẫn file phía khối ĐÍCH (`to`)
+ * để so cổng — vd `V-commands-to-mcp` của `M-commands` grep thẳng
+ * `src/mcp/server.ts`, kéo file của `M-mcp` vào ranh giới của một task chỉ
+ * `touches: [M-commands]`. Đây đúng lớp rủi ro ICE-036: `ganas commit` git-add
+ * nhầm file khối khác nếu nó cũng đang bị sửa trong cùng working tree.
+ * `probe`/`eval` không có vấn đề này — `run` của chúng là lệnh test THẬT SỰ
+ * chạy trên chính khối, không grep chéo sang khối khác.
+ */
+function moduleVerifyPathRefs(task: Task, graph: Graph): ContractPathRef[] {
+  const refs: ContractPathRef[] = [];
+  const seen = new Set<string>();
+
+  for (const moduleId of task.touches) {
+    const mod = graph.modules.get(moduleId)?.value;
+    for (const v of mod?.verify ?? []) {
+      if (v.kind !== "probe" && v.kind !== "eval") continue;
+      for (const raw of pathsFromCommand(v.run)) {
+        const path = raw.replace(/^\.\//, "");
+        if (!path || seen.has(path)) continue;
+        seen.add(path);
+        refs.push({ path, from: `bằng chứng \`${moduleId}/${v.id}\`` });
+      }
+    }
+  }
+  return refs;
+}
+
 /* ------------------------------------------------------------------------- *
  * Ranh giới code của task
  * ------------------------------------------------------------------------- */
@@ -159,7 +206,9 @@ export function verificationPathRefs(task: Task, graph: Graph): ContractPathRef[
  * Ranh giới CODE của một task: code của mọi khối task chạm tới, cộng đường dẫn
  * mà chính `exit_contract` chạy — TRỰC TIẾP (tiêu chí `command`/`artifact`) lẫn
  * GIÁN TIẾP qua một bằng chứng đã khai sẵn (tiêu chí `verification`, xem
- * `verificationPathRefs`).
+ * `verificationPathRefs`) — cộng đường dẫn mà MỌI verification khác của khối
+ * trong `touches` chạy, dù `exit_contract` không nhắc tới (xem
+ * `moduleVerifyPathRefs`, nhánh 1 của D-019).
  *
  * KHÔNG trả về `.ganas` — xem `ownsGanasFile`. Stage cả thư mục là lý do commit
  * mang nhãn một task lại chứa graph của task khác, và lịch sử graph chính là
@@ -173,6 +222,7 @@ export function taskBoundary(task: Task, graph: Graph): string[] {
   }
   for (const p of contractPaths(task)) patterns.add(p);
   for (const r of verificationPathRefs(task, graph)) patterns.add(r.path);
+  for (const r of moduleVerifyPathRefs(task, graph)) patterns.add(r.path);
   return [...patterns];
 }
 
@@ -427,7 +477,8 @@ function designIdFromArtifactRef(ref: string): string {
  *
  * Quyền sở hữu đi theo ĐÚNG những liên kết task tự khai — file task đó, khối
  * trong `touches`, fact trong `context_contract.facts`, và design/goal/phạm vi
- * mà nó khai `implements`/`serves`/`scope`/`produces`. Nhờ vậy
+ * mà nó khai `implements`/`serves`/`scope`/`produces` — cộng fact mà chính
+ * PHIÊN đang làm task này vừa verify (xem nhánh 2 dưới đây). Nhờ vậy
  * `.ganas/designs/D-003.yaml` của một loạt task khác không lọt vào commit
  * mang nhãn task này, mà bộ khung spine của chính task thì vẫn đi cùng nó.
  *
@@ -446,9 +497,24 @@ function designIdFromArtifactRef(ref: string): string {
  * Cố tình KHÔNG nhận `config.yaml`: mức cưỡng chế là quyết định của người, ở
  * tầm dự án chứ không phải việc của một task — nó đáng có commit riêng.
  *
+ * **Nhánh 2 (D-019):** fact SINH RA trong lúc làm task — vì chính task này
+ * chạy `ganas verify` — chưa thể có mặt ở `context_contract.facts`, khai
+ * trường đó đòi biết trước một fact còn chưa tồn tại lúc mở task. Hệ quả cũ:
+ * fact không task nào nhận, `ganas commit` bỏ lại working tree — `F-FLOW-001`
+ * đã bị vậy. Nhận diện thay bằng `verified_by`: fact ghi `verified_by` đúng
+ * bằng `sessionId` của phiên đang làm task này thì coi là fact của phiên đó.
+ * Cần cả `graph` (để tra `verified_by` của fact) lẫn `sessionId` (để so
+ * khớp) — thiếu một trong hai thì bỏ qua nhánh này, giữ hành vi cũ (an toàn
+ * hơn là đoán bừa).
+ *
  * File không thuộc nhóm nào thì để lại và BÁO cho người, đừng nuốt im.
  */
-export function ownsGanasFile(task: Task, relPath: string): boolean {
+export function ownsGanasFile(
+  task: Task,
+  relPath: string,
+  graph?: Graph,
+  sessionId?: string,
+): boolean {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
   const prefix = `${GANAS_DIR}/`;
   if (!p.startsWith(prefix)) return false;
@@ -457,7 +523,7 @@ export function ownsGanasFile(task: Task, relPath: string): boolean {
   if (inner === LEDGER_FILE) return true;
 
   const stem = inner.replace(YAML_EXT, "");
-  return (
+  if (
     stem === `${DIRS.tasks}/${task.id}` ||
     stem === `${DIRS.designs}/${task.implements}` ||
     stem === `${DIRS.scopes}/${task.scope}` ||
@@ -465,5 +531,14 @@ export function ownsGanasFile(task: Task, relPath: string): boolean {
     task.touches.some((m) => stem === `${DIRS.modules}/${m}`) ||
     task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`) ||
     task.produces.some((ref) => stem === `${DIRS.designs}/${designIdFromArtifactRef(ref)}`)
-  );
+  ) {
+    return true;
+  }
+
+  if (graph && sessionId && stem.startsWith(`${DIRS.facts}/`)) {
+    const factId = stem.slice(`${DIRS.facts}/`.length);
+    if (graph.facts.get(factId)?.value.verified_by === sessionId) return true;
+  }
+
+  return false;
 }

@@ -1,0 +1,69 @@
+id: D-019
+title: "Ranh giới task tự biết file kề cận, thay vì bắt mỗi task nhớ khai thêm một tiêu chí"
+serves: [G-002]
+summary: |-
+  `ICE-022` là phần CÒN HỞ sau T-067. T-067 đã cho `taskBoundary()` đọc probe
+  của những `verification` mà `exit_contract` TRỎ TỚI. Ba nhánh khác vẫn ngoài
+  ranh giới, mỗi nhánh một cơ chế riêng — và bằng chứng chúng còn hở là chính
+  chặng 1.2.0 vừa rồi: T-084, T-086, T-089, T-097 đều phải thêm tiêu chí
+  `artifact` vá tay SAU KHI việc đã xong. Bốn trên bốn.
+
+  Đó không còn là ngẫu nhiên. Cách chữa KHÔNG phải bắt mỗi task nhớ thêm một
+  tiêu chí — đó là kỷ luật, và kỷ luật thì quên; lập luận này chính là cái
+  D-014 đã dùng cho helper quét, và nó đúng ở đây vì cùng một lý do.
+
+  ## Nhánh 1 — test của khối mà không probe nào trỏ tới
+
+  `taskBoundary()` gộp `module.paths` với `contractPaths(task)` và probe của
+  verification mà `exit_contract` trỏ tới. Nhưng một khối thường có NHIỀU
+  verification, và `exit_contract` chỉ trỏ vài cái. `M-workflow` gom
+  `commit/flow/gate/handoff/prune`, còn `V-workflow-commit` chỉ chạy
+  `test/commit-staging.test.ts` — nên `test/prune.test.ts` không có đường nào
+  vào ranh giới, dù sửa nó là việc bình thường khi sửa khối đó.
+
+  Chữa: gộp probe của MỌI verification thuộc khối trong `touches`, không chỉ
+  cái được `exit_contract` trỏ tới. Khối đã khai `verify` nào thì file test của
+  những verification ấy là phần của khối.
+
+  ## Nhánh 2 — fact sinh ra TRONG LÚC làm task
+
+  `ownsGanasFile` cho task sở hữu fact đã khai ở `context_contract.facts`. Fact
+  MỚI thì chưa có ở đó — nó vừa sinh ra vì task này chạy verify. Kết quả: fact
+  không task nào nhận, `ganas commit` bỏ lại. `F-FLOW-001` đã bị vậy.
+
+  Chữa: nhận fact có `verified_by` trỏ về phiên đang làm task.
+
+  ## Nhánh 3 — docs: CỐ Ý KHÔNG LÀM Ở ĐÂY
+
+  `docs/**` không thuộc `paths` của khối nào, và không suy được máy móc docs
+  nào thuộc task nào — `docs/COMMANDS.md` nói về mọi lệnh, không riêng khối nào.
+  Mọi cách chữa tự động đều phải ĐOÁN, và đoán sai ở đây nghĩa là kéo nhầm file
+  người khác đang sửa vào commit của mình. Tiêu chí `artifact` khai tay vẫn là
+  câu trả lời đúng cho docs; nó tường minh và không đoán.
+
+  Ghi rõ điều này để chặng sau đừng "làm nốt cho đủ ba nhánh".
+
+  ## Vì sao cảnh báo hiện tại không đủ
+
+  Cảnh báo "ngoài ranh giới" KHÔNG đổi mã thoát, nên không ai bị chặn — nó chỉ
+  trôi qua. Bốn lần trong chặng 1.2.0 nó đã in ra đúng thứ cần in, và bốn lần
+  đều bị đọc lướt. Sau khi hai nhánh trên khép lại, số cảnh báo còn sót sẽ ít
+  và đáng tin hơn nhiều; lúc đó siết mã thoát mới có nghĩa, và đó là việc của
+  task thứ hai.
+
+  ## Không làm trong chặng này
+
+  Không đụng `docs` (lý do trên). Không đổi ý nghĩa `contractPaths` hay
+  `verificationPathRefs` đang chạy — chỉ THÊM nguồn đường dẫn, không thay cái
+  đã có.
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/boundary.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+status: active
+created_at: 2026-09-05T17:40:00Z

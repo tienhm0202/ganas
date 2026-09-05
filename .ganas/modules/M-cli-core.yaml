@@ -70,7 +70,7 @@ contract:
     - name: outsideBoundary
       shape: "(task: Task, graph: Graph, touched: readonly string[]) => string[]"
     - name: ownsGanasFile
-      shape: "(task: Task, relPath: string) => boolean"
+      shape: "(task: Task, relPath: string, graph?: Graph, sessionId?: string) => boolean"
     - name: parseArgs
       shape: "(raw: string[], booleanFlags?: Iterable<string>) => Argv"
     - name: searchFacts

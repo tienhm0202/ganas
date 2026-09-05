@@ -21,7 +21,7 @@ import {
 } from "../commit.js";
 import { alreadyGreen, evaluateGate, formatGate, type GateResult } from "../gate.js";
 import { GANAS_DIR } from "../graph/paths.js";
-import type { Sourced } from "../graph/types.js";
+import type { Graph, Sourced } from "../graph/types.js";
 import type { Task } from "../model/index.js";
 import { baselineFor, releaseSession, taskForSession } from "../state.js";
 import { type Argv, enabled, flag, option } from "../util/args.js";
@@ -68,12 +68,30 @@ function notFullyStaged(e: PorcelainEntry): boolean {
   return e.x === "?" || e.y !== " ";
 }
 
-function ownedPaths(task: Task, entries: readonly PorcelainEntry[]): string[] {
-  return [...new Set(entries.filter((e) => ownsGanasFile(task, e.path)).map((e) => e.path))];
+function ownedPaths(
+  task: Task,
+  entries: readonly PorcelainEntry[],
+  graph: Graph,
+  sessionId: string | undefined,
+): string[] {
+  return [
+    ...new Set(
+      entries.filter((e) => ownsGanasFile(task, e.path, graph, sessionId)).map((e) => e.path),
+    ),
+  ];
 }
 
-function foreignPaths(task: Task, entries: readonly PorcelainEntry[]): string[] {
-  return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
+function foreignPaths(
+  task: Task,
+  entries: readonly PorcelainEntry[],
+  graph: Graph,
+  sessionId: string | undefined,
+): string[] {
+  return [
+    ...new Set(
+      entries.filter((e) => !ownsGanasFile(task, e.path, graph, sessionId)).map((e) => e.path),
+    ),
+  ];
 }
 
 /**
@@ -160,8 +178,8 @@ export async function run(argv: Argv): Promise<number> {
 
   if (flag(argv, "dry-run")) {
     const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
-    const owned = ownedPaths(task, ganasChanged);
-    const foreign = foreignPaths(task, ganasChanged);
+    const owned = ownedPaths(task, ganasChanged, graph, sessionId);
+    const foreign = foreignPaths(task, ganasChanged, graph, sessionId);
     const message = buildCommitMessage(graph, task, gateResult);
 
     process.stdout.write(
@@ -185,8 +203,8 @@ export async function run(argv: Argv): Promise<number> {
 
   // Liệt kê SAU khi đóng task, nếu không file task vừa sửa sẽ không có trong danh sách.
   const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
-  const owned = ownedPaths(task, ganasChanged);
-  const foreign = foreignPaths(task, ganasChanged);
+  const owned = ownedPaths(task, ganasChanged, graph, sessionId);
+  const foreign = foreignPaths(task, ganasChanged, graph, sessionId);
 
   // Giữ lại đúng danh sách đã add — cần cho `resetStagedPaths` nếu recheck bên
   // dưới từ chối cây này.

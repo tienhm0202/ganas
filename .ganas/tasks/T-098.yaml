@@ -1,0 +1,60 @@
+id: T-098
+title: "Ranh giới gộp probe của MỌI verification thuộc khối, và nhận fact vừa
+  sinh trong phiên"
+serves: [ G-002 ]
+implements: D-019
+scope: P-cli
+status: done
+estimated_context: medium
+model: verifier
+commit_type: fix
+
+context_contract:
+  must_read:
+    - path: "src/boundary.ts"
+      why: "`taskBoundary` (:168) gộp ba nguồn; `verificationPathRefs` (:101) chỉ quét
+        verification mà exit_contract trỏ tới — đó là chỗ thiếu nhánh 1.
+        `ownsGanasFile` (:451) là chỗ thiếu nhánh 2"
+    - path: ".ganas/tasks/T-067.yaml"
+      why: "task đã chữa nhánh 'probe mà exit_contract trỏ tới' — đọc để THÊM đúng
+        chỗ, đừng làm lại hay đổi ý nghĩa cái đang chạy"
+  facts: []
+  open_questions: []
+
+touches: [ M-cli-core, M-commands ]
+
+exit_contract:
+  - kind: artifact
+    path: "test/boundary.test.ts"
+    must_contain: "mọi verification"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Hai nhánh, cùng một file, cùng một câu hỏi: ranh giới của task gồm những gì.
+
+  **Nhánh 1** — `taskBoundary` phải gộp probe của MỌI `verification` thuộc khối
+  trong `touches`, không chỉ cái `exit_contract` trỏ tới. Ca gốc: `M-workflow`
+  gom `commit/flow/gate/handoff/prune`, `V-workflow-commit` chỉ chạy
+  `test/commit-staging.test.ts`, nên `test/prune.test.ts` không đường nào vào.
+
+  **Nhánh 2** — `ownsGanasFile` nhận fact có `verified_by` trỏ về phiên đang
+  làm task. Fact SINH RA trong lúc làm chưa thể có mặt ở `context_contract.facts`,
+  nên hiện không task nào nhận nó (`F-FLOW-001` đã bị vậy).
+
+  Dùng lại `pathsFromCommand`/`looksLikePath` đã có. THÊM nguồn đường dẫn, đừng
+  đổi ý nghĩa `contractPaths` hay `verificationPathRefs` — chúng đang chạy đúng.
+
+  Rủi ro phải tự kiểm, không đoán: gộp rộng hơn có thể kéo file của khối khác
+  vào ranh giới nếu hai khối chung một file test. Đo thật trên repo này — chạy
+  `taskBoundary` cho vài task đã done và so trước/sau — rồi ghi kết quả vào báo
+  cáo. Rộng quá thì commit nuốt nhầm, đúng lớp lỗi ICE-036 vừa sửa.
+
+  KHÔNG đụng `docs/**`. D-019 ghi rõ vì sao: không suy được máy móc docs nào
+  thuộc task nào, và đoán sai nghĩa là kéo nhầm file người khác đang sửa.
+done_at: 2026-09-05T16:47:11.627Z
