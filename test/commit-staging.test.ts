@@ -485,3 +485,131 @@ test("⭐ --dry-run cảnh báo file phiên đã sửa nằm NGOÀI ranh giới 
     await cleanup(root);
   }
 });
+
+/* --- Ranh giới code: file TEST bị bỏ lại thì CHẶN commit thật -------------- */
+
+test("⭐ ganas commit TỪ CHỐI khi file test bị bỏ lại ngoài ranh giới, không tạo commit", async () => {
+  const root = await gitProject({ ...BASE, ".ganas/tasks/T-001.yaml": T_ZNSTRACK });
+  try {
+    await mkdir(join(root, "src", "a"), { recursive: true });
+    await writeFile(join(root, "src", "a", "index.ts"), "export {};\n", "utf8");
+    await mkdir(join(root, "tests", "e2e"), { recursive: true });
+    await writeFile(join(root, "tests", "e2e", "domain.test.ts"), "// test\n", "utf8");
+    // File TEST lạc — không thuộc `src/a/**` (paths của M-a) lẫn
+    // `tests/e2e/domain.test.ts` (đường mà exit_contract nhắc tới).
+    await mkdir(join(root, "test"), { recursive: true });
+    await writeFile(join(root, "test", "leftover.test.ts"), "// mồ côi\n", "utf8");
+
+    await assert.rejects(
+      () =>
+        ganasCommit({ positional: ["T-001"], options: { root }, flags: {}, passthrough: [] }),
+      /file test bị bỏ lại/,
+    );
+
+    const rev = await runShell("git rev-parse HEAD", { cwd: root });
+    assert.notEqual(rev.code, 0, "chưa có commit nào — kể cả commit đầu tiên cũng không được tạo");
+
+    const taskFile = await readFile(join(root, ".ganas", "tasks", "T-001.yaml"), "utf8");
+    assert.doesNotMatch(taskFile, /status:\s*done/, "task chưa xong thì không được đánh dấu done");
+
+    const staged = await runShell("git diff --cached --name-only", { cwd: root });
+    assert.equal(staged.stdout.trim(), "", "chặn TRƯỚC khi git add — index phải còn sạch");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("file KHÔNG phải test bị bỏ lại: vẫn chỉ cảnh báo như cũ, commit vẫn xong", async () => {
+  const root = await gitProject({ ...BASE, ".ganas/tasks/T-001.yaml": T_ZNSTRACK });
+  try {
+    await mkdir(join(root, "src", "a"), { recursive: true });
+    await writeFile(join(root, "src", "a", "index.ts"), "export {};\n", "utf8");
+    await mkdir(join(root, "tests", "e2e"), { recursive: true });
+    await writeFile(join(root, "tests", "e2e", "domain.test.ts"), "// test\n", "utf8");
+    // File lạc nhưng KHÔNG phải file test — đúng ca cũ, không được chặn.
+    await mkdir(join(root, "scripts"), { recursive: true });
+    await writeFile(join(root, "scripts", "lac.sh"), "#!/bin/sh\n", "utf8");
+
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string) => {
+      out.push(String(chunk));
+      return true;
+    });
+    try {
+      assert.equal(
+        await ganasCommit({
+          positional: ["T-001"],
+          options: { root },
+          flags: {},
+          passthrough: [],
+        }),
+        0,
+      );
+    } finally {
+      process.stdout.write = write;
+    }
+
+    const text = out.join("");
+    assert.match(text, /NGOÀI ranh giới code/, `phải vẫn cảnh báo. Đã in:\n${text}`);
+
+    const show = await runShell("git show --name-only --format= HEAD", { cwd: root });
+    assert.doesNotMatch(show.stdout, /scripts\/lac\.sh/, "file lạc không được vào commit");
+
+    const taskFile = await readFile(join(root, ".ganas", "tasks", "T-001.yaml"), "utf8");
+    assert.match(taskFile, /status:\s*done/, "file lạc không phải test thì không được chặn đóng task");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("--allow-outside-tests: cửa thoát có, nhưng phải gõ ra tường minh", async () => {
+  const root = await gitProject({ ...BASE, ".ganas/tasks/T-001.yaml": T_ZNSTRACK });
+  try {
+    await mkdir(join(root, "src", "a"), { recursive: true });
+    await writeFile(join(root, "src", "a", "index.ts"), "export {};\n", "utf8");
+    await mkdir(join(root, "tests", "e2e"), { recursive: true });
+    await writeFile(join(root, "tests", "e2e", "domain.test.ts"), "// test\n", "utf8");
+    await mkdir(join(root, "test"), { recursive: true });
+    await writeFile(join(root, "test", "leftover.test.ts"), "// mồ côi\n", "utf8");
+
+    assert.equal(
+      await ganasCommit({
+        positional: ["T-001"],
+        options: { root },
+        flags: { "allow-outside-tests": true },
+        passthrough: [],
+      }),
+      0,
+      "--allow-outside-tests phải commit thật, không bị chặn",
+    );
+
+    const taskFile = await readFile(join(root, ".ganas", "tasks", "T-001.yaml"), "utf8");
+    assert.match(taskFile, /status:\s*done/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("gate KHÔNG bao giờ chặn — chỉ commit mới chặn khi bỏ lại file test", async () => {
+  const root = await gitProject({ ...BASE, ".ganas/tasks/T-001.yaml": T_ZNSTRACK });
+  try {
+    await mkdir(join(root, "src", "a"), { recursive: true });
+    await writeFile(join(root, "src", "a", "index.ts"), "export {};\n", "utf8");
+    await mkdir(join(root, "tests", "e2e"), { recursive: true });
+    await writeFile(join(root, "tests", "e2e", "domain.test.ts"), "// test\n", "utf8");
+    await mkdir(join(root, "test"), { recursive: true });
+    await writeFile(join(root, "test", "leftover.test.ts"), "// mồ côi\n", "utf8");
+
+    const gate = await import("../src/commands/gate.js");
+    const code = await gate.run({
+      positional: ["T-001"],
+      options: { root },
+      flags: {},
+      passthrough: [],
+    });
+    assert.equal(code, 0, "gate là lệnh để NHÌN — không được đổi mã thoát vì file test bị lạc");
+  } finally {
+    await cleanup(root);
+  }
+});

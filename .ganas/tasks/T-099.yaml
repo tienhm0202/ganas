@@ -1,0 +1,55 @@
+id: T-099
+title: "Cảnh báo ngoài ranh giới đổi mã thoát khi file bị bỏ lại là file test"
+serves: [ G-002 ]
+implements: D-019
+scope: P-cli
+status: done
+estimated_context: small
+model: verifier
+commit_type: fix
+blocked_by: [ T-098 ]
+
+context_contract:
+  must_read:
+    - path: "src/boundary.ts"
+      why: "`formatBoundaryWarning` dựng chữ cảnh báo; hiện nó chỉ trả chuỗi, không ai
+        đổi mã thoát theo nó"
+    - path: "src/commands/commit.ts"
+      why: "nơi cảnh báo được in ra và là chỗ duy nhất nên siết — `ganas commit` là
+        lệnh THAY ĐỔI trạng thái, `ganas gate` chỉ để nhìn"
+  facts: []
+  open_questions:
+    - "Siết ở `ganas commit` có đủ không, hay còn đường nào bỏ file lại mà không
+      qua lệnh đó? Trả lời bằng cách đọc code, đừng đoán."
+
+touches: [ M-cli-core, M-commands ]
+
+exit_contract:
+  - kind: artifact
+    path: "test/commit-staging.test.ts"
+    must_contain: "file test bị bỏ lại"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Chạy SAU T-098 và chỉ khi T-098 xong: siết trước khi khép hai nhánh kia thì
+  cảnh báo còn nhiều và đúng phần lớn là dương tính giả, siết vào đó là dạy
+  người ta dùng cờ bỏ qua.
+
+  Ranh giới của việc siết — quan trọng hơn bản thân việc siết:
+  - chỉ siết ở `ganas commit`, KHÔNG siết `ganas gate`. Gate là lệnh để NHÌN;
+    một lệnh nhìn mà chặn là thứ không ai ngờ tới (`src/commands/CLAUDE.md`).
+  - chỉ siết khi file bị bỏ lại là file TEST. Đó là ca gây hỏng thật: commit
+    mang code mới mà bỏ test cũ ⇒ `npm test` trên HEAD đó đỏ. File khác bị bỏ
+    lại thì phiền, không hỏng.
+  - phải có đường thoát tường minh cho người biết mình đang làm gì, và đường đó
+    phải TỰ KHAI trong thông báo lỗi.
+
+  `ganas commit` đã có tiền lệ từ chối: recheck cây sắp commit đỏ thì trả mã 1
+  kèm gợi ý cụ thể. Theo đúng khuôn đó, đừng phát minh kiểu báo lỗi mới.
+done_at: 2026-09-05T16:59:30.045Z

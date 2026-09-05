@@ -268,10 +268,32 @@ export function matchPatterns(boundary: readonly string[]): string[] {
 }
 
 /**
+ * File có phải file TEST không, chỉ xét theo TÊN — không mở nội dung.
+ *
+ * Quy ước duy nhất đang dùng thật trong repo này là `*.test.ts` (xem
+ * `test/*.test.ts`), nhưng nhận thêm hậu tố `.spec.` và các đuôi JS/TS khác
+ * (`.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`, `.cts`) để không vỡ ngay khi có ai
+ * đổi công cụ test — bắt hẹp hơn mức cần thì một file test thật lọt qua mà
+ * không ai biết, còn bắt rộng hơn một chút chỉ tốn thêm vài dòng regex.
+ *
+ * Dùng ở `ganas commit` (xem `src/commands/commit.ts`) để quyết định file
+ * NGOÀI ranh giới nào đáng CHẶN commit — file test bị bỏ lại là ca duy nhất
+ * `outsideBoundary` sinh ra hỏng thật (`npm test` trên chính commit đó ĐỎ);
+ * file khác bị bỏ lại thì phiền, không hỏng, xem docstring `outsideBoundary`.
+ */
+export function isTestFilePath(path: string): boolean {
+  return /\.(test|spec)\.[cm]?[jt]sx?$/i.test(path);
+}
+
+/**
  * File phiên đã sửa mà nằm NGOÀI ranh giới code của task.
  *
  * Chỉ để cảnh báo, không bao giờ chặn và không đổi mã thoát — cùng hạng với
- * `alreadyGreen`: nói ra một sự thật khó chịu rồi để người quyết.
+ * `alreadyGreen`: nói ra một sự thật khó chịu rồi để người quyết. (`ganas
+ * commit` tự quyết định chặn thêm cho riêng file TEST bằng `isTestFilePath`
+ * ở trên — quyết định đó nằm ở nơi gọi, không ở đây, để `ganas gate` tiếp tục
+ * gọi được hàm này mà không bao giờ bị chặn theo, xem bất biến ở
+ * `src/commands/CLAUDE.md`: lệnh chỉ để NHÌN thì không được chặn.)
  *
  * Ba quy ước, mỗi cái có lý do riêng:
  *

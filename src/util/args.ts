@@ -42,6 +42,9 @@ const KNOWN_BOOLEAN_FLAGS = new Set([
   "dry-run",
   "all-ganas",
   "check",
+  // `ganas commit --allow-outside-tests T-005` không được nuốt `T-005` làm
+  // giá trị của cờ — cùng lý do với `dry-run`/`all-ganas` ở trên.
+  "allow-outside-tests",
 ]);
 
 export function parseArgs(raw: string[], booleanFlags: Iterable<string> = []): Argv {

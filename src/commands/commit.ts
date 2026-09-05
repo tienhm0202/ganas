@@ -6,6 +6,7 @@ import {
   contractPathRefs,
   formatBoundaryWarning,
   formatDesignDriftWarning,
+  isTestFilePath,
   outsideBoundary,
   ownsGanasFile,
   taskBoundary,
@@ -161,12 +162,14 @@ export async function run(argv: Argv): Promise<number> {
   // `codePaths` chứ không tính lại, để không có đường nào cho hai thứ lệch nhau.
   // Nguồn `touched` là GIT (gitTouchedPaths), không phải sổ phiên — xem ICE-008.
   const touched = await gitTouchedPaths(root);
-  const outsideWarning = formatBoundaryWarning(
-    taskId,
-    codePaths,
-    touched,
-    outsideBoundary(task, graph, touched),
-  );
+  const outsideFiles = outsideBoundary(task, graph, touched);
+  const outsideWarning = formatBoundaryWarning(taskId, codePaths, touched, outsideFiles);
+
+  // File TEST bị bỏ lại ngoài ranh giới là ca DUY NHẤT của `outsideFiles` gây
+  // hỏng thật, chứ không chỉ phiền: commit mang code mới mà bỏ test cũ lại ⇒
+  // `npm test` trên chính commit đó ĐỎ ở mọi máy khác. File khác bị bỏ lại vẫn
+  // chỉ cảnh báo — xem `outsideWarning` ở trên, không đổi hành vi đó.
+  const outsideTestFiles = outsideFiles.filter(isTestFilePath);
 
   // Cùng khối chữ mà `ganas gate` in — cảnh báo, không chặn.
   const driftWarning = formatDesignDriftWarning(task, graph, freshness);
@@ -196,6 +199,22 @@ export async function run(argv: Argv): Promise<number> {
         `\n\n--- commit message ---\n${message}`,
     );
     return 0;
+  }
+
+  // Chặn THẬT, chỉ ở đây — `dry-run` đã return ở trên nên không bị chặn, và
+  // `ganas gate` không gọi tới hàm này nên cũng không bị chặn theo (bất biến
+  // `src/commands/CLAUDE.md`: lệnh chỉ để NHÌN thì không được chặn). Đặt TRƯỚC
+  // `closeTaskFile`/`git add` — chưa động gì tới đĩa hay index nên không cần
+  // dọn ngược gì khi từ chối, khác ca recheck đỏ ở dưới (ICE-036).
+  if (outsideTestFiles.length > 0 && !flag(argv, "allow-outside-tests")) {
+    throw new GanasError(
+      `✗ ${outsideTestFiles.length} file test bị bỏ lại ngoài ranh giới code của ${taskId}:\n` +
+        outsideTestFiles.map((p) => `    ${p}`).join("\n") +
+        `\n  Commit mang code mới mà bỏ test cũ ở lại working tree ⇒ \`npm test\` trên chính ` +
+        `commit đó ĐỎ ở máy khác — đúng lỗi ranh giới task sinh ra để chặn.\n` +
+        `  Hoặc khai thêm khối vào \`touches\`, hoặc \`git add\` tay rồi commit cùng.\n` +
+        `  Biết rõ và vẫn muốn bỏ lại thì \`ganas commit ${taskId} --allow-outside-tests\`.\n`,
+    );
   }
 
   let originalTaskFile: string | null = null;
