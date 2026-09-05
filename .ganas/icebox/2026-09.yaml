@@ -150,7 +150,9 @@
   anchors:
     - src/hooks/io/handlers.ts:356
     - src/state.ts:143
-  status: open
+  status: promoted
+  promoted_to: T-092
+  closed_at: 2026-09-05T13:54:00.316Z
 - id: ICE-035
   title: schemaFields() chỉ soi tới khối lồng ĐẦU TIÊN của zConfig, session_start
     và claim tuột khỏi bộ dò ngõ cụt
@@ -197,4 +199,27 @@
   anchors:
     - src/commands/commit.ts:174
     - commit:abb3cf8
+  status: promoted
+  promoted_to: T-092
+  closed_at: 2026-09-05T13:54:00.515Z
+- id: ICE-037
+  title: commit_type mặc định chore không có validator nhắc, nên mọi task cũ dán
+    nhãn sai lặng lẽ
+  found_at: 2026-09-05T14:28:29.038Z
+  review_after_days: 30
+  weight: 3
+  ease: 4
+  why_deferred: "Quan sát 2026-09-05 ngay lượt commit đầu tiên dùng subject
+    conventional: T-091 hiện thực auto-loop — một tính năng — nhưng ra
+    chore(D-015/T-091) vì task không khai commit_type, và không lệnh nào nhắc.
+    Repo đã có tiền lệ đúng cho ca này: spine/task-missing-model là warning cho
+    task bỏ trống model, và brief mở đầu bằng cảnh báo chưa ai quyết ai làm.
+    commit_type không có gì tương đương, nên nhãn sai không nổi lên ở đâu — hệt
+    lớp lỗi mà chính D-014 vừa đóng: một phép kiểm im lặng thì không phải phép
+    kiểm. Chưa ai duyệt cách sửa: hoặc thêm warning
+    spine/task-missing-commit-type, hoặc bỏ default để schema bắt buộc khai. Bỏ
+    default thì 69 task cũ đỏ ngay, nên nhiều khả năng là warning."
+  anchors:
+    - src/model/task.ts:216
+    - commit:14ea014
   status: open
