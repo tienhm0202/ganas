@@ -224,10 +224,11 @@
     - commit:14ea014
   status: closed
   closed_at: 2026-09-05T16:04:30.145Z
-  closed_reason: "Đã sửa ở D-018/T-097: commit_type thành optional (mặc định chore chuyển
-    xuống commitSubject, nơi đọc), cộng warning spine/task-missing-commit-type
-    cùng khuôn spine/task-missing-model. ganas validate vẫn đúng 11 cảnh báo sau
-    khi sửa — 72 task cũ không khai commit_type đều done nên không ồn."
+  closed_reason: "Đã sửa ở D-018/T-097: commit_type thành optional (mặc định chore
+    chuyển xuống commitSubject, nơi đọc), cộng warning
+    spine/task-missing-commit-type cùng khuôn spine/task-missing-model. ganas
+    validate vẫn đúng 11 cảnh báo sau khi sửa — 72 task cũ không khai
+    commit_type đều done nên không ồn."
 - id: ICE-038
   title: Không có lệnh xem trạng thái auto_loop (rounds/halted) của một phiên
   found_at: 2026-09-05T15:10:52.927Z
@@ -296,4 +297,46 @@
   anchors:
     - src/model/knowledge.ts:121
   scope: P-graph-core
+  status: open
+- id: ICE-042
+  title: M-workflow gom năm file nhưng chỉ khai một probe, nên ba test của khối
+    vẫn không có đường vào ranh giới
+  found_at: 2026-09-05T16:47:01.979Z
+  review_after_days: 30
+  weight: 4
+  ease: 3
+  why_deferred: "Phát hiện lúc làm T-098 (D-019), ngoài phạm vi task đó. T-098 đã
+    chữa ĐÚNG lớp lỗi ở tầng hàm — taskBoundary giờ gộp probe của mọi
+    verification thuộc khối trong touches — nhưng ca gốc mà ICE-022 nêu
+    (test/prune.test.ts của M-workflow) vẫn KHÔNG tự hết, vì M-workflow chỉ khai
+    một verify là V-workflow-commit chạy test/commit-staging.test.ts. Hai entry
+    còn lại là kind contract, đã bị T-098 cố ý loại khỏi phép gộp sau khi đo
+    thấy contract gây rò chéo khối 27/73 task. Nói cách khác: hàm đã đúng, DỮ
+    LIỆU KHỐI mới là chỗ thiếu — không verify nào trỏ test/prune.test.ts,
+    test/gate.test.ts hay test/handoff.test.ts. Chưa ai duyệt cách sửa: hoặc
+    khai thêm verify entry cho từng file test của khối, hoặc audit độ đầy đủ
+    verify: của cả 22 khối. Việc thứ hai đáng làm nhưng là một chặng riêng,
+    không nhét vào D-019."
+  anchors:
+    - .ganas/modules/M-workflow.yaml
+    - src/boundary.ts:168
+  status: open
+- id: ICE-043
+  title: "M-cli-core.yaml lệch contract so với gen-ports: thiếu Freshness và
+    formatDesignDriftWarning"
+  found_at: 2026-09-05T16:47:02.282Z
+  review_after_days: 30
+  weight: 2
+  ease: 4
+  why_deferred: "Phát hiện lúc làm T-098, đã có TỪ TRƯỚC khi task đó chạm vào
+    file. 'node scripts/gen-ports.mjs --scope P-cli --print M-cli-core' sinh ra
+    cổng Freshness (input) và formatDesignDriftWarning (output) mà YAML
+    checked-in không có. T-098 không sửa vì full regen sẽ trộn thay đổi không
+    liên quan vào diff của task, và đó là quyết định đúng. Chưa ai duyệt: chạy
+    regen cho riêng khối này rồi đối chiếu tay, hay chờ một đợt regen toàn
+    P-cli. Đáng chú ý vì bảng cổng do MÁY sinh mà lệch với máy thì nó không còn
+    là bảng do máy sinh."
+  anchors:
+    - .ganas/modules/M-cli-core.yaml
+    - scripts/gen-ports.mjs
   status: open

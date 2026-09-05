@@ -17339,6 +17339,7 @@ __export(boundary_exports, {
   formatBoundaryWarning: () => formatBoundaryWarning,
   formatDesignDriftWarning: () => formatDesignDriftWarning,
   formatDispatchWarning: () => formatDispatchWarning,
+  isTestFilePath: () => isTestFilePath,
   matchPatterns: () => matchPatterns,
   outsideBoundary: () => outsideBoundary,
   ownsGanasFile: () => ownsGanasFile,
@@ -17418,6 +17419,23 @@ function verificationPathRefs(task, graph) {
   }
   return refs;
 }
+function moduleVerifyPathRefs(task, graph) {
+  const refs = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const moduleId of task.touches) {
+    const mod = graph.modules.get(moduleId)?.value;
+    for (const v of mod?.verify ?? []) {
+      if (v.kind !== "probe" && v.kind !== "eval") continue;
+      for (const raw of pathsFromCommand(v.run)) {
+        const path = raw.replace(/^\.\//, "");
+        if (!path || seen.has(path)) continue;
+        seen.add(path);
+        refs.push({ path, from: `b\u1EB1ng ch\u1EE9ng \`${moduleId}/${v.id}\`` });
+      }
+    }
+  }
+  return refs;
+}
 function taskBoundary(task, graph) {
   const patterns = /* @__PURE__ */ new Set();
   for (const moduleId of task.touches) {
@@ -17426,6 +17444,7 @@ function taskBoundary(task, graph) {
   }
   for (const p of contractPaths(task)) patterns.add(p);
   for (const r of verificationPathRefs(task, graph)) patterns.add(r.path);
+  for (const r of moduleVerifyPathRefs(task, graph)) patterns.add(r.path);
   return [...patterns];
 }
 function matchPatterns(boundary) {
@@ -17437,6 +17456,9 @@ function matchPatterns(boundary) {
     if (!GLOB_CHARS.test(p)) out.add(`${p}/**`);
   }
   return [...out];
+}
+function isTestFilePath(path) {
+  return /\.(test|spec)\.[cm]?[jt]sx?$/i.test(path);
 }
 function outsideBoundary(task, graph, touched) {
   const boundary = taskBoundary(task, graph);
@@ -17524,14 +17546,21 @@ function designIdFromArtifactRef(ref) {
   const slash = ref.indexOf("/");
   return slash === -1 ? ref : ref.slice(0, slash);
 }
-function ownsGanasFile(task, relPath) {
+function ownsGanasFile(task, relPath, graph, sessionId) {
   const p = relPath.split("\\").join("/").replace(/^\.\//, "");
   const prefix = `${GANAS_DIR}/`;
   if (!p.startsWith(prefix)) return false;
   const inner = p.slice(prefix.length);
   if (inner === LEDGER_FILE) return true;
   const stem = inner.replace(YAML_EXT, "");
-  return stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`) || task.produces.some((ref) => stem === `${DIRS.designs}/${designIdFromArtifactRef(ref)}`);
+  if (stem === `${DIRS.tasks}/${task.id}` || stem === `${DIRS.designs}/${task.implements}` || stem === `${DIRS.scopes}/${task.scope}` || task.serves.some((g) => stem === `${DIRS.goals}/${g}`) || task.touches.some((m) => stem === `${DIRS.modules}/${m}`) || task.context_contract.facts.some((f) => stem === `${DIRS.facts}/${f}`) || task.produces.some((ref) => stem === `${DIRS.designs}/${designIdFromArtifactRef(ref)}`)) {
+    return true;
+  }
+  if (graph && sessionId && stem.startsWith(`${DIRS.facts}/`)) {
+    const factId = stem.slice(`${DIRS.facts}/`.length);
+    if (graph.facts.get(factId)?.value.verified_by === sessionId) return true;
+  }
+  return false;
 }
 var GLOB_CHARS, YAML_EXT;
 var init_boundary = __esm({
@@ -38214,7 +38243,10 @@ var KNOWN_BOOLEAN_FLAGS = /* @__PURE__ */ new Set([
   // của `--dry-run`, và lệnh im lặng chạy trên task khác.
   "dry-run",
   "all-ganas",
-  "check"
+  "check",
+  // `ganas commit --allow-outside-tests T-005` không được nuốt `T-005` làm
+  // giá trị của cờ — cùng lý do với `dry-run`/`all-ganas` ở trên.
+  "allow-outside-tests"
 ]);
 function parseArgs(raw, booleanFlags = []) {
   const bools = /* @__PURE__ */ new Set([...KNOWN_BOOLEAN_FLAGS, ...booleanFlags]);
@@ -39980,11 +40012,19 @@ async function resetStagedPaths(root, paths) {
 function notFullyStaged(e) {
   return e.x === "?" || e.y !== " ";
 }
-function ownedPaths(task, entries) {
-  return [...new Set(entries.filter((e) => ownsGanasFile(task, e.path)).map((e) => e.path))];
+function ownedPaths(task, entries, graph, sessionId) {
+  return [
+    ...new Set(
+      entries.filter((e) => ownsGanasFile(task, e.path, graph, sessionId)).map((e) => e.path)
+    )
+  ];
 }
-function foreignPaths(task, entries) {
-  return [...new Set(entries.filter((e) => !ownsGanasFile(task, e.path)).map((e) => e.path))];
+function foreignPaths(task, entries, graph, sessionId) {
+  return [
+    ...new Set(
+      entries.filter((e) => !ownsGanasFile(task, e.path, graph, sessionId)).map((e) => e.path)
+    )
+  ];
 }
 async function closeTaskFile(root, sourced) {
   return setTaskStatus(root, sourced, "done", { done_at: (/* @__PURE__ */ new Date()).toISOString() });
@@ -40029,18 +40069,15 @@ ${formatGate(gateResult)}
   const allGanas = flag(argv, "all-ganas");
   const codePaths = taskBoundary(task, graph);
   const touched = await gitTouchedPaths(root);
-  const outsideWarning = formatBoundaryWarning(
-    taskId,
-    codePaths,
-    touched,
-    outsideBoundary(task, graph, touched)
-  );
+  const outsideFiles = outsideBoundary(task, graph, touched);
+  const outsideWarning = formatBoundaryWarning(taskId, codePaths, touched, outsideFiles);
+  const outsideTestFiles = outsideFiles.filter(isTestFilePath);
   const driftWarning = formatDesignDriftWarning(task, graph, freshness);
   const willClose = enabled(argv, "close") && task.status !== "done" && gateResult.pendingHuman.length === 0;
   if (flag(argv, "dry-run")) {
     const ganasChanged2 = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
-    const owned2 = ownedPaths(task, ganasChanged2);
-    const foreign2 = foreignPaths(task, ganasChanged2);
+    const owned2 = ownedPaths(task, ganasChanged2, graph, sessionId);
+    const foreign2 = foreignPaths(task, ganasChanged2, graph, sessionId);
     const message2 = buildCommitMessage(graph, task, gateResult);
     process.stdout.write(
       `--- ganas commit ${taskId} (dry-run, KH\xD4NG stage, KH\xD4NG commit) ---
@@ -40058,11 +40095,21 @@ ${message2}`
     );
     return 0;
   }
+  if (outsideTestFiles.length > 0 && !flag(argv, "allow-outside-tests")) {
+    throw new GanasError(
+      `\u2717 ${outsideTestFiles.length} file test b\u1ECB b\u1ECF l\u1EA1i ngo\xE0i ranh gi\u1EDBi code c\u1EE7a ${taskId}:
+` + outsideTestFiles.map((p) => `    ${p}`).join("\n") + `
+  Commit mang code m\u1EDBi m\xE0 b\u1ECF test c\u0169 \u1EDF l\u1EA1i working tree \u21D2 \`npm test\` tr\xEAn ch\xEDnh commit \u0111\xF3 \u0110\u1ECE \u1EDF m\xE1y kh\xE1c \u2014 \u0111\xFAng l\u1ED7i ranh gi\u1EDBi task sinh ra \u0111\u1EC3 ch\u1EB7n.
+  Ho\u1EB7c khai th\xEAm kh\u1ED1i v\xE0o \`touches\`, ho\u1EB7c \`git add\` tay r\u1ED3i commit c\xF9ng.
+  Bi\u1EBFt r\xF5 v\xE0 v\u1EABn mu\u1ED1n b\u1ECF l\u1EA1i th\xEC \`ganas commit ${taskId} --allow-outside-tests\`.
+`
+    );
+  }
   let originalTaskFile = null;
   if (willClose) originalTaskFile = await closeTaskFile(root, sourced);
   const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
-  const owned = ownedPaths(task, ganasChanged);
-  const foreign = foreignPaths(task, ganasChanged);
+  const owned = ownedPaths(task, ganasChanged, graph, sessionId);
+  const foreign = foreignPaths(task, ganasChanged, graph, sessionId);
   const addedPaths = [...allGanas ? [GANAS_DIR] : owned, ...codePaths];
   for (const p of addedPaths) {
     await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
@@ -40082,7 +40129,7 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
     );
     return 0;
   }
-  if (!flag(argv, "no-recheck")) {
+  if (enabled(argv, "recheck")) {
     const recheck = await checkStagedTree(root, task, graph.config.build_check);
     const report = formatStagedTreeCheck(taskId, recheck);
     if (recheck.status === "failed") {
