@@ -10,10 +10,12 @@ nhận JSON qua stdin và phải trả JSON qua stdout đúng khuôn Claude Code
 
 ## Cổng vào
 
-Sáu handler cùng khuôn `(input: HookInput) => Promise<HookOutput>`:
-`sessionStart`, `preToolUse`, `postToolUse`, `stop`, `preCompact`,
-`sessionEnd`. Chúng được nối vào Claude Code qua `plugin/hooks/hooks.json` và
-`src/commands/hook.ts`; `readHookInput`/`writeHookOutput` lo phần stdin/stdout.
+Bảy handler cùng khuôn `(input: HookInput) => Promise<HookOutput>`:
+`sessionStart`, `preToolUse`, `postToolUse`, `stop`, `subagentStop`,
+`preCompact`, `sessionEnd`. Chúng được nối vào Claude Code qua
+`plugin/hooks/hooks.json` (sự kiện `SubagentStop` cho `subagentStop`) và
+`src/commands/hook.ts`; `readHookInput`/`writeHookOutput` lo phần
+stdin/stdout.
 
 ## Bất biến dễ phá
 

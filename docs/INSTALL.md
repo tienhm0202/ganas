@@ -8,7 +8,7 @@ ganas cài được 3 cách, tuỳ bạn muốn code nằm ở đâu:
 |              | 1. Claude Code plugin | 2. Editor khác qua MCP | 3. bun/npm add, không qua plugin system |
 |--------------|------------------------|--------------------------|-------------------------------------------|
 | Cơ chế       | plugin (hook + skill) | MCP server (`stdio`) | hook + skill tự khai thẳng trong `.claude/` của project |
-| Cưỡng chế    | có — `PreToolUse`/`Stop` chặn thật | không — chỉ gọi tool theo yêu cầu | có — cùng 6 hook thật như cột 1 |
+| Cưỡng chế    | có — `PreToolUse`/`Stop` chặn thật | không — chỉ gọi tool theo yêu cầu | có — cùng 7 hook thật như cột 1 (kể cả `SubagentStop`) |
 | Code nằm ở đâu | `~/.claude/plugins/cache/…` (dùng chung mọi project trên máy) | tuỳ editor | `node_modules/ganas/` — 100% trong project |
 | Cài          | `claude plugin install` | tự tay trỏ config MCP vào `ganas-mcp.mjs` | `bun add` + script cài kèm theo |
 
@@ -84,7 +84,7 @@ ganas 0.0.1
   Component inventory
     Skills (10) commit, gate, handoff, icebox, next, plan-to-tasks, prune, scope, trace, verify
     Agents (0)
-    Hooks (6)  SessionStart, PreToolUse, PostToolUse, Stop, PreCompact, SessionEnd
+    Hooks (7)  SessionStart, PreToolUse, PostToolUse, Stop, SubagentStop, PreCompact, SessionEnd
   Projected token cost
     Always-on:   ~1,748 tok   added to every session
 ```
@@ -284,9 +284,9 @@ icebox.
 
 ### Cưỡng chế đủ như Claude Code plugin
 
-`--claude-code` viết đúng 6 hook thật (không phải bản rút gọn) nên
-`PreToolUse`/`Stop` chặn y hệt cài qua mục 1 — chỉ khác chỗ code nằm
-(`node_modules/ganas/` thay vì `~/.claude/plugins/cache/…`).
+`--claude-code` viết đúng 7 hook thật, kể cả `SubagentStop` (không phải bản
+rút gọn) nên `PreToolUse`/`Stop` chặn y hệt cài qua mục 1 — chỉ khác chỗ code
+nằm (`node_modules/ganas/` thay vì `~/.claude/plugins/cache/…`).
 
 ### Cập nhật
 

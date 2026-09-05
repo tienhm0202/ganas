@@ -55,6 +55,20 @@ models:
   verifier: claude-sonnet-5
   scribe: claude-haiku-4-5
 
+# Vòng lặp tự động: gate xanh → \`ganas commit\` → \`ganas next\` → giao sub-agent
+# kế tiếp, không đợi người gõ lệnh giữa hai task trong cùng chặng.
+# Mặc định TẮT — bật lên là ganas tự commit thay bạn, chỉ bật khi đã tin luồng
+# gate/commit của dự án.
+auto_loop:
+  enabled: false
+  # max_iterations: 5
+
+# Tự gửi một câu mở đầu khi phiên vừa mở (thay vì chỉ bơm brief vào context,
+# im lặng chờ bạn gõ trước). Mặc định TẮT — mở Claude Code để hỏi nhanh một
+# câu không muốn bị cuốn ngay vào task.
+session_start:
+  auto_begin: false
+
 # Lệnh kiểm TOÀN DỰ ÁN mà \`ganas commit\` chạy trên cây sắp được commit.
 # Khác các lệnh trong \`exit_contract\` của task: chúng chỉ kiểm phần task chạm
 # tới, còn cái này kiểm cả cây — chỗ mà một thay đổi trải sang phạm vi khác làm

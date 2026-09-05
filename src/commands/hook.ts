@@ -16,6 +16,7 @@ const HANDLERS: Record<string, Handler> = {
   "pre-tool-use": handlers.preToolUse,
   "post-tool-use": handlers.postToolUse,
   stop: handlers.stop,
+  "subagent-stop": handlers.subagentStop,
   "pre-compact": handlers.preCompact,
   "session-end": handlers.sessionEnd,
 };

@@ -6,6 +6,7 @@ import type { Graph, Sourced } from "../graph/types.js";
 import {
   agentDispatchLines,
   agentModelAlias,
+  autoLoopFor,
   canDispatchSubagent,
   type Claim,
   type Design,
@@ -512,8 +513,54 @@ function dispatchSection(graph: Graph, t: Task): string {
       ]) +
       `\n\nHai lý do, không phải một: context phiên chính không bị chi tiết thực thi nuốt mất, ` +
       `và tier thấp không nghĩ quá tay cho việc cơ học.\n\n` +
+      reportTemplateBlock() +
+      autoLoopBlock(graph, t) +
       parallelBlock(graph, t) +
       `> Nếu BẠN ĐANG LÀ sub-agent nhận chính task này: làm luôn, đừng giao tiếp nữa.`,
+  );
+}
+
+/**
+ * Mẫu báo cáo sub-agent phải kết thúc lượt bằng — hook `subagentStop`
+ * (`src/hooks/io/handlers.ts`) đối chiếu ĐÚNG ba tiêu đề của `REPORT_SECTIONS`
+ * trước khi cho sub-agent dừng (T-089). In lại ở đây để worker biết TRƯỚC ba
+ * mục phải viết, thay vì đoán hoặc phải đọc code hook — xem docstring của
+ * `REPORT_SECTIONS`.
+ */
+function reportTemplateBlock(): string {
+  return (
+    `Kết thúc lượt trả lời bằng đúng mẫu báo cáo dưới đây — hook \`SubagentStop\` ` +
+    `đối chiếu bằng ĐÚNG ba tiêu đề này (heading Markdown), không đọc nội dung bên dưới:\n\n` +
+    bullet(REPORT_SECTIONS.map((s) => `\`## ${s}\``)) +
+    `\n\nRồi một dòng kết luận: \`Kết luận: XONG\` hoặc ` +
+    `\`Kết luận: CHẶN: <lý do một dòng>\`.\n\n`
+  );
+}
+
+/**
+ * Vòng lặp tự động (D-015 vế 2) — CHỈ in khi `config.auto_loop.enabled`
+ * (mặc định tắt, nên phần lớn dự án không thấy đoạn này). Đây là vòng lặp
+ * THẬT nằm ở PROMPT: Stop hook (T-091, chưa nối dây ở chặng này) chỉ mồi lại
+ * một nhịp, không tự lặp — phiên chính (người đọc brief này) mới là nơi thật
+ * sự gõ `commit` → `next` → giao việc kế tiếp mà không cần người can thiệp.
+ */
+function autoLoopBlock(graph: Graph, t: Task): string {
+  const loop = autoLoopFor(graph.config);
+  if (!loop.enabled) return "";
+
+  return (
+    `**Vòng lặp tự động đang BẬT** (\`auto_loop.enabled: true\`) — sau khi ` +
+    `\`ganas gate\` báo \`${t.id}\` đã xanh, ĐỪNG dừng lại chờ người, tự làm tiếp:\n\n` +
+    bullet([
+      `\`ganas commit\` — commit task vừa xong.`,
+      `\`ganas next\` — lấy task kế tiếp.`,
+      `Giao sub-agent kế đúng như mục "Giao việc" ở trên, cho task mới đó.`,
+      `Dừng lại, không gọi \`ganas next\` nữa, khi: hết task chưa \`done\` trong ` +
+        `cùng design \`${t.implements}\`; hoặc một tiêu chí \`kind: manual\` đòi ` +
+        `người xác nhận; hoặc báo cáo của sub-agent tự khai \`Kết luận: CHẶN:\`.`,
+    ]) +
+    `\n\nTrần \`${loop.max_iterations}\` vòng liên tiếp trong cùng một task — chạm trần thì ` +
+    `dừng lại và báo người, đừng tự nới trần lên.\n\n`
   );
 }
 

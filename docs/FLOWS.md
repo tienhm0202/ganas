@@ -66,7 +66,9 @@ Ba lỗi thiết kế bị chính test này bắt trong lần viết đầu:
 ## 1. Luồng phiên — từ lúc mở tới lúc đóng
 
 Đây là luồng người dùng không bao giờ gõ tay: hook của Claude Code gọi ganas ở
-sáu thời điểm (`plugin/hooks/hooks.json` → `src/commands/hook.ts` → `HANDLERS`).
+bảy thời điểm — `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`,
+`SubagentStop`, `PreCompact`, `SessionEnd` (`plugin/hooks/hooks.json` →
+`src/commands/hook.ts` → `HANDLERS`).
 
 ```mermaid
 flowchart TD
@@ -138,6 +140,19 @@ ghi `.ganas/runs/<session>.md`, nhưng **không code nào đọc lại file đó
 phiên là `state.current_task` (`src/state.ts`) và những gì đã được ghi thành
 fact/claim trong `.ganas/`. Handoff hiện là bản ghi cho **người** đọc, không
 phải cho phiên sau.
+
+**Hook thứ bảy — `SubagentStop`** (`handlers.subagentStop`,
+`src/hooks/io/handlers.ts`): nằm NGOÀI vòng Stop ở trên, vì nó không chấm
+phiên chính mà chấm một SUB-AGENT vừa kết thúc lượt (Agent tool trả về). Đây
+là chỗ DUY NHẤT ganas nhìn thấy `last_assistant_message` của sub-agent trước
+khi nó tan vào tóm tắt của phiên cha (xem D-015 vế 1). Luồng: ghi báo cáo
+(cắt ngắn nếu quá dài) vào `runs/notes/<session>.md` qua `generateNote()` —
+LUÔN ghi, kể cả báo cáo tồi — rồi mới chấm báo cáo có đủ ba tiêu đề bắt buộc
+(`REPORT_SECTIONS`, `src/render/brief.ts`) không; thiếu VÀ đây là lần đầu đòi
+báo cáo ở agent đó thì `applyEnforcement(enforcementFor(config,
+"subagent_report"), ...)` chặn sub-agent dừng lượt. Báo cáo tự khai
+`Kết luận: CHẶN: ...` thì không bị chặn thêm — chỉ dừng auto-loop (luồng 0,
+D-015 vế 2) và báo người qua `systemMessage`.
 
 ---
 

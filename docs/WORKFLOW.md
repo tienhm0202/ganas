@@ -19,13 +19,14 @@ màn hình.
 
 Về cách gõ lệnh: `package.json` khai `"bin": { "ganas": "./dist/cli.js" }`,
 nên sau khi cài (`npm install -g` hoặc `npm link`) bạn gõ thẳng `ganas
-<lệnh>`. Trong Claude Code, các lệnh này phần lớn tự chạy qua hook
-(`plugin/hooks/hooks.json`: `SessionStart` gọi `hook session-start` —
-tương đương `next`, `Stop` gọi `hook stop` — tương đương `gate`) hoặc qua
-skill (`/next`, `/gate`, `/verify`, `/trace`, `/commit`) — bạn hiếm khi gõ
-CLI trần tay. Tài liệu này gõ trần để mỗi bước và mỗi output đều nhìn thấy
-được, kèm `--cwd <thư-mục-dự-án>` vì đang chạy trong dự án scratch riêng
-ngoài luồng phiên bình thường.
+<lệnh>`. Trong Claude Code, các lệnh này phần lớn tự chạy qua bảy hook khai ở
+`plugin/hooks/hooks.json` (`SessionStart` gọi `hook session-start` —
+tương đương `next`, `Stop` gọi `hook stop` — tương đương `gate`, cộng
+`SubagentStop` giữ lại báo cáo của mỗi sub-agent trước khi nó tan — xem
+`docs/FLOWS.md` mục 1) hoặc qua skill (`/next`, `/gate`, `/verify`, `/trace`,
+`/commit`) — bạn hiếm khi gõ CLI trần tay. Tài liệu này gõ trần để mỗi bước và
+mỗi output đều nhìn thấy được, kèm `--cwd <thư-mục-dự-án>` vì đang chạy trong
+dự án scratch riêng ngoài luồng phiên bình thường.
 
 ## 1. `ganas init`
 

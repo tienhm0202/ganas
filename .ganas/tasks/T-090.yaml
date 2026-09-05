@@ -1,0 +1,78 @@
+id: T-090
+title: "Đăng ký hook thứ bảy, và brief in ra đúng mẫu báo cáo mà hook sẽ đọc lại"
+serves: [ G-003 ]
+implements: D-015
+scope: P-cli
+status: done
+estimated_context: medium
+model: verifier
+blocked_by: [ T-089 ]
+
+context_contract:
+  must_read:
+    - path: "src/render/brief.ts"
+      why: "`dispatchSection()` (:436-495) là chỗ đặt mẫu báo cáo và khối auto-loop;
+        docstring của nó cũng kể vì sao khuyến nghị thuần thì trôi"
+    - path: "src/commands/hook.ts"
+      why: "bảng handler (:14-21) — thêm một sự kiện là thêm một dòng ở đây, và hook
+        LUÔN exit 0"
+  facts: []
+  open_questions: []
+
+touches: [ M-render, M-commands, M-templates ]
+
+exit_contract:
+  - kind: artifact
+    path: "plugin/hooks/hooks.json"
+    must_contain: "SubagentStop"
+  - kind: artifact
+    path: "src/render/brief.ts"
+    must_contain: "REPORT_SECTIONS"
+  # Bốn file văn bản nói "sáu hook" phải sửa cùng lúc, nhưng không file nào
+  # thuộc `paths` của khối T-090 chạm — `docs/**` không thuộc khối nào, còn
+  # `src/hooks/io/CLAUDE.md` thuộc M-hook-io ở phạm vi KHÁC. Thiếu bốn tiêu chí
+  # này thì `ganas commit` bỏ chúng lại, và tài liệu nói sai ngay ngày hook thứ
+  # bảy chạy. Khuôn này T-078 đã dùng cho `docs/COMMANDS.md`.
+  - kind: artifact
+    path: "docs/INSTALL.md"
+    must_contain: "SubagentStop"
+  - kind: artifact
+    path: "docs/FLOWS.md"
+    must_contain: "SubagentStop"
+  - kind: artifact
+    path: "docs/WORKFLOW.md"
+    must_contain: "SubagentStop"
+  - kind: artifact
+    path: "src/hooks/io/CLAUDE.md"
+    must_contain: "SubagentStop"
+  - kind: verification
+    target: "M-render/V-render-brief"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: verification
+    target: "M-templates/V-templates-init"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Gom vào một task vì tất cả đều ở P-cli và đều là "nối dây cho thứ T-089 vừa làm":
+  `plugin/hooks/hooks.json` (6 → 7 sự kiện), dòng `"subagent-stop"` trong
+  `src/commands/hook.ts`, mẫu `config.yaml` của `ganas init`
+  (`src/templates/project.ts`) có hai khối mới kèm chú thích "mặc định tắt", và
+  hai khối chữ trong `dispatchSection()`.
+
+  Khối mẫu báo cáo in ra ĐÚNG `REPORT_SECTIONS` mà T-089 export — import hằng đó,
+  đừng gõ lại danh sách.
+
+  Khối auto-loop chỉ in khi `auto_loop.enabled`: gate xanh → `ganas commit` →
+  `ganas next` → giao sub-agent kế → dừng khi hết task trong chặng. Đây mới là
+  vòng lặp THẬT; nhánh Stop hook ở T-091 chỉ mồi lại một nhịp.
+
+  Bốn chỗ văn bản nói "sáu hook / sáu thời điểm" phải sửa, nếu không tài liệu nói
+  sai ngay ngày hook thứ bảy chạy: `docs/INSTALL.md`, `docs/FLOWS.md`,
+  `docs/WORKFLOW.md`, `src/hooks/io/CLAUDE.md`.
+
+  `scripts/install-target.mjs` đọc thẳng `hooks.json` nên KHÔNG có bản chép thứ
+  hai phải đồng bộ — kiểm lại điều này trước khi đi tìm chỗ khác để sửa.
+done_at: 2026-09-05T14:11:59.808Z
