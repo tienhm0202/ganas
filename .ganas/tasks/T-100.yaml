@@ -1,0 +1,76 @@
+id: T-100
+title: "--no-recheck đọc sai khoá nên chưa bao giờ chạy, và test dựng argv tay
+  nên không bắt được"
+serves: [ G-002 ]
+implements: D-019
+scope: P-cli
+status: done
+estimated_context: small
+model: verifier
+commit_type: fix
+blocked_by: [ T-099 ]
+
+context_contract:
+  must_read:
+    - path: "src/util/args.ts"
+      why: "dòng 77-79: token `--no-x` được lưu thành `flags[x] = false`, KHÔNG phải
+        `flags['no-x']` — đây là hợp đồng thật của parser"
+    - path: "src/commands/commit.ts"
+      why: "dòng 259 đọc `flag(argv, \"no-recheck\")` — tra một khoá parser không bao
+        giờ tạo ra; dòng 274 lại in hướng dẫn dùng chính cờ đó"
+  facts: []
+  open_questions: []
+
+touches: [ M-cli-core, M-commands ]
+
+exit_contract:
+  - kind: artifact
+    path: "test/args.test.ts"
+    must_contain: "--no-recheck"
+  # Sửa nguồn làm test này đỏ ngay (nó dựng argv tay với khoá cũ), nên nó là
+  # PHẦN của bản vá chứ không phải file đi ngang. Ranh giới không tự thấy vì
+  # `M-commands` có nhiều verification mà exit_contract chỉ trỏ một cái — đúng
+  # Nhánh 1 mà T-098 vừa chữa ở tầng hàm, nhưng dữ liệu khối chưa theo kịp
+  # (ICE-042). Lần thứ NĂM mẫu này lặp lại.
+  - kind: artifact
+    path: "test/commit-staged-tree.test.ts"
+    must_contain: "recheck: false"
+  - kind: verification
+    target: "M-cli-core/V-cli-core-boundary"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Phát hiện lúc làm T-099, tái hiện bằng E2E thật: dựng repo scratch, gate xanh
+  nhưng cây sắp commit đỏ, gõ `ganas commit T-001 --no-recheck` — vẫn bị từ chối
+  y hệt như không có cờ.
+
+  `parseArgs` gặp `--no-recheck` thì set `flags.recheck = false`. `commit.ts:259`
+  đọc `flag(argv, "no-recheck")`, tra một khoá parser KHÔNG BAO GIỜ tạo ra, nên
+  luôn `undefined` ⇒ `!undefined` là true ⇒ recheck luôn chạy. Cờ chưa từng hoạt
+  động kể từ ngày nó được thêm.
+
+  Chữa: dùng `enabled(argv, "recheck")` — cùng khuôn `enabled(argv, "close")` và
+  `enabled(argv, "baseline")` đang chạy ĐÚNG trong chính file đó.
+
+  ## Vì sao thuộc D-019 chứ không phải một chặng khác
+
+  T-099 vừa thêm một hàng rào chặn commit, kèm cờ thoát `--allow-outside-tests`.
+  Để nguyên một cờ thoát anh em đã hỏng là mâu thuẫn nội tại: chặng này nói
+  hàng rào phải có đường thoát tường minh, mà đường thoát của hàng rào cũ thì
+  không tồn tại.
+
+  ## Chỗ đau thật nằm ở TEST, không ở một dòng sai
+
+  Test hiện có không bắt được vì chúng dựng `argv` tay với đúng khoá
+  `"no-recheck"` — bỏ qua lớp parser, tức là kiểm một thế giới không có thật.
+  Một dòng sửa mà không có test đi qua `parseArgs` thì lớp lỗi này quay lại
+  ngay ở cờ kế tiếp.
+
+  Test phải đi từ CHUỖI THẬT (`["--no-recheck"]`) qua `parseArgs` rồi mới tới
+  người đọc. Rà luôn xem còn chỗ nào khác trong `src/` đọc khoá dạng `"no-*"` —
+  nếu có, đó là cùng một bug và phải sửa cùng lượt, không để lần sau.
+done_at: 2026-09-05T17:05:26.752Z

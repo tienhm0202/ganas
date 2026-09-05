@@ -197,7 +197,9 @@ test("--no-recheck vẫn commit được — cửa thoát có, nhưng phải gõ
     await writeFile(join(root, "src", "b", "dep.ts"), "// DUNG_ROI\n", "utf8");
 
     const before = (await runShell("git rev-parse HEAD", { cwd: root })).stdout.trim();
-    await captureStdout(() => runCommit(argv(root, { "no-recheck": true })));
+    // Khoá đúng mà `parseArgs` sinh ra cho token `--no-recheck` là `recheck: false`,
+    // KHÔNG phải `"no-recheck": true` — xem `src/util/args.ts:77-79` và T-100.
+    await captureStdout(() => runCommit(argv(root, { recheck: false })));
     const after = (await runShell("git rev-parse HEAD", { cwd: root })).stdout.trim();
 
     assert.notEqual(after, before, "--no-recheck phải commit thật");

@@ -256,7 +256,7 @@ export async function run(argv: Argv): Promise<number> {
   // Chấm lại trên chính cây SẮP ĐI VÀO COMMIT, trước khi tạo commit. Gate ở
   // trên chấm working tree — hai cây khác nhau, và chênh lệch giữa chúng chính
   // là chỗ `commit:fc99e87` lọt qua với `tsc` gãy. Xem `checkStagedTree`.
-  if (!flag(argv, "no-recheck")) {
+  if (enabled(argv, "recheck")) {
     const recheck = await checkStagedTree(root, task, graph.config.build_check);
     const report = formatStagedTreeCheck(taskId, recheck);
 
