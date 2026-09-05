@@ -112,3 +112,22 @@
     - src/flow.ts:112
   scope: P-cli
   status: open
+- id: ICE-033
+  title: Cảnh báo dispatch nổ sai khi phiên chính điều phối task khác task đang bind
+  found_at: 2026-09-05T12:26:37.704Z
+  review_after_days: 30
+  weight: 4
+  ease: 3
+  why_deferred: "Phát hiện lúc chạy T-082/T-083/T-084 song song trong phiên
+    2026-09-05, ngoài phạm vi cả ba task. subagentTouchedFor() trả false khi
+    rec.task !== taskId, nên phiên bind T-080 mà chấm gate T-083/T-084 thì cảnh
+    báo 'cả phiên không có lượt sửa nào từ sub-agent' nổ SAI — state.json cho
+    thấy subagent_touched: true có thật. Chưa ai duyệt cách sửa: hoặc cờ gắn
+    theo (session, task) như hiện nay là đúng và cảnh báo phải im khi task chấm
+    khác task bind, hoặc cờ nên gắn theo task mà sub-agent thật sự sửa. Đáng chú
+    ý vì D-015 (auto-loop) dựng đúng luồng phiên chính điều phối nhiều task, nên
+    cảnh báo sai sẽ nổ mỗi vòng lặp."
+  anchors:
+    - src/state.ts:208
+    - src/commands/gate.ts:77
+  status: open

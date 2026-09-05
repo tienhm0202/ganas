@@ -61,5 +61,6 @@ exit_contract:
   - kind: verification
     target: "M-verify/V-verify-run"
 
-status: active
+status: done
+done_at: 2026-09-05T12:40:00Z
 created_at: 2026-09-01T06:12:00Z
