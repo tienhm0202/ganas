@@ -1,0 +1,70 @@
+id: D-017
+title: "Hai hàng rào tự khai sai: một cái soi thiếu, một cái kêu nhầm"
+serves: [G-002]
+summary: |-
+  Cả hai đo được, cả hai tìm ra bằng cách CHẠY luồng mới của 1.2.0 chứ không
+  phải đọc code. Chúng cùng một họ với D-014 nhưng ở đầu kia của cùng một trục:
+  D-014 chữa hàng rào báo ĐẠT khi không kiểm được gì; ở đây một hàng rào soi
+  thiếu mà vẫn xanh, và một hàng rào kêu đỏ khi chẳng có gì sai.
+
+  ## Vế 1 — bộ dò ngõ cụt có vùng không soi tới (ICE-035)
+
+  `schemaFields()` trong `test/no-dead-ends.test.ts` khớp `z.object({...})`
+  bằng regex non-greedy dừng ở `})` ĐẦU TIÊN. Khối lồng đầu tiên vì thế cắt
+  ngang khối ngoài cùng, và mọi trường sau nó tuột khỏi tầm soi.
+
+  Đo được, không suy đoán: chạy chính hàm đó trên `src/model/config.ts` cho ra
+  `auto_loop` nhưng KHÔNG cho ra `session_start` hay `claim` — thay vào đó là
+  `auto_begin` và `ttl_minutes`, tức trường BÊN TRONG chúng. Trên cả `src/model/`
+  thì phép trích đúng thấy 134 tên, phép trích hiện tại thấy 112.
+
+  Hệ quả đúng bằng thứ test này sinh ra để chặn: một trường khai rồi không ai
+  đọc, nằm sau khối lồng đầu tiên, sẽ không bao giờ bị bắt. T-087 đã phải đặt
+  khối `auto_loop` TRƯỚC `session_start` cho lọt vào tầm soi — sắp xếp đó đúng
+  nhưng dễ vỡ: ai chèn một khối lồng khác lên trước là `READ_VIA` thành vô
+  nghĩa, lặng lẽ.
+
+  Cách chữa đã được ghi sẵn trong comment của chính hàm, từ lần vá trước
+  (PR-008): dạy phép trích bỏ qua thân `.default(...)` thay vì né. Né là giấu
+  một khiếm khuyết của phép trích dưới danh nghĩa một quyết định.
+
+  Đã đo trước cái giá: sửa xong lộ thêm 22 tên. Phần lớn có người đọc thật nên
+  tự pass; hai cái — `invalid_type_error`, `required_error` — là khoá của object
+  tuỳ chọn zod chứ không phải trường schema, và comment trong file đã cảnh báo
+  đúng ca này. Chúng phải được phép trích loại ra, KHÔNG phải nhét vào `EXEMPT`.
+
+  ## Vế 2 — cảnh báo giao việc kêu nhầm (ICE-033)
+
+  `subagentTouchedFor()` trả `false` khi `rec.task !== taskId`. Phiên chính bind
+  task A mà chấm gate task B thì cảnh báo "cả phiên không có lượt sửa nào từ
+  sub-agent" nổ, dù `state.json` ghi rõ `subagent_touched: true`. Quan sát thật
+  ngày 2026-09-05 trên năm task liên tiếp.
+
+  Đây KHÔNG phải lỗi của `subagentTouchedFor` — nó gắn theo cặp (session, task)
+  có chủ ý, cùng lý do với `touchedPathsFor`. Chỗ sai là NƠI GỌI: cảnh báo được
+  phát cho một task mà phiên không bind vào, nên tiền đề của nó không đúng ngay
+  từ đầu.
+
+  Cảnh báo sai nguy hiểm hơn không có cảnh báo: nó dạy người đọc bỏ qua, và
+  đúng lúc nó kêu thật thì không ai nhìn nữa.
+
+  ## Vì sao gấp
+
+  Luồng 1.2.0 làm ca này thành thường trực chứ không còn hiếm: auto-loop có
+  phiên chính điều phối nhiều task, nên cảnh báo sai sẽ nổ mỗi vòng lặp.
+
+  ## Không làm trong chặng này
+
+  Không đụng `auto_loop` hay hook `SubagentStop` — chúng vừa ship và chưa chạy
+  thật lần nào. Không nới `EXEMPT` để cho xanh.
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/no-dead-ends.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+status: active
+created_at: 2026-09-05T16:00:00Z

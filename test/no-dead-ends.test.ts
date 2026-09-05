@@ -112,12 +112,60 @@ test("⭐ không chuỗi nào trong src/ trỏ vào thư mục .ganas/ không t�
  * ------------------------------------------------------------------------- */
 
 /**
+ * Tìm vị trí ký tự ĐÓNG khớp với ký tự MỞ tại `openIndex` (đếm độ sâu lồng
+ * nhau, không phải dừng ở lần đóng ĐẦU TIÊN). Đây vẫn là phép dò VĂN BẢN như
+ * toàn bộ file này tự nhận ở đầu file — không phải một trình phân tích cú
+ * pháp thật, nên không tránh được dấu ngoặc lẻ nằm trong chuỗi/comment. Trong
+ * `src/model/` hiện tại không có ca đó rơi vào TRONG thân một `z.object`/
+ * `.default` (đã rà bằng tay), nên đủ dùng; trả `-1` nếu quét hết văn bản mà
+ * không cân bằng, để nơi gọi bỏ qua thay vì đoán bừa.
+ */
+function matchingBracket(text: string, openIndex: number): number {
+  const open = text[openIndex]!;
+  const close = open === "{" ? "}" : ")";
+  let depth = 0;
+  for (let i = openIndex; i < text.length; i++) {
+    if (text[i] === open) depth++;
+    else if (text[i] === close && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Xoá NỘI DUNG thân mọi `.default(...)` trong `text`, giữ nguyên số dòng để
+ * thụt lề của phần còn lại không đổi. Vì sao cần: `.default({ inputs: [] })`
+ * mang một GIÁ TRỊ mặc định, khoá bên trong nó không phải trường schema —
+ * lấy nhầm thì báo sai y hệt ca `required_error` mà comment gốc đã cảnh báo.
+ *
+ * Đây là cách chữa PR-008 đã ghi sẵn: dạy phép trích bỏ qua thân
+ * `.default(...)`, KHÔNG phải nhét tên khoá vào `EXEMPT`.
+ */
+function stripDefaultBodies(text: string): string {
+  let out = text;
+  const re = /\.default\(/g;
+  for (let m = re.exec(out); m; m = re.exec(out)) {
+    const openParen = m.index + m[0].length - 1;
+    const closeParen = matchingBracket(out, openParen);
+    if (closeParen === -1) break;
+    const blanked = out.slice(openParen + 1, closeParen).replace(/[^\n]/g, " ");
+    out = out.slice(0, openParen + 1) + blanked + out.slice(closeParen);
+    re.lastIndex = closeParen;
+  }
+  return out;
+}
+
+/**
  * Tên trường khai trong các `z.object({...})` của một file model.
  *
  * Thụt lề `{2,}`, KHÔNG phải `{4}`. Bản cũ đòi đúng bốn dấu cách nên chỉ thấy
  * schema khai LỒNG trong một biến, và bỏ sót sạch schema khai ở cấp cao nhất —
  * cả chín trường của `zConfig` chưa bao giờ được soi tới, cho tới khi
  * `build_check` được thêm vào mà guard vẫn xanh (PR-008).
+ *
+ * Khớp thân khối bằng ĐẾM ĐỘ SÂU ngoặc (`matchingBracket`), không phải regex
+ * non-greedy dừng ở `})` ĐẦU TIÊN — bản cũ vì vậy bị khối lồng đầu tiên cắt
+ * ngang khối ngoài cùng, mọi trường sau nó tuột khỏi tầm soi (vd `zConfig` chỉ
+ * thấy tới hết `auto_loop`, không bao giờ thấy `session_start`/`claim`).
  *
  * Nếu về sau phép trích bắt nhầm khoá trong object literal của một giá trị mặc
  * định (`.default({ … })`), cách sửa KHÔNG phải nhét tên đó vào `EXEMPT` — mà
@@ -126,8 +174,11 @@ test("⭐ không chuỗi nào trong src/ trỏ vào thư mục .ganas/ không t�
  */
 function schemaFields(text: string): string[] {
   const fields = new Set<string>();
-  for (const m of text.matchAll(/z\s*\n?\s*\.object\(\{([\s\S]*?)\n\s*\}\)/g)) {
-    const body = m[1]!;
+  for (const m of text.matchAll(/z\s*\n?\s*\.object\(\{/g)) {
+    const openBrace = m.index + m[0].length - 1;
+    const closeBrace = matchingBracket(text, openBrace);
+    if (closeBrace === -1) continue;
+    const body = stripDefaultBodies(text.slice(openBrace + 1, closeBrace));
     // Chỉ lấy trường ở CẤP NGOÀI CÙNG của khối, suy bằng thụt lề nhỏ nhất gặp
     // được. Lấy mọi cấp thì vơ luôn khoá của object tuỳ chọn zod
     // (`{ required_error: … }`) — thứ không phải trường schema, và báo chúng là
@@ -154,6 +205,22 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
     id: "khoá của mọi Map trong graph — đọc gián tiếp qua .get()/.keys()",
     note: "ghi chú tự do cho người trên anchor commit — cùng loại `notes`, cố ý không code nào đọc",
     quote: "trích dẫn của anchor URL, HIỆN chưa nối dây ở đâu — xem PR-009, không phải chuyện cố ý",
+    // Ba khoá CỐ ĐỊNH của `config.models` (đúng `MODEL_TIER`) — người đọc thật
+    // là `graph.config.models[t.model]` (`src/render/brief.ts`), với khoá là
+    // một BIẾN kiểu `ModelTier`, không phải literal `.main`/`["main"]`. Cùng
+    // lớp với `id` ở trên: có người đọc thật, chỉ là phép trích văn bản không
+    // thấy được truy cập qua biến.
+    main: "khoá của config.models, đọc gián tiếp qua models[t.model] với tier kiểu ModelTier",
+    verifier: "khoá của config.models, đọc gián tiếp qua models[t.model] với tier kiểu ModelTier",
+    scribe: "khoá của config.models, đọc gián tiếp qua models[t.model] với tier kiểu ModelTier",
+    // Bốn dòng dưới đây là phát hiện MỚI của T-095 (schemaFields trước đây
+    // không soi tới khối lồng thứ hai nên chưa từng thấy chúng) — đã ghi
+    // thành nợ có anchor, KHÔNG phải miễn trừ cho xanh. Xoá dòng nào khỏi đây
+    // thì phải đóng đúng ICE tương ứng trước (nối dây hoặc bỏ trường).
+    created_at: "khai ở Design/Goal/Task, không ai đọc ngoài src/model/ — xem ICE-039",
+    approved_by: "chỉ zGoal.superRefine tự đọc (nội bộ src/model/) — xem ICE-040",
+    approved_at: "chỉ zGoal.superRefine tự đọc (nội bộ src/model/) — xem ICE-040",
+    evidence: "verdict.evidence của Claim, không ai đọc ngoài src/model/ — xem ICE-041",
   };
 
   /**
@@ -220,6 +287,55 @@ test("⭐ mọi trường schema đều có ít nhất một người đọc ngo
       `rằng nó có tác dụng. Ba đường hợp lệ: nối dây cho nó, khai đường đọc gián\n` +
       `tiếp trong READ_VIA, hoặc xoá đi.\n` +
       dead.join("\n"),
+  );
+});
+
+/**
+ * Cắt ra span văn bản của MỘT trường ở cấp ngoài cùng của `zConfig` (thụt lề
+ * 2 dấu cách), từ chính dòng khai `<name>: z` cho tới NGAY TRƯỚC dòng khai
+ * trường anh em kế tiếp cùng cấp. Dùng thụt lề để tìm ranh giới — đúng cách
+ * `schemaFields` tự nó phân biệt "cấp ngoài cùng" — nên không phụ thuộc cú
+ * pháp `.default({})` cụ thể, chỉ phụ thuộc quy ước thụt lề 2 dấu cách.
+ */
+function sliceTopField(text: string, name: string): { start: number; end: number } {
+  const marker = `\n  ${name}: z`;
+  const start = text.indexOf(marker) + 1; // bỏ qua newline dẫn đầu, trỏ đúng đầu dòng field
+  if (start === 0) throw new Error(`không tìm thấy trường \`${name}\` để hoán vị`);
+  const nextField = /\n {2}\w+:/g;
+  nextField.lastIndex = start + 1;
+  const m = nextField.exec(text);
+  const end = m ? m.index + 1 : text.length;
+  return { start, end };
+}
+
+test("⭐ schemaFields ra CÙNG một tập trường bất kể auto_loop đứng trước hay sau session_start", async () => {
+  const original = await readFile(join(ROOT, "src", "model", "config.ts"), "utf8");
+
+  // Hoán vị hai khối lồng liên tiếp của zConfig ngay trong văn bản thật — đây
+  // chính là ca gốc của T-095: bản cũ chỉ soi được khối lồng ĐẦU TIÊN
+  // (`auto_loop`), nên đổi chỗ nó với `session_start` từng đổi luôn cả tập
+  // trường trích ra được. Phép trích đúng thì thứ tự không được phép ảnh
+  // hưởng tới kết quả.
+  const a = sliceTopField(original, "auto_loop");
+  const b = sliceTopField(original, "session_start");
+  assert.ok(a.end <= b.start, "giả định auto_loop đứng TRƯỚC session_start trong config.ts không còn đúng — viết lại test này");
+
+  const blockA = original.slice(a.start, a.end);
+  const blockB = original.slice(b.start, b.end);
+  const swapped = original.slice(0, a.start) + blockB + original.slice(a.end, b.start) + blockA + original.slice(b.end);
+
+  const before = schemaFields(original).sort();
+  const after = schemaFields(swapped).sort();
+
+  assert.deepEqual(
+    after,
+    before,
+    "Đổi thứ tự hai khối lồng phải cho CÙNG một tập trường — khác đi nghĩa là " +
+      "phép trích vẫn phụ thuộc VỊ TRÍ thay vì soi hết mọi khối.",
+  );
+  assert.ok(
+    before.includes("auto_loop") && before.includes("session_start") && before.includes("claim"),
+    "phải thấy cả ba khối lồng (auto_loop, session_start, claim) ở cấp ngoài cùng của zConfig",
   );
 });
 

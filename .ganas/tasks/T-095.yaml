@@ -1,0 +1,64 @@
+id: T-095
+title: "Dạy schemaFields bỏ qua thân .default(), thay vì bắt schema tự xếp chỗ
+  cho vừa tầm soi"
+serves: [ G-002 ]
+implements: D-017
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: verifier
+commit_type: fix
+
+context_contract:
+  must_read:
+    - path: "test/no-dead-ends.test.ts"
+      why: "hàm `schemaFields()` và comment ngay trên nó — comment đã nói sẵn cách
+        chữa đúng từ lần vá trước (PR-008), và nói thẳng vì sao nhét vào
+        `EXEMPT` là giấu khiếm khuyết dưới danh nghĩa một quyết định"
+    - path: "src/model/config.ts"
+      why: "ca gốc đo được: phép trích cho ra `auto_loop` nhưng không cho ra
+        `session_start` hay `claim`, thay vào đó lấy trường bên trong chúng"
+  facts: []
+  open_questions: []
+
+touches: []
+
+exit_contract:
+  - kind: artifact
+    path: "test/no-dead-ends.test.ts"
+    must_contain: "session_start"
+  - kind: command
+    run: "npx tsx --test 'test/no-dead-ends.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  `touches: []` vì `test/` không thuộc `paths` của khối nào (ICE-017/ICE-022);
+  tiêu chí `artifact` là thứ duy nhất kéo file vào ranh giới `ganas commit`.
+
+  Tiêu chí `artifact` đòi chuỗi `session_start` xuất hiện trong file test: đó là
+  bằng chứng rẻ nhất cho thấy phép trích đã soi tới khối lồng thứ hai — hiện tại
+  chuỗi đó KHÔNG có trong file, nên tiêu chí đỏ đúng lúc viết task.
+
+  ## Đã đo trước cái giá, đừng đo lại
+
+  Sửa xong, phép trích thấy 134 tên thay vì 112 — lộ thêm 22. Phần lớn có người
+  đọc thật nên tự pass. Hai cái phải xử lý ĐÚNG CÁCH:
+
+  - `invalid_type_error`, `required_error` — khoá của object tuỳ chọn zod
+    (`{ required_error: … }`), KHÔNG phải trường schema. Phép trích phải loại
+    chúng ra. Nhét vào `EXEMPT` là sai, và comment trong file đã cảnh báo đúng
+    ca này bằng đúng chữ đó.
+
+  Trường nào lộ ra mà THẬT SỰ không ai đọc thì đó là một phát hiện, không phải
+  phiền toái — nối dây nó hoặc ghi icebox, đừng miễn trừ cho xanh.
+
+  ## Không được làm
+
+  Không sắp xếp lại `src/model/*.ts` để chiều phép trích — đó là chiều theo
+  khiếm khuyết, đúng thứ task này sinh ra để bỏ. Sau khi sửa, khối `auto_loop`
+  đứng trước hay sau `session_start` đều phải cho cùng một kết quả; chứng minh
+  điều đó bằng một test, không bằng lời.
+done_at: 2026-09-05T15:39:14.671Z
