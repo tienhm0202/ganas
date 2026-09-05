@@ -1,0 +1,61 @@
+id: T-082
+title: "Probe ba hành vi hook chưa ai kiểm, rồi ghi lại thành claim chứ không
+  phải fact"
+serves: [ G-003 ]
+implements: D-015
+scope: P-hook
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/hooks/io/handlers.ts"
+      why: "hàm `stop` (:332) nhả ngay khi thấy `stop_hook_active` và KHÔNG kiểm
+        `agent_id` — nếu Stop hook cũng bắn lúc sub-agent dừng thì nó đang chấm
+        gate bằng session của phiên cha, tức một lỗi đang có sẵn"
+    - path: "scripts/probe-hook-ignores-locks.sh"
+      why: "tiền lệ duy nhất của repo về probe HÀNH VI harness (không phải unit test)
+        — theo đúng khuôn này, đừng nghĩ ra khuôn mới"
+    - path: ".claude/rules/ganas-knowledge.md"
+      why: "kết quả probe hành vi đi vào claim có anchor, KHÔNG được nâng thẳng thành
+        fact"
+  facts: []
+  open_questions:
+    - "Stop hook có bắn khi sub-agent kết thúc không? Nếu CÓ thì `stop` phải
+      thêm `if (input.agent_id !== undefined) return ALLOW` và T-091 đổi hình
+      dạng."
+    - "`stop_hook_active` có còn true ở lượt Stop kế sau một `decision: block`
+      không?"
+    - "`SubagentStop` có nhận `stop_hook_active` không, và `decision: block` ở
+      đó có thật khiến sub-agent chạy tiếp? Tài liệu Claude Code tự mâu thuẫn:
+      một chỗ nói `block`, chỗ khác mô tả output là `continue|stop`."
+
+touches: [ M-hook-io ]
+
+exit_contract:
+  - kind: artifact
+    path: "scripts/probe-subagent-hooks.sh"
+    must_contain: "stop_hook_active"
+  - kind: artifact
+    path: ".ganas/claims/C-003.yaml"
+    must_contain: "anchors"
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Task này chạy TRƯỚC mọi task auto-loop, vì câu hỏi thứ nhất đổi được hình
+  dạng của T-091. Nếu Stop hook có bắn lúc sub-agent dừng thì đó là một lỗi
+  ĐANG CÓ ở HEAD, không phải rủi ro tương lai — vá luôn trong task này.
+
+  Ba câu hỏi là hành vi của harness, KHÔNG đối chiếu được bằng repo. Kết quả ghi
+  thành claim (`C-003`) với anchor trỏ đúng dòng đã quan sát. Không nâng thành
+  fact ở task này: fact cần `verify.run` chạy lại được, mà probe hành vi hook
+  phải có một phiên Claude Code thật mới chạy được.
+
+  Không thấy điều gì cả cũng là kết quả — ghi vào claim rằng chưa quan sát được,
+  đừng để trống rồi phiên sau tưởng đã kiểm.
+done_at: 2026-09-05T12:43:18.772Z

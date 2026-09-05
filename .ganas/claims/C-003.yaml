@@ -1,0 +1,124 @@
+- id: C-003
+  statement: >-
+    Ở HEAD hiện tại, `handlers.stop` (src/hooks/io/handlers.ts:332) KHÔNG bị
+    harness gọi khi một sub-agent kết thúc — không phải vì code kiểm agent_id
+    (nó không kiểm), mà vì plugin chưa đăng ký hook nào cho sự kiện
+    `SubagentStop` ở bất kỳ chỗ nào trong hai chỗ phải khớp nhau: manifest
+    `plugin/hooks/hooks.json` chỉ có khoá `Stop` (dòng 35), không có
+    `SubagentStop`; và bảng lệnh CLI `src/commands/hook.ts` (HANDLERS, dòng
+    14-19) chỉ ánh xạ `stop: handlers.stop`, không có khoá `subagent-stop`
+    nào. Tài liệu Claude Code (cả CLI lẫn Agent SDK) mô tả `Stop` và
+    `SubagentStop` là HAI sự kiện tách biệt ("khi Claude chính kết thúc lượt"
+    so với "khi một sub-agent kết thúc"), và harness chỉ gọi lệnh đã khai cho
+    ĐÚNG tên sự kiện đó — nên giả định nêu trong context_contract của T-082
+    ("Stop hook chấm gate bằng session của phiên cha lúc sub-agent dừng") KHÔNG
+    phải một lỗi đang có ở HEAD. Nó CHỈ trở thành lỗi thật nếu sau này có ai
+    thêm khoá `SubagentStop` vào hooks.json trỏ thẳng về handler `stop` hiện
+    tại (hoặc một handler mới tái dùng cùng logic) mà quên nhánh agent_id — lúc
+    đó bản vá `if (input.agent_id !== undefined) return ALLOW;` mới cần thiết.
+    Vì lý do đó, task T-082 KHÔNG áp bản vá này vào `stop()`.
+
+    Đáng chú ý: hai hàm hàng xóm của `stop` — `preToolUse` (handlers.ts:219) và
+    `postToolUse` (handlers.ts:285) — ĐÃ tính `fromSubagent = input.agent_id
+    !== undefined` và dùng nó (markTouched, pendingDispatchNudge). `state.ts`
+    còn có hẳn field `subagent_touched` (state.ts:298) để nhớ lại "phiên này có
+    lượt sửa nào từ sub-agent không" — nghĩa là một tool call từ sub-agent VẪN
+    dùng chung `session_id` với phiên chính, chỉ khác ở có thêm `agent_id`.
+    Đây là dữ kiện REPO (không phải suy đoán về harness): nếu SubagentStop có
+    khớp cùng session_id với Stop của phiên cha (nhiều khả năng, vì cùng cơ chế
+    "agent_id thêm vào" áp dụng cho PreToolUse/PostToolUse), thì việc `stop`
+    chưa có nhánh agent_id vẫn là một cạm bẫy CÓ THẬT đang chờ, chỉ chưa bị
+    kích hoạt vì chưa ai nối dây `SubagentStop`. Đây chính là thứ đổi hình dạng
+    của T-091 theo ghi chú trong brief: T-091 (khi thêm SubagentStop để bắt
+    báo cáo sub-agent) phải quyết định dùng handler MỚI (không phải `stop` tái
+    sử dụng), hoặc nếu tái dùng thì bắt buộc thêm nhánh agent_id lúc đó.
+
+    Về bản thân sự kiện SubagentStop (tài liệu bên ngoài repo, KHÔNG quan sát
+    được bằng cách chạy gì trong sandbox này — xem "chưa quan sát được" ở
+    dưới): theo tài liệu Agent SDK của Anthropic, `agent_id`/`agent_type` là
+    field BẮT BUỘC (required) trên SubagentStop (khác PreToolUse/PostToolUse,
+    nơi chúng chỉ optional), và ví dụ code mẫu của chính tài liệu đọc
+    `input_data.get('stop_hook_active')` bên trong một SubagentStop hook —
+    tức input schema của SubagentStop CÓ field `stop_hook_active`, cùng cấu
+    trúc với Stop ("Same structure and semantics as Stop" theo bảng tổng hợp
+    hooks). Về `decision: "block"`: bảng "exit code 2 behavior" của tài liệu
+    Claude Code CLI ghi rõ SubagentStop "Yes — Prevents the subagent from
+    stopping", tức về mặt tài liệu, `block` ở SubagentStop khiến sub-agent
+    CHẠY TIẾP thay vì dừng — cùng cơ chế với `block` ở Stop khiến phiên chính
+    chạy tiếp.
+  scope: P-hook
+  provenance: session
+  trust: unverified
+  anchors:
+    - "plugin/hooks/hooks.json#L35"
+    - "src/commands/hook.ts#L14"
+    - "src/hooks/io/handlers.ts#L219"
+    - "src/hooks/io/handlers.ts#L285"
+    - "src/hooks/io/handlers.ts#L332"
+    - "src/state.ts#L298"
+    - "scripts/probe-subagent-hooks.sh"
+    - "commit:a94bc1b"
+    - kind: url
+      url: "https://code.claude.com/docs/en/hooks"
+      fetched_at: "2026-09-05T12:22:46Z"
+      quote: >-
+        Stop: When Claude finishes responding. SubagentStop: When a subagent
+        finishes. | SubagentStop | Yes | Prevents the subagent from stopping
+    - kind: url
+      url: "https://code.claude.com/docs/en/agent-sdk/hooks"
+      fetched_at: "2026-09-05T12:22:46Z"
+      quote: >-
+        agent_id and agent_type are populated when the hook fires inside a
+        subagent... required fields on SubagentStart and SubagentStop.
+        print(f"  Stop hook active: {input_data.get('stop_hook_active')}")
+        inside a SubagentStop hook example.
+    - kind: url
+      url: "https://gist.github.com/FrancisBourre/50dca37124ecc43eaf08328cdcccdb34"
+      fetched_at: "2026-09-05T12:22:46Z"
+      quote: "SubagentStop — Input / Output: Same structure and semantics as Stop."
+  notes: >-
+    CỐ Ý là claim, không phải fact: hai nửa khác hẳn nhau về loại bằng chứng.
+    Nửa REPO (hooks.json không có khoá SubagentStop, HANDLERS không có khoá
+    subagent-stop, preToolUse/postToolUse đã có fromSubagent mà stop thì
+    chưa, stop_hook_active là short-circuit đầu tiên của stop) là bằng chứng
+    CODE thật, và `scripts/probe-subagent-hooks.sh` giữ nó KHÔNG TRÔI: probe
+    (a) fail nếu ai thêm khoá SubagentStop mà không đọc claim này; probe (b)
+    fail nếu `agent_id` bắt đầu đổi quyết định của `stop()` (vd ai thêm nhánh
+    agent_id mà quên cập nhật claim); probe (c) fail nếu stop_hook_active hết
+    là short-circuit đầu tiên. Cả ba đều exit khác 0 khi giả định trôi — đúng
+    tinh thần "ngày hook đổi hành vi thì probe đỏ" của probe-hook-ignores-locks.sh.
+
+    Nửa TÀI LIỆU (schema thật của SubagentStop, decision:block có làm sub-agent
+    chạy tiếp thật không, stop_hook_active còn true bao lâu sau một block) là
+    hành vi HARNESS — không probe nào trong sandbox này chạm tới được, vì
+    không có cách bắt Claude Code CLI thật gửi một sự kiện SubagentStop rồi đọc
+    JSON nó gửi (không tìm thấy log hook nào trong sandbox, và cấu hình hook
+    được nạp một lần lúc phiên khởi động nên không tự thêm SubagentStop giữa
+    phiên để quan sát). Ba câu hỏi mở gốc của T-082:
+
+    (1) "Stop hook có bắn khi sub-agent kết thúc không?" — TRẢ LỜI ĐƯỢC một
+    phần bằng repo: KHÔNG, vì SubagentStop chưa được đăng ký ở đâu cả nên
+    `stop` không được gọi qua đường đó. Phần "nếu có đăng ký thì có tách biệt
+    session_id hay không" vẫn CHƯA QUAN SÁT ĐƯỢC trực tiếp — suy ra gián tiếp
+    từ việc preToolUse/postToolUse dùng chung session_id cho tool-call từ
+    sub-agent.
+
+    (2) "stop_hook_active có còn true ở lượt Stop kế sau một decision:block
+    không?" — CHƯA QUAN SÁT ĐƯỢC. Tài liệu chỉ nói field này "true nếu Stop
+    hook trước đã giữ Claude chạy tiếp", không nói rõ nó tắt lại NGAY LƯỢT KẾ
+    TIẾP hay có thể còn true nhiều lượt. Không tìm thấy ví dụ JSON cụ thể nào
+    trong tài liệu đã đọc để khẳng định.
+
+    (3) "SubagentStop có nhận stop_hook_active không, và decision:block có
+    thật khiến sub-agent chạy tiếp không?" — TRẢ LỜI ĐƯỢC bằng tài liệu (có,
+    và có — xem anchors url ở trên), nhưng CHƯA quan sát được bằng một lượt
+    chạy thật trong CHÍNH harness Claude Code CLI (bằng chứng đến từ trang
+    Agent SDK + một gist bên thứ ba, không phải một log hook thật đã bắt
+    được). Mâu thuẫn "block vs continue|stop" mà brief nhắc tới KHÔNG xuất
+    hiện trong hai trang đã đọc — có thể tài liệu đã được Anthropic sửa từ
+    lúc brief được viết, hoặc mâu thuẫn nằm ở một trang khác chưa đọc tới;
+    ghi lại là chưa loại trừ được, không phải đã xác nhận hết mâu thuẫn.
+
+    Đường tốt nghiệp lên fact: không có, vì "SubagentStop" cần một phiên
+    Claude Code thật kích hoạt được sự kiện đó để bắt JSON gửi vào — không có
+    lệnh nào trong repo dựng lại được điều đó một cách tất định.
