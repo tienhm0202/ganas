@@ -40536,8 +40536,12 @@ ${formatGate(result)}
   const boundaryWarning = formatBoundaryWarning(taskId, boundary, touched, outside);
   if (boundaryWarning) process.stdout.write(`${boundaryWarning}
 `);
-  const subagentTouched = await subagentTouchedFor(root, sessionId, taskId);
-  const dispatchWarning = formatDispatchWarning(taskId, task.value.model, subagentTouched);
+  const boundTaskId = sessionId ? (await sessionRecord(root, sessionId))?.task : void 0;
+  const dispatchWarning = boundTaskId === taskId ? formatDispatchWarning(
+    taskId,
+    task.value.model,
+    await subagentTouchedFor(root, sessionId, taskId)
+  ) : "";
   if (dispatchWarning) process.stdout.write(`${dispatchWarning}
 `);
   const driftWarning = formatDesignDriftWarning(task.value, graph, freshness);
