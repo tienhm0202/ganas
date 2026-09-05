@@ -560,6 +560,52 @@ test("task chưa gán model bị validate cảnh báo, và task done thì không
   assert.ok(!withModel.codes.includes("spine/task-missing-model"));
 });
 
+test("task chưa gán commit_type bị validate cảnh báo, và task done thì không (D-018)", async () => {
+  const { codes } = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/tasks/T-001.yaml": task("T-001"),
+  });
+  assert.ok(
+    codes.includes("spine/task-missing-commit-type"),
+    "task todo thiếu commit_type phải bị nhắc",
+  );
+
+  const withCommitType = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    ".ganas/tasks/T-001.yaml": task("T-001", { extra: "commit_type: feat\n" }),
+  });
+  assert.ok(!withCommitType.codes.includes("spine/task-missing-commit-type"));
+
+  const doneWithoutCommitType = await check({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+    ".ganas/scopes/P-thu.yaml": scope(),
+    ".ganas/modules/M-a.yaml": moduleYaml(),
+    // `task()` khoá cứng `status: todo` — dựng tay để đổi được thành `done`.
+    ".ganas/tasks/T-001.yaml": `id: T-001
+title: "Task thử"
+serves:
+  - G-001
+implements: D-001
+scope: P-thu
+status: done
+exit_contract:
+  - kind: command
+    run: "true"
+`,
+  });
+  assert.ok(
+    !doneWithoutCommitType.codes.includes("spine/task-missing-commit-type"),
+    "task đã done thiếu commit_type phải im lặng — 72 task cũ không được ồn",
+  );
+});
+
 /* --- Giao song song: chỉ khi vùng code rời nhau ---------------------------- *
  *
  * Song song hoá là thứ dễ bán mà đắt khi sai: hai sub-agent sửa cùng file cùng

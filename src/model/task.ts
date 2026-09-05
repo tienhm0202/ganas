@@ -129,11 +129,15 @@ export function agentDispatchLines(agent: AgentSpec): string[] {
  * `ganas commit`) gọi hàm này thay vì với tay vào `commit_type`, nên đổi
  * cách trình bày chỉ phải sửa một chỗ.
  *
+ * `commit_type` là optional ở schema (không `.default()` — xem D-018), nên
+ * mặc định `chore` khi task chưa khai gì nằm ở ĐÂY, tại nơi đọc, không phải
+ * ở tầng schema.
+ *
  * Trả về chuỗi conventional commits format: `<type>(<scope>): <subject>`,
  * với scope là `<design>/<task>` để giúp trace code thành task.
  */
 export function commitSubject(task: Task, designId: string): string {
-  return `${task.commit_type}(${designId}/${task.id}): ${task.title}`;
+  return `${task.commit_type ?? "chore"}(${designId}/${task.id}): ${task.title}`;
 }
 
 /**
@@ -257,12 +261,16 @@ export const zTask = z
      * Áp dụng khi gọi `ganas commit`. Gán lúc chẻ task — quyết định của
      * người thiết kế biết task này sửa lỗi, thêm tính năng hay refactor.
      *
-     * Mặc định `chore`: hầu hết commit là công việc hành chính (cập nhật
-     * `.ganas/`, ghi fact, chẻ task).
+     * `.optional()`, KHÔNG `.default()`: một task khai `chore` và một task
+     * không khai gì phải ra hai giá trị khác nhau sau khi parse, nếu không
+     * thì thông tin "chưa ai quyết" bị xoá ngay ở tầng schema và không
+     * validator nào cảnh báo được điều nó không còn nhìn thấy (xem D-018).
+     * Mặc định `chore` chuyển xuống tầng ĐỌC — `commitSubject()` bên dưới —
+     * chứ không còn ở đây.
      */
     commit_type: z
       .enum(["feat", "fix", "refactor", "docs", "test", "chore", "perf", "build", "ci"])
-      .default("chore"),
+      .optional(),
 
     /**
      * Bản vẽ mà task này CẦN — hợp đồng vào (input_contract).

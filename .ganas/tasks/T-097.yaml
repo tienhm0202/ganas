@@ -1,0 +1,70 @@
+id: T-097
+title: "commit_type thành optional và một warning nhắc khai, đúng khuôn
+  task-missing-model"
+serves: [ G-002 ]
+implements: D-018
+scope: P-graph-core
+status: done
+estimated_context: small
+model: verifier
+commit_type: fix
+
+context_contract:
+  must_read:
+    - path: "src/model/task.ts"
+      why: "`commit_type` khai `.default(\"chore\")` (:263) — chính chỗ nuốt mất thông
+        tin; và `commitSubject` (:135) là nơi đọc, chỗ mặc định phải chuyển tới"
+    - path: "src/graph/validate.ts"
+      why: "`spine/task-missing-model` (:700) là khuôn nguyên vẹn cho luật mới, kể cả
+        điều kiện `status !== \"done\"` giữ cho 72 task cũ không ồn"
+  facts: []
+  open_questions: []
+
+touches: [ M-model, M-validate ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/graph/validate.ts"
+    must_contain: "task-missing-commit-type"
+  # Ba file test nằm ngoài `paths` của mọi khối (ICE-017/ICE-022), nên thiếu ba
+  # tiêu chí này thì `ganas commit` bỏ chúng lại — kể cả test guard đếm mã tĩnh
+  # mà bản vá này vừa phải nâng 69 → 70. Lần thứ tư mẫu này lặp lại trong chặng
+  # 1.2.0 (T-084, T-086, T-089, giờ T-097).
+  - kind: artifact
+    path: "test/staleness.test.ts"
+    must_contain: "task-missing-commit-type"
+  - kind: artifact
+    path: "test/debt.test.ts"
+    must_contain: "task-missing-commit-type"
+  - kind: artifact
+    path: "test/commit.test.ts"
+    must_contain: "default tại nơi đọc"
+  - kind: verification
+    target: "M-model/V-model-smoke"
+  - kind: verification
+    target: "M-validate/V-validate-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Thứ tự bắt buộc, không đảo được: bỏ `.default("chore")` TRƯỚC, thêm luật SAU.
+  Thêm luật trước là viết một validator không bao giờ kêu, vì sau parse thì
+  "khai chore" và "chưa khai" là cùng một giá trị.
+
+  Ba chỗ sửa:
+  1. `src/model/task.ts` — `commit_type` thành `.optional()`.
+  2. `commitSubject` — rơi về `"chore"` khi `undefined`. Mặc định chuyển từ tầng
+     schema xuống tầng ĐỌC; đó là chỗ duy nhất quyết subject trông thế nào.
+  3. `src/graph/validate.ts` — warning `spine/task-missing-commit-type`, cùng
+     khuôn `spine/task-missing-model`: chỉ cảnh báo khi `status !== "done"`.
+
+  72 task hiện có đều KHÔNG khai `commit_type` và đều `done`. Chúng phải parse
+  được y như trước, vẫn ra `chore` khi commit, và không sinh một cảnh báo nào.
+  `ganas validate` sau khi sửa phải cho ĐÚNG số cảnh báo như trước — con số đó
+  là bằng chứng, đo nó chứ đừng khẳng định.
+
+  Ca gốc đáng có một test: task khai `commit_type: feat` ra `feat(...)`, task
+  không khai ra `chore(...)`, và task chưa done không khai thì `ganas validate`
+  báo đúng một cảnh báo mới.
+done_at: 2026-09-05T16:03:57.861Z

@@ -1,0 +1,51 @@
+id: D-018
+title: "commit_type phải phân biệt được 'khai chore' với 'chưa ai khai'"
+serves: [G-002]
+summary: |-
+  `Task.commit_type` khai `.default("chore")`. Sau khi parse, một task khai
+  `chore` và một task KHÔNG khai gì cho ra cùng một giá trị — thông tin "chưa ai
+  quyết" bị xoá ngay ở tầng schema. Không validator nào cảnh báo được điều nó
+  không còn nhìn thấy.
+
+  Đã cắn thật, một lần, ngay lượt commit đầu tiên dùng subject conventional:
+  T-091 hiện thực auto-loop — một tính năng — mà ra `chore(D-015/T-091)`. Phải
+  sửa tay và `git commit --amend`. Không lệnh nào kêu; nhãn sai chỉ lộ ra vì có
+  người tình cờ đọc dòng subject.
+
+  ## Vì sao đây là cùng một lớp lỗi với D-014 và D-017
+
+  Ba chặng liên tiếp cùng một hình dạng: một phép kiểm im lặng thì không phải
+  phép kiểm. D-014 chữa test xanh khi không quét được gì; D-017 chữa bộ dò có
+  vùng mù. Ở đây thì hàng rào KHÔNG THỂ tồn tại, vì dữ liệu để nó chấm đã bị
+  một `.default()` nuốt trước khi nó kịp nhìn.
+
+  Điều đó làm thứ tự sửa bắt buộc phải là: bỏ default TRƯỚC, thêm luật SAU.
+  Thêm luật trước là viết một validator không bao giờ kêu.
+
+  ## Khuôn đã có sẵn, không phát minh thêm
+
+  `Task.model` là optional (KHÔNG default), và `spine/task-missing-model` cảnh
+  báo khi thiếu — chỉ với task `status !== "done"`, nên 72 task đã đóng không
+  ồn. `commit_type` đi đúng con đường đó: optional ở schema, mặc định `chore`
+  quyết định tại NƠI ĐỌC (`commitSubject`), cộng một warning cùng khuôn.
+
+  Ranh giới quan trọng: bỏ `.default()` KHÔNG được làm hỏng file cũ. 72 task
+  hiện có đều không khai `commit_type`; chúng phải parse được y như trước và
+  vẫn ra `chore` khi commit.
+
+  ## Không làm trong chặng này
+
+  Không đổi danh sách type conventional. Không bắt buộc `commit_type` (bỏ
+  default để bắt buộc thì 72 task cũ đỏ ngay, và một luật mới không được force
+  cứng lên dữ liệu đã có).
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/commit.test.ts' 'test/validate.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+status: active
+created_at: 2026-09-05T17:00:00Z

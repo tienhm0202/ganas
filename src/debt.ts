@@ -97,6 +97,9 @@ const SCORES: Record<string, DebtScore> = {
   "spine/exit-verification-target-not-found": { weight: 4, ease: 5 },
   // Thiếu `model`: không ai quyết tier — không sai lệch dữ liệu, chỉ là ngỏ.
   "spine/task-missing-model": { weight: 1, ease: 5 },
+  // Thiếu `commit_type`: không ai quyết loại commit — cùng lớp với
+  // task-missing-model, sửa nhanh y hệt (khai thêm một trường).
+  "spine/task-missing-commit-type": { weight: 1, ease: 5 },
   // "large": rủi ro compact giữa chừng làm tri thức mất/méo — hỏng nền của
   // chính phiên đó. Sửa = chẻ nhỏ task, một việc thiết kế lại thật sự.
   "spine/task-too-large": { weight: 3, ease: 1 },

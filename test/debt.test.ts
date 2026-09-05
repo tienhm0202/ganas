@@ -294,15 +294,16 @@ test("guard: mọi mã tĩnh (literal `code: \"...\"`) trong validate.ts và loa
   // + 4 mã bản giao việc (T-073): spine/task-produces-unknown-artifact,
   // spine/task-produces-without-verification, spine/artifact-unproduced,
   // spine/agent-empty
+  // + 1 mã commit_type (T-097/D-018): spine/task-missing-commit-type
   // — các mã spine/design-artifact-* KHÔNG đếm ở đây vì chúng dựng bằng
   // template literal từ `artifactIssues()`, không phải literal tĩnh), cộng 3
   // mã DUY NHẤT trong load.ts (spine/config-unknown-key, load/yaml,
   // load/duplicate-id — hai mã sau xuất hiện hai lần trong file nhưng cùng
-  // literal nên `Set` chỉ giữ một) → tổng 69.
+  // literal nên `Set` chỉ giữ một) → tổng 70.
   assert.equal(
     codes.size,
-    69,
-    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 69 (66 + 3) — kiểm lại pattern grep hoặc số đếm`,
+    70,
+    `đếm được ${codes.size} mã tĩnh duy nhất, kỳ vọng 70 (67 + 3) — kiểm lại pattern grep hoặc số đếm`,
   );
 
   const missing = [...codes].filter((c) => !isExplicitlyScored(c));

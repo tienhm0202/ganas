@@ -710,6 +710,24 @@ export function validateGraph(graph: Graph, opts: { now?: number } = {}): Diagno
       });
     }
 
+    // Chẻ task mà không quyết commit_type là để ngỏ cho commit rơi vào mặc định
+    // `chore` dù task thực ra là feat/fix/refactor. Cảnh báo chứ không chặn:
+    // task cũ (chẻ trước khi trường này bỏ `.default()`) vẫn phải parse và
+    // commit được y như trước, và chỉ task chưa `done` mới còn kịp sửa (xem
+    // D-018 — cùng khuôn `spine/task-missing-model` ở trên).
+    if (!t.commit_type && t.status !== "done") {
+      diags.push({
+        severity: "warning",
+        code: "spine/task-missing-commit-type",
+        message: `task ${t.id} chưa khai \`commit_type\` — chưa ai quyết loại commit nào cho việc này`,
+        file: task.file,
+        line: at(graph, task, "status"),
+        hint:
+          `Thêm \`commit_type: feat|fix|refactor|docs|test|chore|perf|build|ci\`. ` +
+          `Thiếu nó, commit rơi về mặc định "chore" dù task có thể là một tính năng thật.`,
+      });
+    }
+
     if (t.estimated_context === "large") {
       diags.push({
         severity: "warning",

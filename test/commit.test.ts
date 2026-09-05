@@ -180,9 +180,41 @@ test("buildCommitMessage: task cũ không khai commit_type được mặc địn
     const gate = await evaluateGate(graph, task, await computeFreshness(graph));
     const message = buildCommitMessage(graph, task, gate);
 
-    // Phải có "chore" (default), không phải feat/fix/...
+    // Phải có "chore" (default tại nơi đọc — commitSubject), không phải feat/fix/...
     assert.match(message, /^chore\(D-001\/T-001\): Sửa gì đó/);
-    assert.equal(task.commit_type, "chore", "task không khai commit_type phải default là chore");
+    // Ở tầng schema, `commit_type` PHẢI là undefined (optional, không default) —
+    // đó chính là thông tin "chưa ai quyết" mà D-018 đòi giữ lại.
+    assert.equal(
+      task.commit_type,
+      undefined,
+      "task không khai commit_type phải parse ra undefined ở tầng schema, mặc định chỉ áp ở nơi đọc",
+    );
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("buildCommitMessage: task khai commit_type: feat thì subject ra feat(...)", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+  });
+  try {
+    const graph = await loadGraph(root);
+    const task = zTask.parse({
+      id: "T-001",
+      title: "Thêm auto-loop",
+      serves: ["G-001"],
+      implements: "D-001",
+      scope: "P-thu",
+      exit_contract: [{ kind: "command", run: "true" }],
+      commit_type: "feat",
+    });
+    const gate = await evaluateGate(graph, task, await computeFreshness(graph));
+    const message = buildCommitMessage(graph, task, gate);
+
+    assert.match(message, /^feat\(D-001\/T-001\): Thêm auto-loop/);
+    assert.equal(task.commit_type, "feat");
   } finally {
     await cleanup(root);
   }
