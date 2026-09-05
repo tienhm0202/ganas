@@ -9,7 +9,7 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
-## Chưa phát hành
+## v1.2.0 — 2026-09-05
 
 - **Báo cáo của sub-agent bay qua phiên cha rồi tan, và không gì đòi nó nói
   ngược lại đặc tả.** Giao việc cho sub-agent đã có từ v1.1.0, nhưng thứ quay
