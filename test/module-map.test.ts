@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { parse } from "yaml";
-
 import { matchesAny } from "../src/util/glob.js";
+import { scanFiles, scanYamlDocs } from "./scan.js";
 
 /**
  * Bản đồ code phải PHỦ HẾT `src/`.
@@ -27,27 +25,18 @@ interface ModuleDoc {
   paths?: string[];
 }
 
-function modules(): ModuleDoc[] {
-  const dir = join(ROOT, ".ganas", "modules");
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(".yaml"))
-    .map((f) => parse(readFileSync(join(dir, f), "utf8")) as ModuleDoc);
+async function modules(): Promise<ModuleDoc[]> {
+  return scanYamlDocs<ModuleDoc>(ROOT, ".ganas/modules");
 }
 
 /** Mọi file `.ts` trong `src/`, đường dẫn tương đối gốc repo, dấu `/`. */
-function sourceFiles(dir = "src"): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
-    const rel = `${dir}/${entry.name}`;
-    if (entry.isDirectory()) out.push(...sourceFiles(rel));
-    else if (entry.name.endsWith(".ts")) out.push(rel);
-  }
-  return out;
+async function sourceFiles(dir = "src"): Promise<string[]> {
+  return scanFiles(ROOT, dir);
 }
 
-test("mọi file trong src/ đều thuộc ít nhất một khối", () => {
-  const mods = modules();
-  const orphans = sourceFiles().filter(
+test("mọi file trong src/ đều thuộc ít nhất một khối", async () => {
+  const mods = await modules();
+  const orphans = (await sourceFiles()).filter(
     (f) => !mods.some((m) => matchesAny(f, m.paths ?? [])),
   );
 
@@ -59,11 +48,11 @@ test("mọi file trong src/ đều thuộc ít nhất một khối", () => {
   );
 });
 
-test("không file nào thuộc hai khối — hai bản đồ lệch nhau là hai sự thật", () => {
-  const mods = modules();
+test("không file nào thuộc hai khối — hai bản đồ lệch nhau là hai sự thật", async () => {
+  const mods = await modules();
   const shared: string[] = [];
 
-  for (const f of sourceFiles()) {
+  for (const f of await sourceFiles()) {
     const owners = mods.filter((m) => matchesAny(f, m.paths ?? [])).map((m) => m.id);
     if (owners.length > 1) shared.push(`${f} → ${owners.join(", ")}`);
   }

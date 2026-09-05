@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { scanFilesWithText } from "./scan.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -29,20 +31,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  * đúng chữ nhưng sai cấp object). Ca đó cần type thật — xem mục cuối file.
  */
 
-async function walk(dir: string, out: string[] = []): Promise<string[]> {
-  for (const e of await readdir(dir, { withFileTypes: true })) {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) await walk(p, out);
-    else if (e.name.endsWith(".ts")) out.push(p);
-  }
-  return out;
-}
-
 async function srcFiles(): Promise<Array<{ path: string; text: string }>> {
-  const files = await walk(join(ROOT, "src"));
-  return Promise.all(
-    files.map(async (path) => ({ path: relative(ROOT, path), text: await readFile(path, "utf8") })),
-  );
+  return scanFilesWithText(ROOT, "src");
 }
 
 async function knownCommands(): Promise<string[]> {

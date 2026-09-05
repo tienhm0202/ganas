@@ -1,0 +1,46 @@
+id: G-002
+title: "Hàng rào không xanh được khi nó chưa kiểm gì"
+outcome: >-
+  Không hàng rào cơ học nào của ganas báo đạt trong khi nó thực ra không kiểm
+  được gì — và mỗi bằng chứng biết nó được chứng tại commit nào, nên bằng chứng
+  ghi trên một commit đã biến khỏi lịch sử thì không còn được tính.
+
+# Hai tiêu chí, cả hai ĐANG ĐỎ tại HEAD hôm nay — đó là điều kiện để chúng có
+# nghĩa. Tiêu chí của G-001 (`npm test` exit_zero) xanh suốt cả 13 chặng nên
+# không bao giờ phân biệt được tiến bộ với giậm chân; đây là chỗ sửa lỗi đó.
+acceptance:
+  - id: A-1
+    kind: command
+    run: "npx tsx --test 'test/scan-guard.test.ts'"
+    expect: exit_zero
+  - id: A-2
+    kind: command
+    run: "npx tsx --test 'test/ledger-commit.test.ts'"
+    expect: exit_zero
+
+status: draft
+created_at: 2026-09-01T06:10:00Z
+notes: |-
+  CHƯA KÝ. Nội dung do model soạn theo hướng @tienhm chọn trong phiên
+  2026-09-01; chữ ký `approved_by` + `approved_at` phải do người điền, và chỉ
+  khi đó mới chuyển `status: active`. Luật ở `src/model/goal.ts`: model không
+  được tự đặt mục tiêu.
+
+  Nguồn của mục tiêu này là hai chỗ hở đo được, không phải một nguyện vọng:
+
+  1. `test/module-nature.test.ts:105` kết bằng `assert.deepEqual(wrong, [])`.
+     Vòng quét không tìm thấy file nào — đổi cấu trúc thư mục, sai glob, `paths`
+     rỗng — thì `wrong` rỗng và test XANH mà không chứng minh gì. Không test
+     quét nào của ganas hiện có chốt chống rỗng.
+
+  2. `src/verify/ledger.ts:292` chạy `git rev-parse --short HEAD` và ghi kết quả
+     vào trường `git` của mỗi dòng sổ cái. Không một dòng nào trong `src/` đọc
+     nó ra. Một trường được ghi mà không ai đọc là đúng lớp "lời hứa suông" mà
+     `test/no-dead-ends.test.ts` sinh ra để chặn — và nó đã lọt.
+
+  Ý tưởng đến từ repo `mosonlab/anneal` (đọc 2026-09-01), hai chỗ cụ thể:
+  `packages/github-client/src/no-child-process.test.ts` có chốt
+  `assert.ok(entries.length > 0, "the scan found no source files, so it proved
+  nothing")`; và luật bằng chứng gắn commit trong `CONTRIBUTING.md` — "A verdict
+  belongs to the exact commit it names — not to an earlier one on the same
+  branch, and not to 'the branch'."

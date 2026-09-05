@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { exists, existsAsync, listDir, mtimeMs } from "../src/util/fsprobe.js";
 import { cleanup } from "./helpers.js";
+import { scanFiles } from "./scan.js";
 
 /**
  * `src/util/fsprobe.ts` — công cụ tra trạng thái dùng chung.
@@ -74,7 +75,6 @@ test("mtimeMs: file tồn tại → trả một số; không tồn tại → und
 /* --- Điều kiện (1) của luật: công cụ phải nằm MỘT chỗ --------------------- */
 
 test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs để TRA trạng thái", async () => {
-  const { readdir, readFile } = await import("node:fs/promises");
   const root = join(import.meta.dirname, "..");
 
   /**
@@ -98,16 +98,6 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
     "src/mcp/server.ts",
   ]);
 
-  const walk = async (dir: string): Promise<string[]> => {
-    const out: string[] = [];
-    for (const e of await readdir(join(root, dir), { withFileTypes: true })) {
-      const rel = `${dir}/${e.name}`;
-      if (e.isDirectory()) out.push(...(await walk(rel)));
-      else if (e.name.endsWith(".ts")) out.push(rel);
-    }
-    return out;
-  };
-
   /**
    * Chưa chuyển sang `fsprobe`, và mỗi dòng nợ một task cụ thể.
    *
@@ -121,7 +111,7 @@ test("⭐ chỉ fsprobe.ts và các khối io được import thẳng node:fs đ
   const PENDING: string[] = [];
 
   const offenders: string[] = [];
-  for (const f of await walk("src")) {
+  for (const f of await scanFiles(root, "src")) {
     if (ALLOWED.has(f)) continue;
     const text = await readFile(join(root, f), "utf8");
     // Chỉ bắt phép TRA. Đọc/ghi nội dung là chuyện của luật khác (`nature`).

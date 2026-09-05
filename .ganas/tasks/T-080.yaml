@@ -1,0 +1,64 @@
+id: T-080
+title: "Helper quét dùng chung tự ném khi không thấy file, và một test canh
+  không ai tự readdir"
+serves:
+  - G-002
+implements: D-014
+scope: P-graph-core
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "test/module-nature.test.ts"
+      why: "ca gốc: `assert.deepEqual(wrong, [])` xanh cả khi vòng quét không thấy
+        file nào — đọc để biết hình dạng vòng quét đang lặp lại ở các test khác"
+    - path: ".claude/rules/architecture.md"
+      why: "luật 'công cụ phải nằm MỘT chỗ dùng chung' là lý do chọn helper thay vì
+        bắt mỗi test tự nhớ thêm một assert"
+  facts: []
+  open_questions: []
+
+touches: []
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/scan-guard.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+  - kind: artifact
+    path: "test/scan-guard.test.ts"
+    must_contain: "readdir"
+  # Bốn test đã di trú sang helper phải VẪN xanh — di trú không được đổi ý nghĩa
+  # phép kiểm nào. Tiêu chí này đồng thời kéo chúng vào ranh giới của task:
+  # `touches` rỗng nên không có khối nào nhận chúng (ICE-017/ICE-022).
+  - kind: command
+    run: "npx tsx --test 'test/module-nature.test.ts' 'test/module-map.test.ts'
+      'test/fsprobe.test.ts' 'test/no-dead-ends.test.ts'"
+    expect: exit_zero
+  # Chính helper — chốt chống rỗng phải nằm TRONG nó, không nằm ở người gọi.
+  - kind: artifact
+    path: "test/scan.ts"
+    must_contain: "không thấy file nào"
+
+notes: |-
+  `touches: []` vì thư mục `test/` không thuộc `paths` của khối nào — đây chính
+  là ICE-017/ICE-022. Tiêu chí `artifact` trỏ `test/scan-guard.test.ts` là thứ
+  DUY NHẤT kéo file test vào ranh giới của `ganas commit`; bỏ nó thì commit bỏ
+  lại đúng file vừa viết. Khuôn này T-078 đã dùng cho `docs/COMMANDS.md`.
+
+  Helper phải NÉM, không phải trả về cờ cho người gọi kiểm — trả cờ thì lại là
+  kỷ luật, đúng thứ đang hỏng. Thông điệp lỗi phải nói được cả hai vế: quét ở
+  đâu, và vì sao rỗng là lỗi chứ không phải kết quả.
+
+  Test canh (`test/scan-guard.test.ts`) tự nó PHẢI có chốt chống rỗng — nếu
+  danh sách file test nó duyệt mà rỗng thì nó xanh vô nghĩa, lặp lại đúng lỗi
+  nó sinh ra để chặn.
+
+  KHÔNG đổi ý nghĩa phép kiểm nào đang có. Nếu di trú một test sang helper làm
+  nó ĐỎ, đó là hàng rào vừa bắt được một vi phạm thật đang bị che — DỪNG LẠI,
+  báo cáo, đừng nới helper cho vừa.
+done_at: 2026-09-05T12:32:16.406Z

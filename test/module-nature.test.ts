@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { parse } from "yaml";
-
 import { matchesAny } from "../src/util/glob.js";
+import { scanFiles, scanYamlDocs } from "./scan.js";
 
 /**
  * Nhãn `nature` của khối phải khớp I/O THẬT của code trong khối đó.
@@ -48,23 +47,11 @@ interface ModuleDoc {
 }
 
 async function modules(): Promise<ModuleDoc[]> {
-  const dir = join(ROOT, ".ganas", "modules");
-  const out: ModuleDoc[] = [];
-  for (const f of await readdir(dir)) {
-    if (!f.endsWith(".yaml")) continue;
-    out.push(parse(await readFile(join(dir, f), "utf8")) as ModuleDoc);
-  }
-  return out;
+  return scanYamlDocs<ModuleDoc>(ROOT, ".ganas/modules");
 }
 
 async function sourceFiles(dir = "src"): Promise<string[]> {
-  const out: string[] = [];
-  for (const e of await readdir(join(ROOT, dir), { withFileTypes: true })) {
-    const rel = `${dir}/${e.name}`;
-    if (e.isDirectory()) out.push(...(await sourceFiles(rel)));
-    else if (e.name.endsWith(".ts")) out.push(rel);
-  }
-  return out;
+  return scanFiles(ROOT, dir);
 }
 
 /** Bằng chứng file này CHẠM RA NGOÀI thật — rỗng nghĩa là không có. */

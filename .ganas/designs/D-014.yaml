@@ -1,0 +1,65 @@
+id: D-014
+title: "Hàng rào tự khai nó đã quét gì, và bằng chứng nhớ commit đã chứng nó"
+serves:
+  - G-002
+summary: |-
+  Hai chỗ hở cùng một hình dạng: một phép kiểm báo ĐẠT trong khi nó không kiểm
+  được gì. Cả hai đo được, không phải suy đoán.
+
+  ## Vế 1 — test quét xanh rỗng
+
+  `test/module-nature.test.ts:105` kết bằng `assert.deepEqual(wrong, [])`. Danh
+  sách `wrong` rỗng có HAI nghĩa ngược nhau: "quét hết rồi, không có vi phạm"
+  và "không quét được gì". Test không phân biệt được, nên đổi cấu trúc thư mục
+  hay sai một glob là hàng rào tắt lặng lẽ. Tám file test của repo có quét
+  filesystem; không file nào có chốt chống rỗng.
+
+  Cách chữa KHÔNG phải bắt mỗi test tự nhớ thêm một assert — đó là kỷ luật, và
+  kỷ luật thì quên. Theo đúng luật `.claude/rules/architecture.md` ("công cụ
+  phải nằm MỘT chỗ dùng chung"): một helper quét dùng chung, và chính helper đó
+  ném lỗi khi không tìm thấy file nào. Test nào cũng gọi nó thì không test nào
+  phải nhớ gì.
+
+  Rồi một test canh chính luật đó: không file test nào được tự `readdir` ngoài
+  helper. Test canh này BẢN THÂN nó phải có chốt chống rỗng — nếu không thì nó
+  lặp lại đúng lỗi nó sinh ra để chặn.
+
+  ## Vế 2 — trường `git` của sổ cái không ai đọc
+
+  `src/verify/ledger.ts:292` chạy `git rev-parse --short HEAD` và ghi vào
+  trường `git` của mỗi dòng sổ cái. Không dòng nào trong `src/` đọc nó ra. Một
+  trường ghi mà không đọc là lời hứa suông — đúng lớp lỗi mà
+  `test/no-dead-ends.test.ts` sinh ra để chặn, và nó đã lọt qua.
+
+  Nối dây: bằng chứng được chứng tại một commit KHÔNG còn nằm trong lịch sử của
+  HEAD thì không được tính là còn hiệu lực. Đó là ca rebase, amend, hoặc đổi
+  nhánh — trạng thái đã được chứng chưa bao giờ đi tiếp.
+
+  FAIL OPEN, có chủ ý: commit mà repo KHÔNG BIẾT (clone nông, đã gc, chưa fetch)
+  thì im lặng bỏ qua, không kêu. Phân biệt "biết và không phải tổ tiên" với
+  "không biết" là bắt buộc — gộp hai ca này lại thì mọi clone nông đỏ rực và
+  hàng rào lập tức thành thứ người ta tắt đi.
+
+  `M-freshness` và `M-verify` đều khai `nature: io`, nên gọi git nằm đúng chỗ,
+  không phải mở port mới.
+
+  ## Không làm trong chặng này
+
+  Không đụng mô hình độ tươi theo `depends_on`/`ttl_days` đang chạy. Commit chỉ
+  THÊM một lý do khiến bằng chứng hết hiệu lực, không thay cái đã có.
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/scan-guard.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/ledger-commit.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+  - kind: verification
+    target: "M-verify/V-verify-run"
+
+status: active
+created_at: 2026-09-01T06:12:00Z
