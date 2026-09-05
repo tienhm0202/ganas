@@ -9,11 +9,15 @@ import { type Candidate, rankedCandidates, selectNextTask } from "../../graph/se
 import { validateGraph } from "../../graph/validate.js";
 import { generateHandoff } from "../../handoff.js";
 import { enforcementFor } from "../../model/index.js";
-import { renderBrief } from "../../render/brief.js";
+import { generateNote } from "../../note.js";
+import { REPORT_SECTIONS, renderBrief } from "../../render/brief.js";
 import {
+  agentReportedFor,
   bindSession,
   clearTouched,
   dispatchNudgedFor,
+  haltAutoLoop,
+  markAgentReported,
   markDispatchNudged,
   markTouched,
   releaseSession,
@@ -21,7 +25,7 @@ import {
   taskForSession,
 } from "../../state.js";
 import { existsAsync } from "../../util/fsprobe.js";
-import { ledgerPath } from "../../verify/ledger.js";
+import { ledgerPath, runContext } from "../../verify/ledger.js";
 import {
   applyEnforcement,
   decideEntityOverwrite,
@@ -391,6 +395,164 @@ export async function stop(input: HookInput): Promise<HookOutput> {
   return mode === "enforce"
     ? { decision: "block", reason: body }
     : { systemMessage: `ganas (chế độ warn — chưa chặn):\n${body}` };
+}
+
+/* ------------------------------------------------------------------------- *
+ * SubagentStop — giữ lại báo cáo của worker, đòi đủ ba mục phản biện
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Trần độ dài phần báo cáo ghi vào `runs/notes/` — chặn `state.json`/note
+ * phình vô hạn khi một sub-agent lỡ dán nguyên một đoạn log dài vào câu trả
+ * lời cuối. Quy ước bắt buộc của repo: "cắt bớt thì phải in số dòng đã bỏ"
+ * (`src/commands/CLAUDE.md`) — cắt im lặng làm người đọc note tưởng đã thấy
+ * hết báo cáo.
+ */
+const NOTE_BODY_LIMIT_CHARS = 8_000;
+
+/**
+ * Cắt `text` CỨNG ở đúng `NOTE_BODY_LIMIT_CHARS` ký tự (không lùi về biên
+ * dòng gần nhất — mục tiêu là chặn TRẦN dung lượng, không phải giữ Markdown
+ * đẹp), trả kèm số dòng đã bỏ để in ra cho người đọc note.
+ */
+function truncateForNote(text: string): { body: string; droppedLines: number } {
+  if (text.length <= NOTE_BODY_LIMIT_CHARS) return { body: text, droppedLines: 0 };
+  const body = text.slice(0, NOTE_BODY_LIMIT_CHARS);
+  // Dòng bị cắt dở ở đúng mốc cũng tính là một dòng "đã bỏ".
+  const droppedLines = text.slice(NOTE_BODY_LIMIT_CHARS).split("\n").length;
+  return { body, droppedLines };
+}
+
+/**
+ * `section` có xuất hiện dưới dạng MỘT DÒNG heading Markdown (`#`…`######`,
+ * rồi đúng chữ đó, cho phép khoảng trắng hai đầu) trong `message` không.
+ *
+ * Đây là TOÀN BỘ những gì hàng rào này kiểm được: sự CÓ MẶT của tiêu đề,
+ * không phải nội dung bên dưới nó. Worker viết "(không có)" ngay sau heading
+ * vẫn qua — xem giới hạn đầy đủ ở docstring của `subagentStop`.
+ */
+function hasReportHeading(message: string, section: string): boolean {
+  const escaped = section.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  return new RegExp(`^#{1,6}\\s*${escaped}\\s*$`, "mi").test(message);
+}
+
+/** Những tiêu đề của `REPORT_SECTIONS` còn thiếu trong `message` — rỗng nghĩa là đủ. */
+function missingReportSections(message: string): string[] {
+  return REPORT_SECTIONS.filter((s) => !hasReportHeading(message, s));
+}
+
+/**
+ * Worker tự khai kết luận của lượt này là "CHẶN:" — xin dừng auto-loop để
+ * người xử lý, không phải đang bị HOOK chặn. Chuỗi khớp đúng quy ước trong
+ * mẫu báo cáo (`Kết luận: XONG hoặc CHẶN: <lý do một dòng>`).
+ */
+function reportRequestsHalt(message: string): boolean {
+  return /CHẶN:/.test(message);
+}
+
+function missingSectionsReason(missing: readonly string[]): string {
+  return (
+    `Báo cáo kết thúc lượt của sub-agent thiếu ${missing.length} tiêu đề bắt buộc: ` +
+    `${missing.map((s) => `"${s}"`).join(", ")}.\n\n` +
+    `Ba mục "${REPORT_SECTIONS.join('", "')}" là chỗ worker được nói ngược lại người ra đề — ` +
+    `thiếu một trong chúng thì báo cáo chỉ còn là lời khen suông. Viết lại đủ ba mục, ĐÚNG DẠNG ` +
+    `heading Markdown (vd \`## ${REPORT_SECTIONS[0]}\`), rồi kết thúc lượt lần nữa.\n\n` +
+    `(Chỉ đòi đúng MỘT LẦN cho agent này — lượt kế tiếp, dù vẫn thiếu, sẽ không bị đòi lại.)`
+  );
+}
+
+/**
+ * Sub-agent kết thúc lượt (Claude Code gọi khi một Agent-tool call trả về).
+ * Đây là nơi DUY NHẤT ganas nhìn thấy `last_assistant_message` của sub-agent
+ * trước khi nó tan vào tóm tắt của phiên cha — xem D-015 vế 1.
+ *
+ * Thứ tự dưới đây CHÍNH LÀ nội dung task T-089, không được đảo:
+ *
+ * 1. Không phải dự án ganas ⇒ `ALLOW`.
+ * 2. `input.agent_id === undefined` (tool call không đến từ sub-agent, tức
+ *    đây là Stop của phiên chính bị harness gắn nhầm tên sự kiện) ⇒ `ALLOW`.
+ * 3. LUÔN ghi báo cáo ra `runs/notes/<session>.md` qua lõi `src/note.ts` —
+ *    GHI TRƯỚC, CHẤM SAU: báo cáo tồi (thiếu tiêu đề, hay bị chặn ở bước 4)
+ *    vẫn phải được giữ lại, không phải chỉ báo cáo "đạt" mới đáng lưu.
+ * 4. Thiếu tiêu đề bắt buộc VÀ agent này CHƯA từng bị đòi báo cáo (ở đúng
+ *    task đang bind) ⇒ `applyEnforcement(enforcementFor(config,
+ *    "subagent_report"), ...)`. Đánh dấu "đã đòi" xảy ra bất kể mode
+ *    warn/enforce — đây là cờ nhắc-một-lần, không phải cờ riêng của enforce.
+ * 5. Báo cáo tự khai "CHẶN:" trong kết luận ⇒ KHÔNG chặn (worker đã nói thật,
+ *    chặn thêm là phạt đúng hành vi cần khuyến khích) — thay vào đó dừng
+ *    auto-loop và trả `systemMessage` để người biết mà xử lý.
+ *
+ * `loadGraph` (đắt — đọc và validate cả `.ganas/`) chỉ được gọi SAU bước 2,
+ * và ở đây còn trễ hơn: chỉ gọi khi bước 4 THẬT SỰ cần biết mode cưỡng chế —
+ * luật "chỉ đi lấy thứ policy hỏi" (`src/hooks/io/CLAUDE.md`).
+ *
+ * Giới hạn PHẢI nói thẳng: hàng rào ở bước 4 cưỡng chế được sự CÓ MẶT của ba
+ * tiêu đề, KHÔNG cưỡng chế được nội dung — worker viết "(không có)" dưới mỗi
+ * heading là qua. Đừng coi ALLOW ở đây là "báo cáo đã được xác nhận đúng sự
+ * thật"; đó là việc của người đọc `runs/notes/`.
+ *
+ * Không có `sessionId`: vẫn ghi note (dùng nhãn `unknown-session`) nhưng bỏ
+ * qua bước 4/5 — cả hai đều cần `state.json` khoá theo session để nhớ "đã
+ * đòi chưa"/dừng đúng phiên nào, và không có session thì không có gì để nhớ.
+ * Chặn lặp lại vô hạn trong ca đó còn tệ hơn bỏ qua.
+ */
+export async function subagentStop(input: HookInput): Promise<HookOutput> {
+  const root = findGanasRoot(input.cwd ?? process.cwd());
+  if (!root) return ALLOW;
+
+  if (input.agent_id === undefined) return ALLOW;
+  const agentId = input.agent_id;
+
+  const sessionId = input.session_id;
+  const session = sessionId ? await sessionRecord(root, sessionId) : null;
+  const taskId = session?.task ?? null;
+  const rawMessage = input.last_assistant_message ?? "";
+
+  // Bước 3 — GHI TRƯỚC, CHẤM SAU.
+  const { body, droppedLines } = truncateForNote(rawMessage);
+  const cutNotice =
+    droppedLines > 0
+      ? `\n\n… đã cắt bớt ${droppedLines} dòng còn lại (báo cáo dài hơn ${NOTE_BODY_LIMIT_CHARS} ký tự).`
+      : "";
+  // Dùng lại `runContext` của sổ cái xác minh chỉ để lấy sha hiện tại — M-hook-io
+  // đã sẵn `depends_on: M-verify`, không đáng viết thêm một lời gọi git riêng.
+  const sha = (await runContext(root, "subagentStop")).git;
+  await generateNote(root, sessionId ?? "unknown-session", {
+    at: new Date().toISOString(),
+    taskId,
+    sha,
+    touchedPaths: session?.touched_paths ?? [],
+    content:
+      `- agent_type: \`${input.agent_type ?? "(không rõ)"}\`\n` +
+      `- agent_id: \`${agentId}\`\n\n` +
+      body +
+      cutNotice,
+  });
+
+  if (!sessionId) return ALLOW;
+
+  // Bước 4.
+  const missing = missingReportSections(rawMessage);
+  if (missing.length > 0) {
+    const already = await agentReportedFor(root, sessionId, taskId ?? "", agentId);
+    if (!already) {
+      await markAgentReported(root, sessionId, agentId);
+      const graph = await loadGraph(root);
+      return applyEnforcement(enforcementFor(graph.config, "subagent_report"), missingSectionsReason(missing));
+    }
+  }
+
+  // Bước 5.
+  if (reportRequestsHalt(rawMessage)) {
+    await haltAutoLoop(root, sessionId);
+    return {
+      systemMessage:
+        `ganas: sub-agent báo "CHẶN:" trong kết luận — đã dừng auto-loop. Đọc báo cáo trong ` +
+        `\`runs/notes/${sessionId}.md\`, xử lý xong thì tự chạy \`ganas next\` để mở lại.`,
+    };
+  }
+
+  return ALLOW;
 }
 
 /* ------------------------------------------------------------------------- *

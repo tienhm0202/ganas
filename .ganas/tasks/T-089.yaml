@@ -1,0 +1,72 @@
+id: T-089
+title: "Hook SubagentStop giữ lại báo cáo worker và đòi ba mục phản biện"
+serves: [ G-003 ]
+implements: D-015
+scope: P-hook
+status: done
+estimated_context: medium
+model: main
+blocked_by: [ T-082, T-084, T-087, T-088 ]
+
+context_contract:
+  must_read:
+    - path: "src/hooks/io/handlers.ts"
+      why: "khuôn của mọi handler: `ALLOW` khi không phải dự án ganas (:47), và
+        `postToolUse` (:305-330) cho thấy `applyEnforcement` dùng thế nào"
+    - path: "src/hooks/policy/types.ts"
+      why: "`agent_id`, `agent_type`, `last_assistant_message` ĐÃ khai sẵn (:34-37) —
+        file này không cần sửa, đọc để khỏi thêm trùng"
+    - path: "src/hooks/io/CLAUDE.md"
+      why: "hai bất biến task này dễ phá nhất: handler không bao giờ được ném, và chỉ
+        đi lấy thứ policy HỎI (đừng `loadGraph` ở đầu hàm)"
+  facts: []
+  open_questions: []
+
+touches: [ M-hook-io ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/hooks/io/handlers.ts"
+    must_contain: "subagentStop"
+  # `REPORT_SECTIONS` sinh ra ở task này nhưng sống trong `src/render/brief.ts`
+  # (M-render, phạm vi khác) — đặt ngược lại sẽ tạo cạnh depends_on mới ngược
+  # tầng. Không có tiêu chí này thì cây sắp commit có `handlers.ts` import một
+  # hằng chưa tồn tại: ranh giới commit phải theo file THẬT SỰ đổi.
+  - kind: artifact
+    path: "src/render/brief.ts"
+    must_contain: "REPORT_SECTIONS"
+  - kind: command
+    run: "npx tsx --test 'test/subagent-report.test.ts'"
+    expect: exit_zero
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Thứ tự trong handler, và thứ tự này là nội dung chính:
+
+  1. không phải dự án ganas ⇒ ALLOW.
+  2. `input.agent_id === undefined` ⇒ ALLOW.
+  3. LUÔN ghi `last_assistant_message` vào `runs/notes/<session>.md` qua lõi
+     `src/note.ts` — kèm `agent_type`, `agent_id`, task, sha. GHI TRƯỚC, CHẤM SAU:
+     báo cáo tồi vẫn phải được giữ lại. Cắt ở trần ~8.000 ký tự và IN SỐ DÒNG ĐÃ
+     BỎ (quy ước bắt buộc, `src/commands/CLAUDE.md`).
+  4. thiếu tiêu đề VÀ chưa từng chặn `agent_id` này ⇒ `applyEnforcement(
+     enforcementFor(config, "subagent_report"), ...)`.
+  5. báo cáo có `CHẶN:` ⇒ KHÔNG chặn, đặt cờ dừng auto-loop + `systemMessage`.
+
+  `loadGraph` chỉ gọi sau bước 2, không sớm hơn.
+
+  Danh sách tiêu đề phải có ĐÚNG MỘT nguồn: hằng `REPORT_SECTIONS`. Task này định
+  nghĩa và export nó; T-090 làm brief in ra đúng nó. Hai bản danh sách ở hai file
+  là thứ lệch ngay tuần sau.
+
+  Nói thẳng trong docstring giới hạn của hàng rào: nó cưỡng chế được sự CÓ MẶT
+  của ba tiêu đề, không cưỡng chế được nội dung. Worker viết "(không có)" là qua.
+  Đừng viết như thể ganas kiểm được sự thật của văn xuôi.
+
+  Nếu T-082 phát hiện Stop hook cũng bắn lúc sub-agent dừng, phần vá `stop` đã
+  nằm ở T-082 rồi — đừng vá lại lần nữa ở đây.
+done_at: 2026-09-05T14:04:21.130Z

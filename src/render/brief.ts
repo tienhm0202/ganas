@@ -61,6 +61,33 @@ bằng tay.`;
 const BRIEF_LENGTH_WARNING_CHARS = 14_000;
 
 /**
+ * Ba tiêu đề bắt buộc trong báo cáo kết thúc lượt của một sub-agent — nguồn
+ * DUY NHẤT, đọc bởi cả hai phía:
+ *
+ * - hook `subagentStop` (`src/hooks/io/handlers.ts`) đối chiếu báo cáo với
+ *   đúng ba tiêu đề này trước khi cho sub-agent dừng (T-089).
+ * - `renderBrief` (T-090) in lại nguyên hằng này ở mục "Giao việc", để worker
+ *   biết TRƯỚC ba mục phải viết, thay vì đoán hoặc phải đọc code hook.
+ *
+ * Hai bản danh sách ở hai file là thứ lệch ngay tuần sau — đặt Ở ĐÂY (không
+ * phải trong `hooks/io/`) vì `M-hook-io` đã sẵn `depends_on: M-render` từ
+ * T-038 (`renderBrief` được gọi ở hook `sessionStart`): thêm hằng này vào
+ * `render/brief.ts` KHÔNG sinh cạnh `depends_on` mới, chỉ dùng lại cạnh đã có
+ * — đặt ngược lại (hằng trong `hooks/io/`, `render/` import về) mới là cạnh
+ * MỚI và ngược tầng (P-cli phụ thuộc ngược vào P-hook cho một hằng số).
+ *
+ * Giới hạn PHẢI biết: đây là danh sách TIÊU ĐỀ, không phải NỘI DUNG. Hàng rào
+ * dùng hằng này chỉ cưỡng chế được sự CÓ MẶT của heading, không cưỡng chế
+ * được worker có viết gì có nghĩa bên dưới hay không — xem docstring của
+ * `subagentStop`.
+ */
+export const REPORT_SECTIONS = [
+  "Lệch so với đặc tả",
+  "Quyết định tự ý",
+  "Phát hiện / nghi ngờ",
+] as const;
+
+/**
  * Legacy claim liên quan tới task: cùng phạm vi VÀ anchor trỏ vào file mà task
  * phải đọc. Lọc phạm vi trước — một hiểu nhầm cũ về vùng code khác không phải
  * thứ phiên này cần cân nhắc.
