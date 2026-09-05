@@ -51,5 +51,6 @@ exit_contract:
     run: "npm test"
     expect: exit_zero
 
-status: active
+status: done
+done_at: 2026-09-05T15:40:00Z
 created_at: 2026-09-05T15:20:00Z

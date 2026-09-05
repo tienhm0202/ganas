@@ -223,3 +223,21 @@
     - src/model/task.ts:216
     - commit:14ea014
   status: open
+- id: ICE-038
+  title: Không có lệnh xem trạng thái auto_loop (rounds/halted) của một phiên
+  found_at: 2026-09-05T15:10:52.927Z
+  review_after_days: 30
+  weight: 2
+  ease: 4
+  why_deferred: Viết docs/PLAN-TO-LOOP.md (T-094) cần giải thích cách người dùng
+    biết loop đang ở vòng mấy hay đã bị halt vì sao — hiện chỉ có cách đọc thẳng
+    .ganas/state.json (gitignore, không phải giao diện công khai) hoặc chờ
+    systemMessage của Stop hook lúc nó xảy ra. Không chặn việc viết tài liệu (đã
+    mô tả đúng cơ chế hiện có), nhưng một lệnh kiểu 'ganas flow --session <id>'
+    in rounds/halted/red_count sẽ giúp gỡ một loop bị kẹt mà không cần mở
+    state.json tay.
+  anchors:
+    - src/state.ts#L142
+    - src/commands
+  scope: P-hook
+  status: open

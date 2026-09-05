@@ -18,7 +18,8 @@ acceptance:
     run: "npx tsx --test 'test/auto-loop.test.ts'"
     expect: exit_zero
 
-status: active
+status: closed
+closed_at: 2026-09-05T15:40:00Z
 created_at: 2026-09-05T00:00:00Z
 approved_by: "@tienhm"
 approved_at: 2026-09-05T10:47:44Z
@@ -40,3 +41,22 @@ notes: |-
   Điều mục tiêu này KHÔNG hứa: nó không làm nội dung báo cáo của worker đáng
   tin hơn. ganas kiểm được rằng báo cáo CÓ ba mục phản biện, không kiểm được
   ba mục đó nói thật. Chỗ kiểm thật vẫn là `gate` và sổ cái.
+
+  ĐÓNG 2026-09-05 theo yêu cầu của @tienhm, cùng ngày ký. `approved_by` phía
+  trên vẫn là chữ ký lúc MỞ; schema không có `closed_by`, nên người quyết đóng
+  ghi ở đây.
+
+  Căn cứ đóng: cả hai tiêu chí đạt — `test/subagent-report.test.ts` 10/10 và
+  `test/auto-loop.test.ts` 10/10, đo lúc đóng. Hai chặng phục vụ mục tiêu này
+  đều `done`: D-015 (cơ chế) và D-016 (tài liệu).
+
+  GHI THẲNG ĐIỀU MỤC TIÊU NÀY KHÔNG CHỨNG MINH ĐƯỢC, vì nó đổi cách đọc con số
+  trên: hai tiêu chí đều là test tự động, chạy trên input giả lập. Không tiêu
+  chí nào chứng minh auto-loop đã chạy hết một chặng THẬT trong một phiên Claude
+  Code thật — `test/auto-loop.test.ts` dựng input rồi gọi handler, nó không mở
+  phiên nào. Ba hành vi harness ở `C-003` vẫn chưa quan sát được, và
+  `auto_loop.enabled` vì thế mặc định `false`.
+
+  Nói cách khác: mục tiêu đóng vì cơ chế đã dựng xong và có bằng chứng cơ học,
+  KHÔNG phải vì luồng đã được chứng minh chạy trơn ngoài đời. Lần chạy thật đầu
+  tiên vẫn còn ở phía trước, và nên có người ngồi xem.

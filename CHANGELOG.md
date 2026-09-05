@@ -9,6 +9,69 @@ Việc đang làm ghi dưới `## Chưa phát hành`. Đừng gõ tay số versi
 `scripts/sync-version.mjs`, và `test/version-sync.test.ts` chặn mọi trường hợp
 lệch giữa CHANGELOG, `package.json`, manifest plugin và bundle đã build.
 
+## Chưa phát hành
+
+- **Báo cáo của sub-agent bay qua phiên cha rồi tan, và không gì đòi nó nói
+  ngược lại đặc tả.** Giao việc cho sub-agent đã có từ v1.1.0, nhưng thứ quay
+  về chỉ là một đoạn tóm tắt tự do: nó sống trong context phiên cha, mất khi
+  compact, và không ai bắt nó trả lời ba câu đáng giá nhất — *lệch so với đặc
+  tả*, *quyết định tự ý*, *phát hiện / nghi ngờ*. Đó là chỗ worker được nói
+  ngược lại người ra đề, và ở những dự án đã chạy mẫu báo cáo này bằng tay, nó
+  sinh ra gần hết giá trị.
+
+  Điểm cắm hoá ra đã có sẵn: `SubagentStop` nhận `last_assistant_message`, và
+  ba trường cần thiết (`agent_id`, `agent_type`, `last_assistant_message`) đã
+  khai trong `HookInput` từ trước. Không cần kênh mới — chỉ cần chặn đúng chỗ
+  đoạn đó bay qua. Hook thứ bảy vì thế ghi mọi báo cáo vào `runs/notes/` (ghi
+  TRƯỚC, chấm SAU: báo cáo tồi vẫn phải giữ lại) rồi chặn sub-agent dừng nếu
+  thiếu tiêu đề, đúng một lần cho mỗi agent, qua luật `subagent_report`.
+
+  Nói thẳng giới hạn, vì tài liệu hứa quá ở đây là nguy hiểm: hàng rào cưỡng
+  chế được **sự có mặt** của ba tiêu đề, KHÔNG cưỡng chế được nội dung. Đã
+  quan sát thật khi viết bản này — cùng một prompt, model mạnh viết ba mục có
+  nội dung kể cả chỗ phản biện người ra đề, model nhỏ viết "(không có)" cả ba.
+  Chỗ kiểm thật vẫn là `gate` và sổ cái.
+
+- **Hết một task là phiên dừng lại chờ người, kể cả khi việc kế tiếp đã rõ.**
+  `ganas next` từ chối mở task mới khi task cũ chưa done, Stop hook cố ý chỉ
+  chặn đúng một lần, `auto_begin` chỉ mồi một câu lúc khởi động. Người duyệt
+  xong plan vẫn phải ngồi lại gõ từng bước.
+
+  `auto_loop` chạy hết các task của MỘT chặng (`Design` — không thêm khái niệm
+  "phase" nào, vì Design đã là nó) rồi dừng. Vòng lặp thật nằm ở brief; Stop
+  hook chỉ mồi lại một nhịp mỗi lượt. Bốn phanh, không cái nào dựa vào harness:
+  trần số vòng đếm trong `state.json`, dừng khi cùng một task đỏ hai lượt liên
+  tiếp, dừng khi báo cáo có `CHẶN:`, dừng khi hết task trong chặng. Bộ đếm sống
+  ngoài `SessionRecord` có chủ ý — `bindSession` thay cả record, nên để trong
+  đó thì trần bị vô hiệu đúng ở ca xấu nhất là ca vòng lặp chạy mãi.
+
+  Nhánh nằm SAU `evaluateGate` và chỉ chạy khi gate đã xanh thật: auto-loop
+  không nới một tiêu chí nào, nó chỉ thay "người gõ `ganas next`" bằng "hook
+  nhắc gõ". Tiêu chí `kind: manual` vẫn dừng vòng lặp. **Mặc định TẮT**, và
+  `docs/PLAN-TO-LOOP.md` khuyên để tắt cho tới khi tự chạy thử một chặng nhỏ —
+  ba hành vi harness quanh `stop_hook_active`/`SubagentStop` vẫn chưa quan sát
+  được, ghi ở claim `C-003`.
+
+- **Commit message giờ theo conventional commits.** `<type>(<design>/<task>):
+  <title>`, ví dụ `feat(D-015/T-091): ...`. `type` lấy từ `Task.commit_type`
+  gán lúc chẻ task, cùng chỗ và cùng lúc với `model`. Áp cho MỌI `ganas commit`
+  chứ không riêng auto-loop — hai convention song song thì bản sai luôn thắng.
+
+- **`ganas commit` nhả bind khi đóng task, và dọn index khi recheck từ chối.**
+  Hai lỗi phát hiện bằng cách chạy thử luồng mới chứ không phải đọc code. Task
+  `done` rồi mà phiên vẫn bind vào nó thì Stop hook chấm mãi một hợp đồng đã
+  đóng và chặn phiên vì lý do không liên quan. Và `git add` chạy trước recheck
+  mà không có đường lùi: recheck đỏ thì lệnh từ chối commit nhưng để nguyên
+  index, nên lệnh commit kế tiếp nuốt trọn file của task trước — hàng rào tự
+  phá mục tiêu của nó.
+
+- **Skill `plan-to-tasks` nhận đường dẫn file plan**, không còn đòi plan phải
+  nằm sẵn trong context. Cộng `docs/PLAN-TO-LOOP.md` cho cả luồng: người duyệt
+  plan xong thường đi thẳng vào hiện thực — đó là hành vi mặc định của Claude
+  Code và đúng ở mọi dự án không dùng ganas — nên mất im lặng cả ba thứ trên.
+
+- Số đo: hook 6 → 7, test 911 → 948, hai chặng D-015 và D-016, mười hai task.
+
 ## v1.1.0 — 2026-09-01
 
 - **Design không nối tới code, nên thiết kế và code trôi khỏi nhau mà không ai
