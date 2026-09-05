@@ -7,6 +7,7 @@ paths:
   - "src/flow.ts"
   - "src/gate.ts"
   - "src/handoff.ts"
+  - "src/note.ts"
   - "src/prune.ts"
 
 # Bảng cổng dưới đây do MÁY sinh từ chính chữ ký trong code (T-037):

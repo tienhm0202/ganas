@@ -1,0 +1,62 @@
+id: T-084
+title: "Tách lõi ghi note ra src/note.ts để hook gọi được mà không import ngược tầng"
+serves: [ G-003 ]
+implements: D-015
+scope: P-cli
+status: done
+estimated_context: small
+model: scribe
+
+context_contract:
+  must_read:
+    - path: "src/commands/note.ts"
+      why: "phần phải tách là `renderHead`/`renderEntry`/append (:44-100); đọc cả
+        docstring đầu file — nó nói rõ vì sao note phi cấu trúc và ĐỪNG thêm
+        luật validate cho nó"
+    - path: "src/handoff.ts"
+      why: "khuôn đúng của một lõi mà cả CLI lẫn hook cùng gọi — `handlers.ts:409` đã
+        gọi nó, làm theo hình dạng này"
+  facts: []
+  open_questions: []
+
+touches: [ M-workflow, M-commands ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/note.ts"
+    must_contain: "CHƯA KIỂM"
+  # Kéo test round-trip vào ranh giới của `ganas commit`. `test/` không thuộc
+  # `paths` của khối nào (ICE-017/ICE-022), nên thiếu tiêu chí này thì chính
+  # file chứng minh "refactor không đổi hành vi" bị bỏ lại ngoài commit.
+  - kind: artifact
+    path: "test/note.test.ts"
+    must_contain: "generateNote"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: verification
+    target: "M-commands/V-commands-smoke"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Refactor THUẦN: hành vi của `ganas note` không được đổi một chữ. Test round-trip
+  là thứ chứng minh điều đó, không phải lời khai trong báo cáo.
+
+  Vì sao bắt buộc tách: không tách thì `subagentStop` (T-089) phải import từ
+  `src/commands/` — ngược tầng, và `M-hook-io` sẽ mọc một cạnh `depends_on` sang
+  `M-commands` chỉ để ghi một file text.
+
+  `src/note.ts` phải khai vào `paths` của `M-workflow` (cùng chỗ `handoff.ts`,
+  `prune.ts`) — quên bước này thì file mới không thuộc khối nào và trôi ra ngoài
+  mọi hàng rào.
+
+  Giữ nguyên header "CHƯA KIỂM, KHÔNG PHẢI tri thức dự án". T-089 sẽ dùng lại
+  đúng header đó cho báo cáo sub-agent, không viết header riêng.
+
+  THÊM SAU khi việc đã xong, và nói thẳng ra chứ không giấu: tiêu chí `artifact`
+  trỏ `test/note.test.ts` XANH SẴN lúc được thêm vào, nên nó không gác gì. Vai
+  trò của nó là RANH GIỚI COMMIT chứ không phải hàng rào — `ganas gate` đã cảnh
+  báo file test nằm ngoài ranh giới và sẽ không được stage. Khuôn này T-080 đã
+  dùng và ghi lại lý do y hệt.
+done_at: 2026-09-05T12:43:01.416Z

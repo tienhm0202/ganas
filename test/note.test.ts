@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { run as runNote } from "../src/commands/note.js";
+import { generateNote } from "../src/note.js";
 import { loadGraph } from "../src/graph/load.js";
 import { hasErrors } from "../src/graph/types.js";
 import { applyPrune, notePath, planPrune } from "../src/prune.js";
@@ -171,6 +172,55 @@ test("note: thiếu nội dung → GanasError, không ghi file nào", async () =
       },
     );
     assert.ok(!existsSync(join(root, ".ganas", "runs")), "không được tạo runs/ khi không có nội dung");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("note: generateNote (lõi tách từ commands/note.ts) hoạt động như cũ — round-trip", async () => {
+  const root = await gitProjectWithCommit({ ".ganas/goals/G-001.yaml": goal() });
+  try {
+    await bindSession(root, "sess-core", "T-042");
+    await markTouched(root, "sess-core", "src/foo.ts");
+
+    const at = new Date().toISOString();
+    const result1 = await generateNote(root, "sess-core", {
+      at,
+      taskId: "T-042",
+      sha: "abc1234",
+      touchedPaths: ["src/foo.ts"],
+      content: "mẩu lõi thứ nhất",
+    });
+
+    assert.ok(result1.path.includes("sess-core"), "phải trả đúng path");
+    assert.equal(result1.appended, false, "lần đầu là write, không append");
+
+    const content1 = await readFile(result1.path, "utf8");
+    assert.match(content1, /CHƯA KIỂM/, "header phải có CHƯA KIỂM");
+    assert.match(content1, /mẩu lõi thứ nhất/);
+    assert.match(content1, /task: `T-042`/);
+    assert.match(content1, /sha: `abc1234`/);
+    assert.match(content1, /src\/foo\.ts/);
+
+    // Lần thứ hai: append
+    const result2 = await generateNote(root, "sess-core", {
+      at,
+      taskId: "T-042",
+      sha: "abc1234",
+      touchedPaths: ["src/foo.ts"],
+      content: "mẩu lõi thứ hai",
+    });
+
+    assert.equal(result2.appended, true, "lần thứ hai là append");
+
+    const content2 = await readFile(result2.path, "utf8");
+    assert.match(content2, /mẩu lõi thứ nhất/);
+    assert.match(content2, /mẩu lõi thứ hai/);
+    assert.equal(
+      content2.match(/CHƯA KIỂM/g)?.length,
+      1,
+      "header chỉ ghi một lần, không lặp lại mỗi append",
+    );
   } finally {
     await cleanup(root);
   }

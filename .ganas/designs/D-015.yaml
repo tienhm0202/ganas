@@ -1,0 +1,106 @@
+id: D-015
+title: "Báo cáo của worker được giữ lại, và chặng tự chạy hết sau khi plan được duyệt"
+serves:
+  - G-003
+summary: |-
+  Luồng làm việc @tienhm muốn: duyệt plan một lần, rồi ganas chạy hết chặng.
+  Đối chiếu với repo thì phần lớn luồng đó ĐÃ CÓ, chỉ mang tên khác — và chỗ
+  đắt nhất của chặng này là không dựng lại thứ đã có.
+
+  ## Ba thứ đã có, không làm lại
+
+  - "phase P0" — `Design` đã là chặng. `plugin/skills/plan-to-tasks/SKILL.md`
+    mục 2 cấm thẳng "phase"/"sprint"/"lô".
+  - file prompt `t1.input.md` — `ganas brief <id>` đã là prompt của worker,
+    sinh CƠ HỌC từ graph nên luôn tươi. Chép nó ra một file `.md` tĩnh là đúng
+    chỗ brief bị bóp méo, cộng thêm một thư mục nữa trong `.ganas/`.
+  - mục "lệnh nghiệm thu + 20 dòng output" của mẫu báo cáo — `ganas gate` cộng
+    `verify-ledger.jsonl` đã thay bằng thứ mạnh hơn: MÁY chạy lệnh, không phải
+    worker tự khai là đã chạy.
+
+  ## Vế 1 — báo cáo của worker đang bay qua rồi tan
+
+  Sub-agent kết thúc bằng một đoạn tóm tắt gửi về phiên cha. Đoạn đó chính là
+  báo cáo, nhưng nó chỉ sống trong context phiên cha và mất khi compact. Ba mục
+  đáng giá nhất của mẫu báo cáo mà @tienhm đã chạy thật ở dự án khác — LỆCH SO
+  VỚI ĐẶC TẢ, QUYẾT ĐỊNH TỰ Ý, PHÁT HIỆN/NGHI NGỜ — là chỗ worker được nói
+  ngược lại người ra đề, và hiện không có gì đòi worker viết chúng.
+
+  Điểm cắm đúng là hook `SubagentStop`: nơi DUY NHẤT ganas nhìn thấy đoạn đó
+  trước khi nó tan. Ba trường cần thiết (`agent_id`, `agent_type`,
+  `last_assistant_message`) ĐÃ khai sẵn ở `src/hooks/policy/types.ts:34-37`,
+  nên vế này rẻ hơn vẻ ngoài của nó: không lệnh mới, không trường mới trên
+  `Task`, không thư mục mới — báo cáo ghi vào `runs/notes/` mà `ganas prune`
+  đã dọn sẵn.
+
+  Cưỡng chế tới đâu, nói thẳng: hàng rào thật là sub-agent KHÔNG DỪNG ĐƯỢC khi
+  báo cáo thiếu tiêu đề, đúng một lần cho mỗi agent. NỘI DUNG ba mục thì không
+  kiểm được — worker viết "(không có)" là qua. Đừng giả vờ kiểm được; file note
+  dùng lại nguyên văn header "CHƯA KIỂM, KHÔNG PHẢI tri thức dự án".
+
+  ## Vế 2 — auto-loop, và phanh phải nằm ở ganas
+
+  Hiện `ganas next` từ chối mở task mới khi task cũ chưa done, và Stop hook cố
+  ý chỉ chặn ĐÚNG MỘT LẦN (`src/hooks/io/handlers.ts:335`). Vòng lặp thật vì
+  vậy phải nằm ở PROMPT (một khối trong brief: gate xanh → commit → next →
+  giao sub-agent kế), còn Stop hook chỉ mồi lại một nhịp mỗi lượt.
+
+  Phanh KHÔNG được dựa vào `stop_hook_active` của harness: tài liệu Claude Code
+  không định nghĩa cờ này ở phần schema, và có issue báo nó không propagate —
+  rủi ro cả hai chiều, hoặc loop chết sau một bước, hoặc loop không có phanh.
+  Bộ đếm riêng trong `state.json` là bắt buộc, không phải "cho chắc".
+
+  Bộ đếm phải sống NGOÀI `SessionRecord`: `bindSession` thay cả record
+  (`src/state.ts:143`) nên đếm để trong đó sẽ reset mỗi lần đổi task — trần bị
+  vô hiệu đúng ở ca xấu nhất, là ca mỗi vòng lại đẻ một task vá mới trong cùng
+  chặng.
+
+  Auto-loop KHÔNG mâu thuẫn với "hàng rào không xanh được khi chưa kiểm gì"
+  (G-002), nhưng chỉ nhờ thứ tự: nhánh nằm SAU `evaluateGate` và chỉ chạy khi
+  gate đã xanh thật. Nó thay "người gõ `ganas next`" bằng "hook nhắc gõ", không
+  nới một tiêu chí nào. Tiêu chí `kind: manual` (`pendingHuman`) vẫn dừng loop
+  — đó là chỗ tuyệt đối không được nới cho vòng lặp chạy mượt.
+
+  ## Vế 3 — commit message theo conventional commits
+
+  `src/commit.ts:22` đang dựng `T-079: <title>`. @tienhm chốt đổi sang
+  `<type>(<design>/<task>): <title>`. `type` không suy được từ dữ liệu hiện có
+  (`role` chỉ có `design|build`), nên thêm `Task.commit_type` gán lúc chẻ task,
+  cùng chỗ và cùng lúc với `model`. Áp cho MỌI `ganas commit`, không chỉ trong
+  loop — hai convention song song thì bản sai luôn thắng.
+
+  ## Vì sao chặng này nhiều task hơn vẻ ngoài của nó
+
+  Việc chạm bốn phạm vi: `src/model/**` ở P-graph-core, `src/hooks/io/**` và
+  `src/state.ts` ở P-hook, `src/render/**` cùng `src/commit.ts` ở P-cli. Luật
+  `scope/task-touches-outside-scope` là ERROR nên không gộp được, và chẻ theo
+  ranh giới phạm vi phải làm TRƯỚC khi chẻ theo việc.
+
+  Trường schema mới và người đọc nó ở phạm vi khác thì đi theo khuôn `READ_VIA`
+  đã có trong `test/no-dead-ends.test.ts`: một accessor công khai trong chính
+  model (như `agentDispatchLines()`), khai vào `READ_VIA`, rồi task ở phạm vi
+  kia gọi accessor đó. Hệ quả đã biết và chấp nhận: `npm test` đỏ ở khoảng giữa
+  hai task, y như khi khối `agent` được thêm.
+
+  ## Không làm trong chặng này
+
+  Không thêm khái niệm `phase`/`sprint`. Không thêm lệnh CLI. Không thêm `kind`
+  mới cho `exit_contract` — tiêu chí là thứ MÁY chấm được, một `kind: report`
+  chỉ chấm được bằng "có văn bản nào đó", tức rỗng nghĩa. Không thêm thư mục
+  nào trong `.ganas/`.
+
+exit_contract:
+  - kind: command
+    run: "npx tsx --test 'test/subagent-report.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npx tsx --test 'test/auto-loop.test.ts'"
+    expect: exit_zero
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+  - kind: verification
+    target: "M-hook-io/V-hooks-smoke"
+
+status: active
+created_at: 2026-09-05T00:00:00Z

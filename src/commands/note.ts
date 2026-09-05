@@ -1,13 +1,9 @@
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-
 import { requireGanasRoot } from "../graph/paths.js";
-import { notePath } from "../prune.js";
+import { generateNote } from "../note.js";
 import { taskForSession, touchedPathsFor } from "../state.js";
 import { type Argv, option } from "../util/args.js";
 import { GanasError } from "../util/errors.js";
 import { runShell } from "../util/exec.js";
-import { existsAsync } from "../util/fsprobe.js";
 
 /**
  * `ganas note "..."` — ghi chú thô, RẺ hơn mở `NOTES.md` ra gõ tay.
@@ -40,41 +36,6 @@ async function gitSha(root: string): Promise<string | undefined> {
   return result.code === 0 ? result.stdout.trim() : undefined;
 }
 
-function renderHead(sessionId: string): string {
-  return (
-    `# Ghi chép thô của phiên \`${sessionId}\` — CHƯA KIỂM, KHÔNG PHẢI tri thức dự án\n\n` +
-    `Mỗi mục dưới đây là một ghi chú rời, không có anchor, không đi qua verify.\n` +
-    `KHÔNG được coi là fact hay trích dẫn như tri thức đã kiểm chứng. Muốn nâng cấp\n` +
-    `một điều ở đây thành tri thức thì đi đường claim → verify → fact.\n`
-  );
-}
-
-function renderEntry(opts: {
-  at: string;
-  taskId: string | null;
-  sha: string | undefined;
-  touchedPaths: string[];
-  content: string;
-}): string {
-  const lines = [
-    "",
-    "---",
-    "",
-    `## ${opts.at}`,
-    "",
-    `- task: \`${opts.taskId ?? "(không rõ)"}\``,
-  ];
-  if (opts.sha) lines.push(`- sha: \`${opts.sha}\``);
-  lines.push(
-    `- file đã đụng: ${
-      opts.touchedPaths.length ? opts.touchedPaths.map((p) => `\`${p}\``).join(", ") : "(chưa đụng file nào)"
-    }`,
-    "",
-    opts.content,
-  );
-  return lines.join("\n") + "\n";
-}
-
 export async function run(argv: Argv): Promise<number> {
   const content = argv.positional.join(" ").trim();
   if (!content) {
@@ -89,16 +50,8 @@ export async function run(argv: Argv): Promise<number> {
   const sha = await gitSha(root);
   const at = new Date().toISOString();
 
-  const path = notePath(root, sessionId);
-  await mkdir(dirname(path), { recursive: true });
+  const result = await generateNote(root, sessionId, { at, taskId, sha, touchedPaths, content });
 
-  const entry = renderEntry({ at, taskId, sha, touchedPaths, content });
-  if (await existsAsync(path)) {
-    await appendFile(path, entry, "utf8");
-  } else {
-    await writeFile(path, renderHead(sessionId) + entry, "utf8");
-  }
-
-  process.stdout.write(`Đã ghi note vào ${path}\n`);
+  process.stdout.write(`Đã ghi note vào ${result.path}\n`);
   return 0;
 }

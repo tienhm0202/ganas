@@ -1,0 +1,42 @@
+id: G-003
+title: "Một chặng chạy hết mà người chỉ phải duyệt plan lúc đầu"
+outcome: >-
+  Sau khi người duyệt xong plan, ganas chạy hết các task của một chặng mà không
+  cần người can thiệp giữa chừng — và mỗi lượt giao việc cho sub-agent để lại
+  một báo cáo đọc được, gồm cả chỗ worker nói ngược lại đặc tả.
+
+# Hai tiêu chí, cả hai ĐANG ĐỎ tại HEAD hôm nay: hai file test chưa tồn tại.
+# Bài học từ G-001 (`npm test` exit_zero xanh suốt 13 chặng nên không phân biệt
+# được tiến bộ với giậm chân) — tiêu chí phải đỏ lúc mở thì mới có nghĩa.
+acceptance:
+  - id: A-1
+    kind: command
+    run: "npx tsx --test 'test/subagent-report.test.ts'"
+    expect: exit_zero
+  - id: A-2
+    kind: command
+    run: "npx tsx --test 'test/auto-loop.test.ts'"
+    expect: exit_zero
+
+status: active
+created_at: 2026-09-05T00:00:00Z
+approved_by: "@tienhm"
+approved_at: 2026-09-05T10:47:44Z
+notes: |-
+  KÝ 2026-09-05 bởi @tienhm, trong chính phiên đã soạn ra mục tiêu này. Nội
+  dung do model soạn theo luồng làm việc @tienhm mô tả; chữ ký là của người,
+  đúng luật ở `src/model/goal.ts` — model không được tự đặt mục tiêu.
+
+  Hai quyết định @tienhm đã chốt trong phiên đó, ghi lại để chặng dưới không
+  phải đoán lại:
+  - auto-loop ĐƯỢC commit tự động, message theo conventional commits;
+  - loop dừng ở ranh giới HẾT TASK TRONG CÙNG DESIGN, không chạy sang chặng khác.
+
+  Quyết định thứ nhất NGƯỢC với thói quen vẫn dùng trong repo này (luôn hỏi
+  người trước khi commit). Ghi lại chỗ ngược đó ở đây để phiên sau không tưởng
+  là sơ suất rồi "sửa" lại: đối sách đi kèm là `auto_loop.enabled` mặc định
+  `false`, và commit chỉ chạy sau khi gate đã xanh thật.
+
+  Điều mục tiêu này KHÔNG hứa: nó không làm nội dung báo cáo của worker đáng
+  tin hơn. ganas kiểm được rằng báo cáo CÓ ba mục phản biện, không kiểm được
+  ba mục đó nói thật. Chỗ kiểm thật vẫn là `gate` và sổ cái.
