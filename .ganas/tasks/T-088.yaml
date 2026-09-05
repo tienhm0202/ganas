@@ -1,0 +1,55 @@
+id: T-088
+title: "State nhớ agent nào đã bị đòi báo cáo, và đếm vòng auto-loop ở cấp phiên
+  chứ không cấp task"
+serves: [ G-003 ]
+implements: D-015
+scope: P-hook
+status: done
+estimated_context: medium
+model: verifier
+
+context_contract:
+  must_read:
+    - path: "src/state.ts"
+      why: "`bindSession` (:143) THAY CẢ `SessionRecord` — đó là lý do bộ đếm vòng
+        KHÔNG được để trong record đó; và `dispatch_nudged` (:78-88) là khuôn
+        của một cờ nhắc-một-lần"
+  facts: []
+  open_questions: []
+
+touches: [ M-claim ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/state.ts"
+    must_contain: "reported_agents"
+  - kind: artifact
+    path: "src/state.ts"
+    must_contain: "auto_loop"
+  - kind: verification
+    target: "M-claim/V-claim-smoke"
+  - kind: command
+    run: "npm run typecheck"
+    expect: exit_zero
+
+notes: |-
+  Hai thứ ở HAI CẤP khác nhau, và cấp là toàn bộ nội dung của task này:
+
+  1. `SessionRecord.reported_agents?: string[]` — danh sách `agent_id` đã bị chặn
+     một lần. Theo đúng khuôn `dispatch_nudged`: reset khi đổi task là ĐÚNG, vì
+     agent của task cũ không còn liên quan.
+
+  2. Bộ đếm vòng auto-loop phải sống ở cấp `State`, NGOÀI `sessions[id]` — ví dụ
+     `State.auto_loop?: Record<sessionId, number>`, cộng cờ dừng (halt) và cặp
+     task-đỏ/số-lần-đỏ.
+
+  Vì sao (2) đi ngược khuôn của (1), và PHẢI ghi lý do vào docstring: `bindSession`
+  thay cả record, nên đếm để trong record sẽ reset mỗi lần đổi task. Trần vì thế
+  bị vô hiệu đúng ở ca xấu nhất — ca mỗi vòng lại đẻ một task vá mới trong cùng
+  chặng, tức ca vòng lặp chạy mãi. Một trần chỉ có tác dụng khi mọi thứ đã đúng
+  thì không phải trần.
+
+  Mọi trường đều optional / có default: `state.json` cũ phải đọc được nguyên vẹn.
+
+  Gate là `typecheck`; các trường này có người đọc thật từ T-089 và T-091.
+done_at: 2026-09-05T13:14:10.578Z

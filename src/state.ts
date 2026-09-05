@@ -85,6 +85,33 @@ export interface SessionRecord {
    * hoặc chạy `ganas next --no-baseline`) ⇒ không kết luận gì.
    */
   baseline?: Record<string, boolean>;
+  /**
+   * Danh sách `agent_id` đã bị đòi báo cáo (hook `SubagentStop`) một lần, kể
+   * từ khi bind vào task hiện tại.
+   *
+   * Khuôn theo `dispatch_nudged`: cờ "đã đòi một lần cho mỗi agent", và giống
+   * `dispatch_nudged`, RESET khi đổi task là ĐÚNG với trường này — báo cáo của
+   * sub-agent gắn với TASK đang làm; task khác thì đòi báo cáo lại từ đầu là
+   * hợp lý, không phải rò rỉ. Vòng đời theo đúng `bindSession` (:143) như
+   * `dispatch_nudged`.
+   */
+  reported_agents?: string[];
+}
+
+/**
+ * Bộ đếm vòng auto-loop của một phiên, cộng cờ dừng (halt) và cặp
+ * task-đỏ/số-lần-đỏ liên tiếp — xem docstring của `State.auto_loop` để biết vì
+ * sao khối này KHÔNG nằm trong `SessionRecord`.
+ */
+export interface AutoLoopState {
+  /** Số vòng auto-loop đã chạy trong phiên này, cộng dồn qua mọi lần đổi task. */
+  rounds: number;
+  /** Đã bị buộc dừng chưa — true thì auto-loop ngưng hẳn, chỉ người mới mở lại được. */
+  halted?: boolean;
+  /** Task đỏ (gate không đạt) gần nhất mà auto-loop gặp phải. */
+  red_task?: string;
+  /** Số lần LIÊN TIẾP gặp lại đúng `red_task` đó — tín hiệu vòng lặp không tiến triển. */
+  red_count?: number;
 }
 
 export interface State {
@@ -92,6 +119,27 @@ export interface State {
   /** Task được chọn gần nhất — dùng khi không biết session id. */
   current_task: string | null;
   sessions: Record<string, SessionRecord>;
+  /**
+   * Bộ đếm vòng auto-loop, khoá theo `sessionId` — CỐ Ý nằm NGOÀI
+   * `sessions[id]` (`SessionRecord`), đi ngược khuôn của `dispatch_nudged` và
+   * `reported_agents` ở trên. Đây không phải sơ suất, mà là chỗ hai trường
+   * cùng-kiểu-cờ-một-lần-cho-mỗi-task lại phải sống ở hai cấp khác nhau.
+   *
+   * Vì sao: `bindSession` (:143) THAY CẢ `SessionRecord` mỗi khi đổi task, nên
+   * mọi trường sống trong record đó tự reset theo task — đúng ý cho một cờ
+   * "đã nhắc/đã đòi Ở TASK NÀY" (`dispatch_nudged`, `reported_agents`), vì hết
+   * task thì cờ đó hết nghĩa. Nhưng auto-loop cần một cái TRẦN chống VÒNG LẶP
+   * CHẠY MÃI, và ca xấu nhất của vòng lặp chạy mãi chính là: mỗi vòng lại đẻ
+   * ra một task vá mới trong cùng một chặng (gate đỏ → sinh task vá → bind
+   * sang task đó → sửa → gate lại đỏ → sinh task vá tiếp...). Nếu đếm nằm
+   * trong `SessionRecord` thì mỗi task vá mới là một lần `bindSession`, tức bộ
+   * đếm tự về lại 0 — cái trần bị vô hiệu ĐÚNG vào lúc nó cần cản nhất. Một
+   * cái trần chỉ có tác dụng khi nó KHÔNG tự xoá mình lúc mọi thứ đang đi sai.
+   *
+   * Để ở cấp `State`, khoá theo `sessionId` (không theo `task`), bộ đếm sống
+   * xuyên suốt phiên bất kể phiên nhảy qua bao nhiêu task — đúng cái cần cản.
+   */
+  auto_loop?: Record<string, AutoLoopState>;
 }
 
 const EMPTY: State = { version: 1, current_task: null, sessions: {} };
@@ -116,6 +164,7 @@ export async function readState(root: string): Promise<State> {
       version: 1,
       current_task: parsed.current_task ?? null,
       sessions: parsed.sessions ?? {},
+      auto_loop: parsed.auto_loop,
     };
   } catch {
     // State hỏng không được làm sập phiên — coi như chưa có gì.
@@ -230,6 +279,90 @@ export async function markDispatchNudged(root: string, sessionId: string): Promi
     const rec = s.sessions[sessionId];
     if (rec) rec.dispatch_nudged = true;
   });
+}
+
+/**
+ * `agentId` này đã bị đòi báo cáo (hook `SubagentStop`) chưa, CHỈ khi phiên
+ * còn bind vào đúng task đó — cùng lý do không rơi về `current_task` với
+ * `touchedPathsFor`/`subagentTouchedFor`.
+ */
+export async function agentReportedFor(
+  root: string,
+  sessionId: string | undefined,
+  taskId: string,
+  agentId: string,
+): Promise<boolean> {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return (rec.reported_agents ?? []).includes(agentId);
+}
+
+/** Đánh dấu `agentId` đã bị đòi báo cáo — gọi đúng một lần cho mỗi agent, khuôn theo `markDispatchNudged`. */
+export async function markAgentReported(root: string, sessionId: string, agentId: string): Promise<void> {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (!rec) return;
+    const list = (rec.reported_agents ??= []);
+    if (!list.includes(agentId)) list.push(agentId);
+  });
+}
+
+/**
+ * Trạng thái auto-loop của một phiên — khoá theo `sessionId`, KHÔNG theo
+ * task; xem docstring của `State.auto_loop` về vì sao. Chưa từng chạy vòng
+ * nào thì trả `undefined`.
+ */
+export async function autoLoopFor(root: string, sessionId: string): Promise<AutoLoopState | undefined> {
+  const state = await readState(root);
+  return state.auto_loop?.[sessionId];
+}
+
+/**
+ * Tăng bộ đếm vòng auto-loop của phiên lên 1 và trả về giá trị mới. Sống ở
+ * cấp `State`, cố ý KHÔNG reset khi phiên đổi task — xem `State.auto_loop`.
+ */
+export async function incrementAutoLoopRounds(root: string, sessionId: string): Promise<number> {
+  const state = await updateState(root, (s) => {
+    const loop = (s.auto_loop ??= {});
+    const entry = (loop[sessionId] ??= { rounds: 0 });
+    entry.rounds += 1;
+  });
+  return state.auto_loop?.[sessionId]?.rounds ?? 0;
+}
+
+/** Auto-loop của phiên này đã bị dừng (halt) chưa. */
+export async function autoLoopHaltedFor(root: string, sessionId: string): Promise<boolean> {
+  return (await autoLoopFor(root, sessionId))?.halted === true;
+}
+
+/** Bật cờ dừng auto-loop của phiên — ngưng hẳn cho tới khi người can thiệp reset state. */
+export async function haltAutoLoop(root: string, sessionId: string): Promise<void> {
+  await updateState(root, (s) => {
+    const loop = (s.auto_loop ??= {});
+    const entry = (loop[sessionId] ??= { rounds: 0 });
+    entry.halted = true;
+  });
+}
+
+/**
+ * Ghi nhận một task đỏ (gate không đạt) mà auto-loop vừa gặp, trả về
+ * `red_count` sau khi cập nhật. Cùng task với lần trước thì cộng dồn —
+ * tín hiệu "vòng lặp không tiến triển" (sinh task vá mới nhưng vẫn đỏ). Khác
+ * task thì reset `red_count` về 1.
+ */
+export async function markRedTask(root: string, sessionId: string, taskId: string): Promise<number> {
+  const state = await updateState(root, (s) => {
+    const loop = (s.auto_loop ??= {});
+    const entry = (loop[sessionId] ??= { rounds: 0 });
+    if (entry.red_task === taskId) {
+      entry.red_count = (entry.red_count ?? 0) + 1;
+    } else {
+      entry.red_task = taskId;
+      entry.red_count = 1;
+    }
+  });
+  return state.auto_loop?.[sessionId]?.red_count ?? 0;
 }
 
 /** Task của một phiên; rơi về current_task khi không có session id. */
