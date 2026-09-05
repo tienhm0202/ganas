@@ -39,6 +39,7 @@ việc phải làm, kèm lý do và khung dán được. Bí lúc nào thì gõ 
 | Cài thế nào (plugin / MCP / editor khác) | [INSTALL.md](INSTALL.md) |
 | Vì sao ganas làm thế này mà không làm thế kia | [CONCEPTS.md](CONCEPTS.md) |
 | Một ngày làm việc thật trông ra sao | [WORKFLOW.md](WORKFLOW.md) |
+| Vừa duyệt xong plan trong Plan Mode, giờ làm gì | [PLAN-TO-LOOP.md](PLAN-TO-LOOP.md) |
 | Luồng phiên, luồng dịch yêu cầu, luồng kiểm chứng | [FLOWS.md](FLOWS.md) |
 | Lệnh này có cờ gì, mã thoát nào | [COMMANDS.md](COMMANDS.md) |
 | Ganas hiện có những gì | file này, phần dưới |

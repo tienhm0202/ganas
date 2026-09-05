@@ -1,0 +1,69 @@
+id: T-094
+title: "docs/PLAN-TO-LOOP.md: luồng plan → chẻ task → chạy hết chặng, kèm chỗ nó
+  KHÔNG hứa"
+serves: [ G-003 ]
+implements: D-016
+scope: P-cli
+status: done
+estimated_context: medium
+model: verifier
+commit_type: docs
+
+context_contract:
+  must_read:
+    - path: "docs/START.md"
+      why: "cửa vào thật của tài liệu — mục 'Câu hỏi của bạn nằm ở file nào' là chỗ
+        tài liệu mới phải xuất hiện, nếu không không ai tìm ra nó"
+    - path: "plugin/skills/plan-to-tasks/SKILL.md"
+      why: "sáu bước chẻ plan đã viết sẵn ở đây; tài liệu mới TRỎ tới nó, không chép
+        lại"
+    - path: ".ganas/claims/C-003.yaml"
+      why: "ba hành vi harness CHƯA quan sát được — nguồn của mọi câu cảnh báo về
+        auto_loop trong tài liệu; đừng hứa quá cái claim này cho phép"
+  facts: []
+  open_questions: []
+
+touches: []
+
+exit_contract:
+  - kind: artifact
+    path: "docs/PLAN-TO-LOOP.md"
+    must_contain: "auto_loop"
+  - kind: artifact
+    path: "docs/START.md"
+    must_contain: "PLAN-TO-LOOP"
+  - kind: artifact
+    path: "docs/WORKFLOW.md"
+    must_contain: "PLAN-TO-LOOP"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  `touches: []` vì `docs/**` không thuộc `paths` của khối nào (ICE-017/ICE-022).
+  Ba tiêu chí `artifact` là thứ DUY NHẤT kéo ba file vào ranh giới `ganas commit`
+  — bỏ một cái là file đó ở lại working tree, không ai nghiệm thu. Chuyện này đã
+  xảy ra ba lần liên tiếp ở T-084, T-086, T-089.
+
+  Nội dung tối thiểu, theo đúng thứ tự người dùng gặp:
+  1. Khoảnh khắc sau `ExitPlanMode` — vì sao đi thẳng vào hiện thực là mất im
+     lặng, không phải lỗi của người dùng mà là hành vi mặc định của công cụ.
+  2. Lưu plan ra file, đưa đường dẫn cho skill `plan-to-tasks` (bước 0 của skill).
+  3. Chẻ task, gán `model` và `commit_type` ngay lúc chẻ.
+  4. Giao sub-agent bằng `ganas brief <id>` — KHÔNG chép brief bằng tay.
+  5. Mẫu báo cáo ba mục, hook `SubagentStop` đòi nó thế nào.
+  6. `auto_loop`: bật thế nào, bốn phanh, và vì sao mặc định tắt.
+
+  Ba điều PHẢI nói thẳng, không được bán hàng:
+  - auto-loop mặc định TẮT và nên để tắt tới khi tự chạy thử một chặng nhỏ;
+    `C-003` ghi ba hành vi harness chưa quan sát được.
+  - hàng rào báo cáo kiểm SỰ CÓ MẶT của ba tiêu đề, KHÔNG kiểm nội dung — quan
+    sát thật ngày 2026-09-05: cùng một prompt, model mạnh viết ba mục có nội
+    dung, model nhỏ viết "(không có)" cả ba.
+  - chỗ kiểm thật vẫn là `gate` và sổ cái, không phải văn xuôi của worker.
+
+  KHÔNG chép lại sáu bước của `plan-to-tasks` — trỏ tới skill. Hai bản song song
+  thì bản sai luôn là bản không ai đọc.
+
+  KHÔNG đổi một dòng code nào. Phát hiện cơ chế thiếu thì ghi icebox.
+done_at: 2026-09-05T15:12:13.857Z

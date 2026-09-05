@@ -1,0 +1,55 @@
+id: D-016
+title: "Tài liệu cho luồng plan → chẻ task → chạy hết chặng, vì mặc định người dùng sẽ tự làm luôn"
+serves: [G-003]
+summary: |-
+  D-015 dựng xong cơ chế nhưng không ai biết dùng. Đó không phải phỏng đoán về
+  người dùng — nó là hành vi MẶC ĐỊNH của chính công cụ: Claude Code vừa duyệt
+  plan xong là bắt tay hiện thực ngay, và đó là điều đúng ở mọi dự án KHÔNG
+  dùng ganas. Người dùng không phải quên một bước; họ không có lý do nào để ngờ
+  rằng có một bước.
+
+  Chỗ hở nằm đúng ở khoảnh khắc sau `ExitPlanMode`. Ai đi thẳng vào hiện thực
+  sẽ mất trọn ba thứ mà chặng trước vừa xây: task có ranh giới commit, báo cáo
+  phản biện của worker, và vòng lặp chạy hết chặng. Mất im lặng — không lệnh
+  nào đỏ, không hook nào kêu, vì phiên đó chưa hề có task nào để mà gác.
+
+  ## Viết ở đâu, và vì sao KHÔNG nhồi vào WORKFLOW.md
+
+  `docs/WORKFLOW.md` đã 674 dòng và mô tả luồng TƯƠNG TÁC: người ngồi cùng, gõ
+  `ganas next`, xem gate, quyết từng bước. Luồng mới ngược lại ở đúng chỗ quan
+  trọng nhất — người chỉ duyệt plan rồi rời đi. Nhồi hai luồng ngược nhau vào
+  một file thì người đọc phải tự đoán câu nào áp cho ca của mình.
+
+  Một tài liệu riêng, cộng đường dẫn tới nó từ `docs/START.md` (cửa vào thật)
+  và một dòng trỏ từ `docs/WORKFLOW.md`.
+
+  ## Phải nói thẳng ba điều, không được bán hàng
+
+  1. **Auto-loop mặc định TẮT, và nên để tắt cho tới khi chạy thử.** `C-003`
+     ghi ba hành vi harness chưa quan sát được. Tài liệu hứa hẹn quá tay ở đây
+     là dụ người bật một vòng lặp tự commit trên một hệ chưa ai chạy thật.
+  2. **Hàng rào báo cáo kiểm được SỰ CÓ MẶT của ba tiêu đề, không kiểm nội
+     dung.** Đã quan sát thật trong phiên 2026-09-05: cùng một prompt, model
+     mạnh viết ba mục có nội dung, model nhỏ viết "(không có)" cả ba. Ai đọc
+     tài liệu mà tưởng báo cáo là bằng chứng sẽ tin nhầm đúng chỗ nguy hiểm.
+  3. **Chỗ kiểm thật vẫn là `gate` và sổ cái**, không phải văn xuôi của worker.
+
+  ## Không làm trong chặng này
+
+  Không đổi một dòng code nào. Không thêm lệnh, không thêm luật validate.
+  Nếu viết tài liệu mà phát hiện cơ chế thiếu, ghi icebox — đừng vá code ở đây,
+  vì tài liệu và code sửa chung một task thì không ai biết cái nào sai khi gate đỏ.
+
+exit_contract:
+  - kind: artifact
+    path: "docs/PLAN-TO-LOOP.md"
+    must_contain: "auto_loop"
+  - kind: artifact
+    path: "docs/START.md"
+    must_contain: "PLAN-TO-LOOP"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+status: active
+created_at: 2026-09-05T15:20:00Z

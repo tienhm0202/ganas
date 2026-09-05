@@ -6,6 +6,11 @@ verify → trace → gate → commit → đánh dấu xong. Khác với `docs/CO
 prose) và `docs/COMMANDS.md` (tham chiếu đầy đủ từng cờ) — file này là một
 ví dụ CHẠY ĐƯỢC, không phải narrative viết theo trí nhớ.
 
+Luồng dưới đây là luồng **TƯƠNG TÁC**: có người ngồi cùng phiên, gõ từng
+lệnh, xem gate, quyết từng bước. Nếu bạn vừa duyệt xong một plan trong Plan
+Mode và định RỜI ĐI để ganas tự chạy hết phần còn lại, đó là một luồng khác —
+xem [PLAN-TO-LOOP.md](PLAN-TO-LOOP.md).
+
 **Mọi YAML và mọi lệnh dưới đây đã được chạy thật** trong một thư mục scratch
 (`ganas init` + `git init` thật, không phải dự án ganas này) khi viết tài
 liệu này, và output hiển thị là output THẬT nhận được (diễn giải bớt phần
