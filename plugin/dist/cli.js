@@ -22805,6 +22805,37 @@ ${nudgeText}`;
   }
   return applyEnforcement(mode, knowledgeWriteBody(rel, mine, rule, nudgeTail));
 }
+function hasMoreWorkInDesign(graph, task) {
+  return [...graph.tasks.values()].some(
+    (t) => t.value.implements === task.implements && t.value.id !== task.id && t.value.status !== "done" && openBlockers(graph, t.value).length === 0
+  );
+}
+async function autoLoopDecision(root, graph, task, sessionId) {
+  const loopConfig = autoLoopFor(graph.config);
+  if (!loopConfig.enabled) return ALLOW;
+  const loopState = await autoLoopFor2(root, sessionId);
+  const rounds = loopState?.rounds ?? 0;
+  if (rounds >= loopConfig.max_iterations) {
+    return {
+      systemMessage: `ganas: auto-loop d\u1EEBng \u2014 \u0111\xE3 ch\u1EA1m tr\u1EA7n ${loopConfig.max_iterations} v\xF2ng li\xEAn ti\u1EBFp c\u1EE7a phi\xEAn n\xE0y. Ki\u1EC3m l\u1EA1i ti\u1EBFn \u0111\u1ED9; mu\u1ED1n ti\u1EBFp t\u1EE5c th\xEC t\u1EF1 ch\u1EA1y \`ganas commit ${task.id}\` r\u1ED3i \`ganas next --session ${sessionId}\`.`
+    };
+  }
+  if (await autoLoopHaltedFor(root, sessionId)) {
+    return {
+      systemMessage: `ganas: auto-loop \u0111ang b\u1ECB d\u1EEBng (m\u1ED9t sub-agent tr\u01B0\u1EDBc \u0111\xE3 b\xE1o "CH\u1EB6N:" trong k\u1EBFt lu\u1EADn \u2014 xem \`runs/notes/${sessionId}.md\`). X\u1EED l\xFD xong th\xEC t\u1EF1 ch\u1EA1y \`ganas next\` \u0111\u1EC3 m\u1EDF l\u1EA1i; state.json ch\u1EC9 t\u1EF1 reset khi ng\u01B0\u1EDDi can thi\u1EC7p.`
+    };
+  }
+  if (!hasMoreWorkInDesign(graph, task)) {
+    return {
+      systemMessage: `ganas: auto-loop d\u1EEBng \u2014 h\u1EBFt task ch\u01B0a xong trong ch\u1EB7ng ${task.implements}. Ch\u1EA1y \`ganas commit ${task.id}\` \u0111\u1EC3 \u0111\xF3ng n\u1ED1t task n\xE0y, r\u1ED3i \`ganas gate --design ${task.implements}\` \u0111\u1EC3 x\xE1c nh\u1EADn c\u1EA3 ch\u1EB7ng \u0111\xE3 \u0111\xF3ng.`
+    };
+  }
+  const nextRound = await incrementAutoLoopRounds(root, sessionId);
+  return {
+    decision: "block",
+    reason: `${task.id}: m\u1ECDi ti\xEAu ch\xED t\u1EF1 \u0111\u1ED9ng \u0111\xE3 \u0111\u1EA1t (v\xF2ng ${nextRound}/${loopConfig.max_iterations}). Ch\u1EA1y \`ganas commit ${task.id}\` r\u1ED3i \`ganas next --session ${sessionId}\` \u0111\u1EC3 giao sub-agent k\u1EBF ti\u1EBFp \u2014 ch\u1EB7ng ${task.implements} c\xF2n vi\u1EC7c, \u0111\u1EEBng d\u1EEBng l\u1EA1i h\u1ECFi ng\u01B0\u1EDDi.`
+  };
+}
 async function stop(input) {
   if (input.stop_hook_active) return ALLOW;
   const root = findGanasRoot(input.cwd ?? process.cwd());
@@ -22820,7 +22851,9 @@ async function stop(input) {
   await clearTouched(root, sessionId);
   const freshness = await computeFreshness(graph);
   const result = await evaluateGate(graph, task.value, freshness, sessionId);
-  if (result.ok && result.pendingHuman.length === 0) return ALLOW;
+  if (result.ok && result.pendingHuman.length === 0) {
+    return autoLoopDecision(root, graph, task.value, sessionId);
+  }
   const unmetText = result.unmet.map((u) => `  \u2717 ${u.label}${u.reason ? `
       ${u.reason}` : ""}`).join("\n");
   if (result.ok) {
@@ -22828,6 +22861,18 @@ async function stop(input) {
       systemMessage: `${taskId}: m\u1ECDi ti\xEAu ch\xED t\u1EF1 \u0111\u1ED9ng \u0111\xE3 \u0111\u1EA1t. C\xF2n ${result.pendingHuman.length} m\u1EE5c c\u1EA7n ng\u01B0\u1EDDi x\xE1c nh\u1EADn tr\u01B0\u1EDBc khi \u0111\xE1nh d\u1EA5u task done:
 ` + result.pendingHuman.map((p) => `  \u2026 ${p.label}`).join("\n")
     };
+  }
+  if (autoLoopFor(graph.config).enabled) {
+    const redCount = await markRedTask(root, sessionId, taskId);
+    if (redCount >= 2) {
+      return {
+        systemMessage: `ganas: auto-loop d\u1EEBng \u2014 task ${taskId} v\u1EABn \u0111\u1ECF sau ${redCount} l\u01B0\u1EE3t li\xEAn ti\u1EBFp, kh\xF4ng th\u1EA5y ti\u1EBFn tri\u1EC3n:
+
+${unmetText}
+
+X\u1EED l\xFD xong th\xEC t\u1EF1 ch\u1EA1y \`ganas next --session ${sessionId}\` \u0111\u1EC3 m\u1EDF l\u1EA1i.`
+      };
+    }
   }
   const mode = enforcementFor(graph.config, "exit_contract");
   const body = `Task ${taskId} ch\u01B0a tho\u1EA3 \u0111i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:
