@@ -131,3 +131,70 @@
     - src/state.ts:208
     - src/commands/gate.ts:77
   status: open
+- id: ICE-034
+  title: Phiên vẫn bind task đã done sau ganas commit, nên Stop hook chấm mãi một
+    hợp đồng đã đóng
+  found_at: 2026-09-05T13:06:45.393Z
+  review_after_days: 30
+  weight: 4
+  ease: 3
+  why_deferred: "Phát hiện 2026-09-05, ngoài phạm vi mọi task đang chạy. Sau khi
+    ganas commit T-080 đóng task (status: done) thì state.json vẫn giữ
+    current_task: T-080 và sessions[...].task = T-080. Stop hook đọc
+    session.task rồi chấm exit_contract của task ĐÃ ĐÓNG — nó đỏ vì lý do hoàn
+    toàn không liên quan tới T-080 (khoảng đỏ có chủ ý của T-085 trên
+    no-dead-ends), và chặn phiên. Chưa ai duyệt cách sửa: hoặc ganas commit nhả
+    bind khi đóng task, hoặc Stop hook bỏ qua task status done. Chú ý: hai cách
+    này khác nhau về hệ quả với luồng auto-loop của D-015, nơi phiên chính đóng
+    task rồi mở task kế ngay trong cùng phiên."
+  anchors:
+    - src/hooks/io/handlers.ts:356
+    - src/state.ts:143
+  status: open
+- id: ICE-035
+  title: schemaFields() chỉ soi tới khối lồng ĐẦU TIÊN của zConfig, session_start
+    và claim tuột khỏi bộ dò ngõ cụt
+  found_at: 2026-09-05T13:13:22.560Z
+  review_after_days: 30
+  weight: 4
+  ease: 2
+  why_deferred: "Đo được, không suy đoán: chạy chính schemaFields() trên
+    src/model/config.ts cho ra 9 tên — version, project, harness, enforcement,
+    enforcement_rules, models, auto_loop, auto_begin, ttl_minutes. Thiếu
+    session_start và claim; thay vào đó là auto_begin và ttl_minutes, tức trường
+    BÊN TRONG chúng. Regex non-greedy dừng ở '})' đầu tiên nên khối ngoài cùng
+    bị cắt sớm, các khối lồng sau bị đọc như z.object riêng. Hệ quả: một trường
+    lồng thêm vào sau vị trí đó không bao giờ bị bộ dò ngõ cụt soi tới — đúng
+    lớp lỗi 'khai rồi không ai đọc' mà test này sinh ra để chặn, và PR-008 đã
+    từng vá một ca y hệt (bốn dấu cách thành {2,}). T-087 phải đặt khối
+    auto_loop TRƯỚC session_start để nó lọt vào phần được trích; sắp xếp đó đúng
+    nhưng dễ vỡ, ai chèn một khối lồng khác lên trước là READ_VIA['auto_loop']
+    thành vô nghĩa lặng lẽ. Cách chữa gốc đã được ghi sẵn trong comment của
+    chính hàm: dạy schemaFields bỏ qua thân .default(...) thay vì né. Chưa làm
+    ngay vì sửa xong nhiều khả năng lộ ra một loạt trường chưa ai đọc, và đó là
+    việc riêng chứ không nhét vào chặng D-015 được."
+  anchors:
+    - test/no-dead-ends.test.ts:126
+    - src/model/config.ts:145
+  status: open
+- id: ICE-036
+  title: ganas commit git add TRƯỚC khi recheck, recheck đỏ thì bỏ commit nhưng
+    KHÔNG dọn index — commit kế tiếp nuốt
+  found_at: 2026-09-05T13:15:16.803Z
+  review_after_days: 30
+  weight: 5
+  ease: 3
+  why_deferred: "Đo được 2026-09-05, ngoài phạm vi mọi task đang chạy. Chuỗi thật:
+    ganas commit T-086 chạy git add cho ranh giới của nó (src/commit.ts), rồi
+    recheck cây sắp commit ĐỎ nên từ chối commit — nhưng index vẫn giữ
+    src/commit.ts đã staged. Lệnh kế tiếp ganas commit T-087 commit cả index,
+    nên abb3cf8 mang tên T-087 lại chứa src/commit.ts và .ganas/tasks/T-086.yaml
+    của T-086. Hàng rào recheck vì thế tự phá mục tiêu của nó: nó chặn đúng một
+    commit sai rồi giao nguyên liệu sai cho commit sau. Cách chữa gốc phải dọn
+    index khi recheck đỏ (git reset các đường dẫn vừa add, hoặc add sau khi
+    recheck xanh). Liên quan nhưng KHÁC ICE-033 và ICE-034 — hai cái đó về bind
+    session, cái này về index."
+  anchors:
+    - src/commands/commit.ts:174
+    - commit:abb3cf8
+  status: open

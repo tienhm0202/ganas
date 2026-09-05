@@ -18,13 +18,20 @@ acceptance:
     run: "npx tsx --test 'test/ledger-commit.test.ts'"
     expect: exit_zero
 
-status: draft
+status: active
 created_at: 2026-09-01T06:10:00Z
+approved_by: "@tienhm"
+approved_at: 2026-09-05T13:04:07Z
 notes: |-
-  CHƯA KÝ. Nội dung do model soạn theo hướng @tienhm chọn trong phiên
-  2026-09-01; chữ ký `approved_by` + `approved_at` phải do người điền, và chỉ
-  khi đó mới chuyển `status: active`. Luật ở `src/model/goal.ts`: model không
-  được tự đặt mục tiêu.
+  KÝ 2026-09-05 bởi @tienhm, bốn ngày sau khi soạn. Nội dung do model soạn
+  theo hướng @tienhm chọn trong phiên 2026-09-01; chữ ký là của người, đúng
+  luật ở `src/model/goal.ts`.
+
+  Ghi thẳng một điều về THỜI ĐIỂM ký, vì nó đổi cách đọc mục tiêu này: lúc
+  soạn (2026-09-01) cả hai tiêu chí đều ĐỎ, và đó là chủ ý. Lúc ký thì cả
+  hai đã XANH — T-080 tạo `test/scan-guard.test.ts`, T-081 tạo
+  `test/ledger-commit.test.ts`. Nên chữ ký này KHÔNG phải lời hứa sẽ làm;
+  nó là xác nhận việc đã làm xong. Mục tiêu đủ điều kiện đóng ngay.
 
   Nguồn của mục tiêu này là hai chỗ hở đo được, không phải một nguyện vọng:
 
