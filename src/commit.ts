@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { evaluateTreeCriteria, type GateResult } from "./gate.js";
 import type { Graph } from "./graph/types.js";
-import type { Task } from "./model/index.js";
+import { commitSubject, type Task } from "./model/index.js";
 import { runShell } from "./util/exec.js";
 import { exists } from "./util/fsprobe.js";
 
@@ -19,7 +19,7 @@ import { exists } from "./util/fsprobe.js";
  * không phải tuỳ chọn cấu hình.
  */
 export function buildCommitMessage(graph: Graph, task: Task, gate: GateResult): string {
-  const lines: string[] = [`${task.id}: ${task.title}`, "", "Điều kiện hoàn thành:"];
+  const lines: string[] = [commitSubject(task, task.implements), "", "Điều kiện hoàn thành:"];
 
   for (const r of gate.results) {
     const mark = r.status === "pass" ? "✓" : r.status === "pending_human" ? "…" : "✗";

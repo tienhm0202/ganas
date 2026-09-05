@@ -32,7 +32,7 @@ test("buildCommitMessage: không bao giờ nhắc AI/trợ lý, lấy đúng d�
     const gate = await evaluateGate(graph, task, await computeFreshness(graph));
     const message = buildCommitMessage(graph, task, gate);
 
-    assert.match(message, /^T-001: Sửa nhận diện ý định/);
+    assert.match(message, /^chore\(D-001\/T-001\): Sửa nhận diện ý định/);
     assert.match(message, /✓ lệnh `true`/);
     assert.match(message, /design D-001 — Design thử/);
     assert.doesNotMatch(message, /claude/i);
@@ -110,7 +110,7 @@ exit_contract:
     assert.equal(code, 0);
 
     const log = await runShell("git log -1 --pretty=%B", { cwd: root });
-    assert.match(log.stdout, /^T-001: Sửa gì đó/);
+    assert.match(log.stdout, /^chore\(D-001\/T-001\): Sửa gì đó/);
     assert.doesNotMatch(log.stdout, /claude/i);
     assert.doesNotMatch(log.stdout, /co-authored/i);
 
@@ -155,6 +155,34 @@ exit_contract:
     assert.equal(code, 0);
     const log = await runShell("git log --oneline", { cwd: root });
     assert.equal(log.stdout.trim(), "", "dry-run không được tạo commit");
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test("buildCommitMessage: task cũ không khai commit_type được mặc định là chore", async () => {
+  const root = await makeProject({
+    ".ganas/goals/G-001.yaml": goal(),
+    ".ganas/designs/D-001.yaml": design(),
+  });
+  try {
+    const graph = await loadGraph(root);
+    // Parse task mà KHÔNG khai commit_type — phải default là "chore"
+    const task = zTask.parse({
+      id: "T-001",
+      title: "Sửa gì đó",
+      serves: ["G-001"],
+      implements: "D-001",
+      scope: "P-thu",
+      exit_contract: [{ kind: "command", run: "true" }],
+      // Không khai commit_type
+    });
+    const gate = await evaluateGate(graph, task, await computeFreshness(graph));
+    const message = buildCommitMessage(graph, task, gate);
+
+    // Phải có "chore" (default), không phải feat/fix/...
+    assert.match(message, /^chore\(D-001\/T-001\): Sửa gì đó/);
+    assert.equal(task.commit_type, "chore", "task không khai commit_type phải default là chore");
   } finally {
     await cleanup(root);
   }

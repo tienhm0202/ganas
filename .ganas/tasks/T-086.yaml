@@ -1,0 +1,55 @@
+id: T-086
+title: "ganas commit dựng subject theo conventional commits, cho mọi commit chứ
+  không riêng auto-loop"
+serves: [ G-003 ]
+implements: D-015
+scope: P-cli
+status: done
+estimated_context: small
+model: scribe
+blocked_by: [ T-085 ]
+
+context_contract:
+  must_read:
+    - path: "src/commit.ts"
+      why: "dòng 22 đang dựng `${task.id}: ${task.title}` — đúng một chỗ phải đổi, và
+        docstring :12 nói message dựng TỪ dữ liệu đã kiểm chứng, không phải văn
+        xuôi tự bịa"
+    - path: ".claude/rules/ganas-git.md"
+      why: "luật git của repo — commit không được nhắc AI, và đây là lúc dễ vô ý thêm
+        dòng đó vào khuôn message mới"
+  facts: []
+  open_questions: []
+
+touches: [ M-workflow ]
+
+exit_contract:
+  - kind: artifact
+    path: "src/commit.ts"
+    must_contain: "commitSubject"
+  # Kéo test vào ranh giới của `ganas commit`. `test/` không thuộc `paths` của
+  # khối nào (ICE-017/ICE-022), nên thiếu tiêu chí này thì cây sắp commit có
+  # `src/commit.ts` MỚI cộng `test/commit.test.ts` CŨ — đỏ, và đúng ca đã xảy ra.
+  - kind: artifact
+    path: "test/commit.test.ts"
+    must_contain: "chore"
+  - kind: verification
+    target: "M-workflow/V-workflow-commit"
+  - kind: command
+    run: "npm test"
+    expect: exit_zero
+
+notes: |-
+  Chỉ đổi SUBJECT. Thân message (điều kiện hoàn thành, dòng design) giữ nguyên —
+  nó đã dựng từ dữ liệu đã kiểm chứng và không có gì sai.
+
+  Task này là chỗ `npm test` xanh trở lại sau khoảng đỏ của T-085: `commitSubject`
+  giờ có người gọi ngoài `src/model/`, nên vế thứ ba của `READ_VIA` đạt.
+
+  Áp cho MỌI `ganas commit`, không chỉ trong auto-loop. Hai convention song song
+  thì bản sai luôn thắng, và lịch sử repo (`T-079: ...`) sẽ lệch với mọi commit
+  mới kể từ đây — đó là chủ ý, không phải sơ suất.
+
+  Task cũ không khai `commit_type` ⇒ `chore`. Phải có test cho đúng ca đó, vì
+  đó là ca chạy nhiều nhất trong 58 task đang có.
+done_at: 2026-09-05T13:24:14.102Z
