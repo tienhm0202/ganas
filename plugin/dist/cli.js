@@ -4876,6 +4876,9 @@ function agentModelAlias(modelId) {
 function enforcementFor(config, rule) {
   return config.enforcement_rules[rule] ?? config.enforcement;
 }
+function autoLoopFor(config) {
+  return config.auto_loop;
+}
 var ENFORCEMENT, ENFORCEMENT_RULES, MODEL_TIER, HARNESS, GUIDE_FILE, LATEST_SCHEMA_VERSION, zConfig;
 var init_config = __esm({
   "src/model/config.ts"() {
@@ -4893,7 +4896,17 @@ var init_config = __esm({
       /** Tạo/đóng task không neo được vào phạm vi/goal. */
       "task_link",
       /** Model tự đặt status: approved/rejected cho proposal thay vì `ganas proposal approve/reject`. */
-      "proposal_decision"
+      "proposal_decision",
+      /**
+       * Sub-agent kết thúc mà báo cáo (SubagentStop) thiếu tiêu đề bắt buộc.
+       *
+       * Đây là luật QUY TRÌNH (kiểm soát cách một lượt giao việc kết thúc), không
+       * phải luật bảo toàn DỮ LIỆU — khác bốn ngoại lệ chặn vô điều kiện liệt kê ở
+       * `src/hooks/io/CLAUDE.md` (sổ cái xác minh, `config.yaml`, thư mục skill,
+       * ghi đè thực thể). Luật quy trình phải đi qua `enforcementFor()` để dự án
+       * có sẵn adopt được mà không bị chặn cứng ngay từ lần cài đầu tiên.
+       */
+      "subagent_report"
     ];
     MODEL_TIER = ["main", "verifier", "scribe"];
     HARNESS = [
@@ -4933,6 +4946,30 @@ var init_config = __esm({
         main: external_exports.string().default("claude-opus-5"),
         verifier: external_exports.string().default("claude-sonnet-5"),
         scribe: external_exports.string().default("claude-haiku-4-5")
+      }).default({}),
+      /**
+       * Vòng lặp tự động: gate xanh → commit → next → giao sub-agent kế, không
+       * đợi người gõ lệnh giữa hai task. Xem D-015 vế 2.
+       *
+       * Mặc định TẮT (`enabled: false`) — nghiêm hơn cả `warn`, vì nhánh này
+       * KHÔNG đi qua `enforcementFor()` dù nó gác một hành vi có thể coi là
+       * "chặn": khi tắt, ganas không tự mồi lượt kế tiếp, y hệt hành vi hiện tại
+       * của mọi dự án chưa khai field này (`.default({})` ở cả hai cấp). Cổng
+       * bật/tắt của nhánh này chính là `enabled`, không phải một luật trong
+       * `ENFORCEMENT_RULES` — không có gì để "nới" thành `warn`, vì loop chỉ có
+       * hai trạng thái sinh ra một hành động (mồi lượt kế) hoặc không, không có
+       * trạng thái trung gian kiểu "cảnh báo nhưng vẫn mồi". Đưa nó qua
+       * `enforcementFor()` sẽ tạo ảo giác có mức `warn` cho một thứ không có
+       * hành vi cảnh báo nào để chạy.
+       */
+      auto_loop: external_exports.object({
+        enabled: external_exports.boolean().default(false),
+        /**
+         * Trần số vòng lặp liên tiếp trong CÙNG một task trước khi loop tự
+         * dừng — phanh thật nằm ở bộ đếm riêng trong `state.json`, NGOÀI
+         * `SessionRecord` (xem D-015 vế 2), field này chỉ là ngưỡng.
+         */
+        max_iterations: external_exports.number().int().positive().default(5)
       }).default({}),
       session_start: external_exports.object({
         /**
@@ -4983,6 +5020,9 @@ function agentDispatchLines(agent) {
     );
   }
   return lines;
+}
+function commitSubject(task, designId) {
+  return `${task.commit_type}(${designId}/${task.id}): ${task.title}`;
 }
 var TASK_STATUS, ESTIMATED_CONTEXT, TASK_ROLE, zArtifactRef, zAgentSpec, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
 var init_task = __esm({
@@ -5094,6 +5134,15 @@ var init_task = __esm({
        * rỗng, vốn có nhiều lý do khác) tự động biến một task thành design.
        */
       role: external_exports.enum(TASK_ROLE).default("build"),
+      /**
+       * Loại commit theo conventional commits cho commit message của task này.
+       * Áp dụng khi gọi `ganas commit`. Gán lúc chẻ task — quyết định của
+       * người thiết kế biết task này sửa lỗi, thêm tính năng hay refactor.
+       *
+       * Mặc định `chore`: hầu hết commit là công việc hành chính (cập nhật
+       * `.ganas/`, ghi fact, chẻ task).
+       */
+      commit_type: external_exports.enum(["feat", "fix", "refactor", "docs", "test", "chore", "perf", "build", "ci"]).default("chore"),
       /**
        * Bản vẽ mà task này CẦN — hợp đồng vào (input_contract).
        *
@@ -13790,7 +13839,17 @@ async function runContext(root, by) {
     host: hostname()
   };
 }
-var FINGERPRINT_FIELDS, CHAIN_GENESIS, LEDGER_LOCK_TTL_MS, corruptLines;
+async function commitStatus(root, sha) {
+  if (!SHA_SHAPE.test(sha)) return "unknown";
+  const known = await runShell(`git cat-file -e ${sha}^{commit}`, { cwd: root, timeoutMs: 5e3 });
+  if (known.code !== 0) return "unknown";
+  const ancestor = await runShell(`git merge-base --is-ancestor ${sha} HEAD`, {
+    cwd: root,
+    timeoutMs: 5e3
+  });
+  return ancestor.code === 0 ? "ancestor" : "rewritten";
+}
+var FINGERPRINT_FIELDS, CHAIN_GENESIS, LEDGER_LOCK_TTL_MS, corruptLines, SHA_SHAPE;
 var init_ledger = __esm({
   "src/verify/ledger.ts"() {
     "use strict";
@@ -13802,6 +13861,7 @@ var init_ledger = __esm({
     CHAIN_GENESIS = "0".repeat(64);
     LEDGER_LOCK_TTL_MS = 5e3;
     corruptLines = /* @__PURE__ */ new Map();
+    SHA_SHAPE = /^[0-9a-f]{4,40}$/i;
   }
 });
 
@@ -14042,14 +14102,14 @@ function validateGraph(graph, opts = {}) {
       }
     });
     const allClosed = d.serves.length > 0 && d.serves.every((g) => graph.goals.get(g)?.value.status === "closed");
-    if (allClosed && d.status !== "archived" && d.status !== "superseded") {
+    if (allClosed && d.status !== "archived" && d.status !== "superseded" && d.status !== "done") {
       diags.push({
         severity: "warning",
         code: "spine/design-orphaned",
         message: `design ${d.id} m\u1ED3 c\xF4i: m\u1ECDi goal n\xF3 ph\u1EE5c v\u1EE5 \u0111\xE3 closed`,
         file: design.file,
         line: at(graph, design, "status"),
-        hint: `\u0110\u1EB7t status: archived, ho\u1EB7c tr\u1ECF serves sang goal \u0111ang active.`
+        hint: `Ch\u1EB7ng c\xF2n dang d\u1EDF d\u01B0\u1EDBi goal \u0111\xE3 \u0111\xF3ng: \u0111\xF3ng n\xF3 (status: done + done_at), ho\u1EB7c tr\u1ECF serves sang goal \u0111ang active.`
       });
     }
     d.decisions.forEach((decId, i) => {
@@ -15801,7 +15861,17 @@ function freshnessMark(state) {
   return `\u26A0 [${state.freshness.toUpperCase()}]`;
 }
 function decide(args) {
-  const { entry, currentDef, current, ttlDays, depsChangedAt, changedFile, depsNow, now } = args;
+  const {
+    entry,
+    currentDef,
+    current,
+    ttlDays,
+    depsChangedAt,
+    changedFile,
+    depsNow,
+    entryCommitStatus,
+    now
+  } = args;
   if (!entry) {
     return {
       freshness: "never_verified",
@@ -15864,6 +15934,13 @@ function decide(args) {
       };
   }
   const verifiedAt = Date.parse(entry.at);
+  if (entryCommitStatus === "rewritten") {
+    return {
+      freshness: "stale",
+      reason: `b\u1EB1ng ch\u1EE9ng ch\u1EE9ng t\u1EA1i commit \`${entry.git}\` \u2014 commit \u0111\xF3 kh\xF4ng c\xF2n n\u1EB1m trong l\u1ECBch s\u1EED c\u1EE7a HEAD (rebase/amend/\u0111\u1ED5i nh\xE1nh)`,
+      action: "ch\u1EA1y l\u1EA1i `ganas verify`"
+    };
+  }
   if (entry.deps !== void 0 && depsNow !== void 0) {
     if (entry.deps !== depsNow) {
       return {
@@ -15911,6 +15988,14 @@ async function computeFreshness(graph, opts = {}) {
     mtimeCache.set(rel, value);
     return value;
   };
+  const commitCache = /* @__PURE__ */ new Map();
+  const commitStatusOf = (sha) => {
+    const cached = commitCache.get(sha);
+    if (cached) return cached;
+    const value = commitStatus(graph.root, sha);
+    commitCache.set(sha, value);
+    return value;
+  };
   for (const target of targets) {
     const entry = lastFor(graph.ledger, target.id);
     const globs = globsOf(target);
@@ -15934,6 +16019,7 @@ async function computeFreshness(graph, opts = {}) {
       ttlDays: target.ttlDays,
       depsChangedAt,
       changedFile,
+      entryCommitStatus: entry?.git !== void 0 ? await commitStatusOf(entry.git) : void 0,
       now
     });
     const history = historyFor(graph.ledger, target.id, 5).map((e) => e.score).filter((s) => s !== void 0);
@@ -15977,11 +16063,18 @@ var init_freshness = __esm({
 var state_exports = {};
 __export(state_exports, {
   TOUCHED_PATHS_CAP: () => TOUCHED_PATHS_CAP,
+  agentReportedFor: () => agentReportedFor,
+  autoLoopFor: () => autoLoopFor2,
+  autoLoopHaltedFor: () => autoLoopHaltedFor,
   baselineFor: () => baselineFor,
   bindSession: () => bindSession,
   clearTouched: () => clearTouched,
   dispatchNudgedFor: () => dispatchNudgedFor,
+  haltAutoLoop: () => haltAutoLoop,
+  incrementAutoLoopRounds: () => incrementAutoLoopRounds,
+  markAgentReported: () => markAgentReported,
   markDispatchNudged: () => markDispatchNudged,
+  markRedTask: () => markRedTask,
   markTouched: () => markTouched,
   readState: () => readState,
   releaseSession: () => releaseSession,
@@ -16004,7 +16097,8 @@ async function readState(root) {
     return {
       version: 1,
       current_task: parsed.current_task ?? null,
-      sessions: parsed.sessions ?? {}
+      sessions: parsed.sessions ?? {},
+      auto_loop: parsed.auto_loop
     };
   } catch {
     return { ...EMPTY };
@@ -16069,6 +16163,55 @@ async function markDispatchNudged(root, sessionId) {
     const rec = s.sessions[sessionId];
     if (rec) rec.dispatch_nudged = true;
   });
+}
+async function agentReportedFor(root, sessionId, taskId, agentId) {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return (rec.reported_agents ?? []).includes(agentId);
+}
+async function markAgentReported(root, sessionId, agentId) {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (!rec) return;
+    const list = rec.reported_agents ??= [];
+    if (!list.includes(agentId)) list.push(agentId);
+  });
+}
+async function autoLoopFor2(root, sessionId) {
+  const state = await readState(root);
+  return state.auto_loop?.[sessionId];
+}
+async function incrementAutoLoopRounds(root, sessionId) {
+  const state = await updateState(root, (s) => {
+    const loop = s.auto_loop ??= {};
+    const entry = loop[sessionId] ??= { rounds: 0 };
+    entry.rounds += 1;
+  });
+  return state.auto_loop?.[sessionId]?.rounds ?? 0;
+}
+async function autoLoopHaltedFor(root, sessionId) {
+  return (await autoLoopFor2(root, sessionId))?.halted === true;
+}
+async function haltAutoLoop(root, sessionId) {
+  await updateState(root, (s) => {
+    const loop = s.auto_loop ??= {};
+    const entry = loop[sessionId] ??= { rounds: 0 };
+    entry.halted = true;
+  });
+}
+async function markRedTask(root, sessionId, taskId) {
+  const state = await updateState(root, (s) => {
+    const loop = s.auto_loop ??= {};
+    const entry = loop[sessionId] ??= { rounds: 0 };
+    if (entry.red_task === taskId) {
+      entry.red_count = (entry.red_count ?? 0) + 1;
+    } else {
+      entry.red_task = taskId;
+      entry.red_count = 1;
+    }
+  });
+  return state.auto_loop?.[sessionId]?.red_count ?? 0;
 }
 async function taskForSession(root, sessionId) {
   const state = await readState(root);
@@ -16668,6 +16811,20 @@ models:
   main: claude-opus-5
   verifier: claude-sonnet-5
   scribe: claude-haiku-4-5
+
+# V\xF2ng l\u1EB7p t\u1EF1 \u0111\u1ED9ng: gate xanh \u2192 \`ganas commit\` \u2192 \`ganas next\` \u2192 giao sub-agent
+# k\u1EBF ti\u1EBFp, kh\xF4ng \u0111\u1EE3i ng\u01B0\u1EDDi g\xF5 l\u1EC7nh gi\u1EEFa hai task trong c\xF9ng ch\u1EB7ng.
+# M\u1EB7c \u0111\u1ECBnh T\u1EAET \u2014 b\u1EADt l\xEAn l\xE0 ganas t\u1EF1 commit thay b\u1EA1n, ch\u1EC9 b\u1EADt khi \u0111\xE3 tin lu\u1ED3ng
+# gate/commit c\u1EE7a d\u1EF1 \xE1n.
+auto_loop:
+  enabled: false
+  # max_iterations: 5
+
+# T\u1EF1 g\u1EEDi m\u1ED9t c\xE2u m\u1EDF \u0111\u1EA7u khi phi\xEAn v\u1EEBa m\u1EDF (thay v\xEC ch\u1EC9 b\u01A1m brief v\xE0o context,
+# im l\u1EB7ng ch\u1EDD b\u1EA1n g\xF5 tr\u01B0\u1EDBc). M\u1EB7c \u0111\u1ECBnh T\u1EAET \u2014 m\u1EDF Claude Code \u0111\u1EC3 h\u1ECFi nhanh m\u1ED9t
+# c\xE2u kh\xF4ng mu\u1ED1n b\u1ECB cu\u1ED1n ngay v\xE0o task.
+session_start:
+  auto_begin: false
 
 # L\u1EC7nh ki\u1EC3m TO\xC0N D\u1EF0 \xC1N m\xE0 \`ganas commit\` ch\u1EA1y tr\xEAn c\xE2y s\u1EAFp \u0111\u01B0\u1EE3c commit.
 # Kh\xE1c c\xE1c l\u1EC7nh trong \`exit_contract\` c\u1EE7a task: ch\xFAng ch\u1EC9 ki\u1EC3m ph\u1EA7n task ch\u1EA1m
@@ -18682,8 +18839,33 @@ Phi\xEAn ch\xEDnh l\xE0 ng\u01B0\u1EDDi \u0110I\u1EC0U PH\u1ED0I: ch\u1ECDn task
 
 Hai l\xFD do, kh\xF4ng ph\u1EA3i m\u1ED9t: context phi\xEAn ch\xEDnh kh\xF4ng b\u1ECB chi ti\u1EBFt th\u1EF1c thi nu\u1ED1t m\u1EA5t, v\xE0 tier th\u1EA5p kh\xF4ng ngh\u0129 qu\xE1 tay cho vi\u1EC7c c\u01A1 h\u1ECDc.
 
-` + parallelBlock(graph, t) + `> N\u1EBFu B\u1EA0N \u0110ANG L\xC0 sub-agent nh\u1EADn ch\xEDnh task n\xE0y: l\xE0m lu\xF4n, \u0111\u1EEBng giao ti\u1EBFp n\u1EEFa.`
+` + reportTemplateBlock() + autoLoopBlock(graph, t) + parallelBlock(graph, t) + `> N\u1EBFu B\u1EA0N \u0110ANG L\xC0 sub-agent nh\u1EADn ch\xEDnh task n\xE0y: l\xE0m lu\xF4n, \u0111\u1EEBng giao ti\u1EBFp n\u1EEFa.`
   );
+}
+function reportTemplateBlock() {
+  return `K\u1EBFt th\xFAc l\u01B0\u1EE3t tr\u1EA3 l\u1EDDi b\u1EB1ng \u0111\xFAng m\u1EABu b\xE1o c\xE1o d\u01B0\u1EDBi \u0111\xE2y \u2014 hook \`SubagentStop\` \u0111\u1ED1i chi\u1EBFu b\u1EB1ng \u0110\xDANG ba ti\xEAu \u0111\u1EC1 n\xE0y (heading Markdown), kh\xF4ng \u0111\u1ECDc n\u1ED9i dung b\xEAn d\u01B0\u1EDBi:
+
+` + bullet(REPORT_SECTIONS.map((s) => `\`## ${s}\``)) + `
+
+R\u1ED3i m\u1ED9t d\xF2ng k\u1EBFt lu\u1EADn: \`K\u1EBFt lu\u1EADn: XONG\` ho\u1EB7c \`K\u1EBFt lu\u1EADn: CH\u1EB6N: <l\xFD do m\u1ED9t d\xF2ng>\`.
+
+`;
+}
+function autoLoopBlock(graph, t) {
+  const loop = autoLoopFor(graph.config);
+  if (!loop.enabled) return "";
+  return `**V\xF2ng l\u1EB7p t\u1EF1 \u0111\u1ED9ng \u0111ang B\u1EACT** (\`auto_loop.enabled: true\`) \u2014 sau khi \`ganas gate\` b\xE1o \`${t.id}\` \u0111\xE3 xanh, \u0110\u1EEANG d\u1EEBng l\u1EA1i ch\u1EDD ng\u01B0\u1EDDi, t\u1EF1 l\xE0m ti\u1EBFp:
+
+` + bullet([
+    `\`ganas commit\` \u2014 commit task v\u1EEBa xong.`,
+    `\`ganas next\` \u2014 l\u1EA5y task k\u1EBF ti\u1EBFp.`,
+    `Giao sub-agent k\u1EBF \u0111\xFAng nh\u01B0 m\u1EE5c "Giao vi\u1EC7c" \u1EDF tr\xEAn, cho task m\u1EDBi \u0111\xF3.`,
+    `D\u1EEBng l\u1EA1i, kh\xF4ng g\u1ECDi \`ganas next\` n\u1EEFa, khi: h\u1EBFt task ch\u01B0a \`done\` trong c\xF9ng design \`${t.implements}\`; ho\u1EB7c m\u1ED9t ti\xEAu ch\xED \`kind: manual\` \u0111\xF2i ng\u01B0\u1EDDi x\xE1c nh\u1EADn; ho\u1EB7c b\xE1o c\xE1o c\u1EE7a sub-agent t\u1EF1 khai \`K\u1EBFt lu\u1EADn: CH\u1EB6N:\`.`
+  ]) + `
+
+Tr\u1EA7n \`${loop.max_iterations}\` v\xF2ng li\xEAn ti\u1EBFp trong c\xF9ng m\u1ED9t task \u2014 ch\u1EA1m tr\u1EA7n th\xEC d\u1EEBng l\u1EA1i v\xE0 b\xE1o ng\u01B0\u1EDDi, \u0111\u1EEBng t\u1EF1 n\u1EDBi tr\u1EA7n l\xEAn.
+
+`;
 }
 function parallelBlock(graph, t) {
   const others = parallelCandidates(graph, t);
@@ -19034,7 +19216,7 @@ ${input.volatile}`);
   }
   return parts.join("\n\n");
 }
-var RULE_REMINDER, BRIEF_LENGTH_WARNING_CHARS, SUGGESTED_FACTS_LIMIT, ICEBOX_OVERDUE_LIMIT, DAY_MS;
+var RULE_REMINDER, BRIEF_LENGTH_WARNING_CHARS, REPORT_SECTIONS, SUGGESTED_FACTS_LIMIT, ICEBOX_OVERDUE_LIMIT, DAY_MS;
 var init_brief = __esm({
   "src/render/brief.ts"() {
     "use strict";
@@ -19053,6 +19235,11 @@ ch\u01B0a bi\u1EBFt v\xE0 \u0111\u01B0a v\xE0o \`open_questions\`.
 Kh\xF4ng n\xE2ng claim th\xE0nh fact n\u1EBFu ch\u01B0a ch\u1EA1y probe. Kh\xF4ng s\u1EEDa \`last_verified_at\`
 b\u1EB1ng tay.`;
     BRIEF_LENGTH_WARNING_CHARS = 14e3;
+    REPORT_SECTIONS = [
+      "L\u1EC7ch so v\u1EDBi \u0111\u1EB7c t\u1EA3",
+      "Quy\u1EBFt \u0111\u1ECBnh t\u1EF1 \xFD",
+      "Ph\xE1t hi\u1EC7n / nghi ng\u1EDD"
+    ];
     SUGGESTED_FACTS_LIMIT = 3;
     ICEBOX_OVERDUE_LIMIT = 3;
     DAY_MS = 24 * 60 * 60 * 1e3;
@@ -19596,7 +19783,7 @@ import { mkdtemp as mkdtemp2, rm as rm4, symlink } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
 import { join as join12 } from "node:path";
 function buildCommitMessage(graph, task, gate) {
-  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
+  const lines = [commitSubject(task, task.implements), "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
   for (const r of gate.results) {
     const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
     lines.push(`  ${mark} ${r.label}`);
@@ -19752,6 +19939,7 @@ var init_commit = __esm({
   "src/commit.ts"() {
     "use strict";
     init_gate();
+    init_model();
     init_exec();
     init_fsprobe();
     BUILD_CHECK_TIMEOUT_MS = 3e5;
@@ -21422,6 +21610,11 @@ import { join as join15 } from "node:path";
 function quote(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
 }
+async function resetStagedPaths(root, paths) {
+  for (const p of paths) {
+    await runShell(`git reset -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
+  }
+}
 function notFullyStaged(e) {
   return e.x === "?" || e.y !== " ";
 }
@@ -21508,7 +21701,8 @@ ${message2}`
   const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
   const owned = ownedPaths(task, ganasChanged);
   const foreign = foreignPaths(task, ganasChanged);
-  for (const p of [...allGanas ? [GANAS_DIR] : owned, ...codePaths]) {
+  const addedPaths = [...allGanas ? [GANAS_DIR] : owned, ...codePaths];
+  for (const p of addedPaths) {
     await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
   }
   const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
@@ -21533,6 +21727,7 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
       if (originalTaskFile !== null) {
         await writeFile8(join15(root, sourced.file), originalTaskFile, "utf8");
       }
+      await resetStagedPaths(root, addedPaths);
       throw new GanasError(
         report.trimStart() + `
   Th\u1EADt s\u1EF1 c\u1EA7n b\u1ECF qua th\xEC \`ganas commit ${taskId} --no-recheck\` \u2014 nh\u01B0ng bi\u1EBFt r\xF5 l\xE0 \u0111ang commit m\u1ED9t c\xE2y ch\u01B0a ai ki\u1EC3m.
@@ -21557,6 +21752,7 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
       throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
 ${result.stderr || result.stdout}`);
     }
+    if (willClose && sessionId) await releaseSession(root, sessionId);
     process.stdout.write(
       `\u2713 \u0110\xE3 commit cho ${taskId}.
 
@@ -21818,17 +22014,9 @@ var init_prune = __esm({
   }
 });
 
-// src/commands/note.ts
-var note_exports = {};
-__export(note_exports, {
-  run: () => run17
-});
+// src/note.ts
 import { appendFile as appendFile3, mkdir as mkdir11, writeFile as writeFile9 } from "node:fs/promises";
 import { dirname as dirname11 } from "node:path";
-async function gitSha(root) {
-  const result = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5e3 });
-  return result.code === 0 ? result.stdout.trim() : void 0;
-}
 function renderHead(sessionId) {
   return `# Ghi ch\xE9p th\xF4 c\u1EE7a phi\xEAn \`${sessionId}\` \u2014 CH\u01AFA KI\u1EC2M, KH\xD4NG PH\u1EA2I tri th\u1EE9c d\u1EF1 \xE1n
 
@@ -21854,6 +22042,36 @@ function renderEntry(opts) {
   );
   return lines.join("\n") + "\n";
 }
+async function generateNote(root, sessionId, entry) {
+  const path = notePath(root, sessionId);
+  await mkdir11(dirname11(path), { recursive: true });
+  const entryContent = renderEntry(entry);
+  let appended = false;
+  if (await existsAsync(path)) {
+    await appendFile3(path, entryContent, "utf8");
+    appended = true;
+  } else {
+    await writeFile9(path, renderHead(sessionId) + entryContent, "utf8");
+  }
+  return { path, appended };
+}
+var init_note = __esm({
+  "src/note.ts"() {
+    "use strict";
+    init_prune();
+    init_fsprobe();
+  }
+});
+
+// src/commands/note.ts
+var note_exports = {};
+__export(note_exports, {
+  run: () => run17
+});
+async function gitSha(root) {
+  const result = await runShell("git rev-parse --short HEAD", { cwd: root, timeoutMs: 5e3 });
+  return result.code === 0 ? result.stdout.trim() : void 0;
+}
 async function run17(argv) {
   const content = argv.positional.join(" ").trim();
   if (!content) {
@@ -21865,29 +22083,21 @@ async function run17(argv) {
   const touchedPaths = taskId ? await touchedPathsFor(root, sessionId, taskId) : [];
   const sha = await gitSha(root);
   const at2 = (/* @__PURE__ */ new Date()).toISOString();
-  const path = notePath(root, sessionId);
-  await mkdir11(dirname11(path), { recursive: true });
-  const entry = renderEntry({ at: at2, taskId, sha, touchedPaths, content });
-  if (await existsAsync(path)) {
-    await appendFile3(path, entry, "utf8");
-  } else {
-    await writeFile9(path, renderHead(sessionId) + entry, "utf8");
-  }
-  process.stdout.write(`\u0110\xE3 ghi note v\xE0o ${path}
+  const result = await generateNote(root, sessionId, { at: at2, taskId, sha, touchedPaths, content });
+  process.stdout.write(`\u0110\xE3 ghi note v\xE0o ${result.path}
 `);
   return 0;
 }
 var DEFAULT_SESSION_LABEL;
-var init_note = __esm({
+var init_note2 = __esm({
   "src/commands/note.ts"() {
     "use strict";
     init_paths();
-    init_prune();
+    init_note();
     init_state();
     init_args();
     init_errors();
     init_exec();
-    init_fsprobe();
     DEFAULT_SESSION_LABEL = "manual";
   }
 });
@@ -22628,6 +22838,71 @@ L\xE0m n\u1ED1t nh\u1EEFng m\u1EE5c tr\xEAn r\u1ED3i h\xE3y k\u1EBFt th\xFAc. N\
   return mode === "enforce" ? { decision: "block", reason: body } : { systemMessage: `ganas (ch\u1EBF \u0111\u1ED9 warn \u2014 ch\u01B0a ch\u1EB7n):
 ${body}` };
 }
+function truncateForNote(text) {
+  if (text.length <= NOTE_BODY_LIMIT_CHARS) return { body: text, droppedLines: 0 };
+  const body = text.slice(0, NOTE_BODY_LIMIT_CHARS);
+  const droppedLines = text.slice(NOTE_BODY_LIMIT_CHARS).split("\n").length;
+  return { body, droppedLines };
+}
+function hasReportHeading(message, section) {
+  const escaped = section.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  return new RegExp(`^#{1,6}\\s*${escaped}\\s*$`, "mi").test(message);
+}
+function missingReportSections(message) {
+  return REPORT_SECTIONS.filter((s) => !hasReportHeading(message, s));
+}
+function reportRequestsHalt(message) {
+  return /CHẶN:/.test(message);
+}
+function missingSectionsReason(missing) {
+  return `B\xE1o c\xE1o k\u1EBFt th\xFAc l\u01B0\u1EE3t c\u1EE7a sub-agent thi\u1EBFu ${missing.length} ti\xEAu \u0111\u1EC1 b\u1EAFt bu\u1ED9c: ${missing.map((s) => `"${s}"`).join(", ")}.
+
+Ba m\u1EE5c "${REPORT_SECTIONS.join('", "')}" l\xE0 ch\u1ED7 worker \u0111\u01B0\u1EE3c n\xF3i ng\u01B0\u1EE3c l\u1EA1i ng\u01B0\u1EDDi ra \u0111\u1EC1 \u2014 thi\u1EBFu m\u1ED9t trong ch\xFAng th\xEC b\xE1o c\xE1o ch\u1EC9 c\xF2n l\xE0 l\u1EDDi khen su\xF4ng. Vi\u1EBFt l\u1EA1i \u0111\u1EE7 ba m\u1EE5c, \u0110\xDANG D\u1EA0NG heading Markdown (vd \`## ${REPORT_SECTIONS[0]}\`), r\u1ED3i k\u1EBFt th\xFAc l\u01B0\u1EE3t l\u1EA7n n\u1EEFa.
+
+(Ch\u1EC9 \u0111\xF2i \u0111\xFAng M\u1ED8T L\u1EA6N cho agent n\xE0y \u2014 l\u01B0\u1EE3t k\u1EBF ti\u1EBFp, d\xF9 v\u1EABn thi\u1EBFu, s\u1EBD kh\xF4ng b\u1ECB \u0111\xF2i l\u1EA1i.)`;
+}
+async function subagentStop(input) {
+  const root = findGanasRoot(input.cwd ?? process.cwd());
+  if (!root) return ALLOW;
+  if (input.agent_id === void 0) return ALLOW;
+  const agentId = input.agent_id;
+  const sessionId = input.session_id;
+  const session = sessionId ? await sessionRecord(root, sessionId) : null;
+  const taskId = session?.task ?? null;
+  const rawMessage = input.last_assistant_message ?? "";
+  const { body, droppedLines } = truncateForNote(rawMessage);
+  const cutNotice = droppedLines > 0 ? `
+
+\u2026 \u0111\xE3 c\u1EAFt b\u1EDBt ${droppedLines} d\xF2ng c\xF2n l\u1EA1i (b\xE1o c\xE1o d\xE0i h\u01A1n ${NOTE_BODY_LIMIT_CHARS} k\xFD t\u1EF1).` : "";
+  const sha = (await runContext(root, "subagentStop")).git;
+  await generateNote(root, sessionId ?? "unknown-session", {
+    at: (/* @__PURE__ */ new Date()).toISOString(),
+    taskId,
+    sha,
+    touchedPaths: session?.touched_paths ?? [],
+    content: `- agent_type: \`${input.agent_type ?? "(kh\xF4ng r\xF5)"}\`
+- agent_id: \`${agentId}\`
+
+` + body + cutNotice
+  });
+  if (!sessionId) return ALLOW;
+  const missing = missingReportSections(rawMessage);
+  if (missing.length > 0) {
+    const already = await agentReportedFor(root, sessionId, taskId ?? "", agentId);
+    if (!already) {
+      await markAgentReported(root, sessionId, agentId);
+      const graph = await loadGraph(root);
+      return applyEnforcement(enforcementFor(graph.config, "subagent_report"), missingSectionsReason(missing));
+    }
+  }
+  if (reportRequestsHalt(rawMessage)) {
+    await haltAutoLoop(root, sessionId);
+    return {
+      systemMessage: `ganas: sub-agent b\xE1o "CH\u1EB6N:" trong k\u1EBFt lu\u1EADn \u2014 \u0111\xE3 d\u1EEBng auto-loop. \u0110\u1ECDc b\xE1o c\xE1o trong \`runs/notes/${sessionId}.md\`, x\u1EED l\xFD xong th\xEC t\u1EF1 ch\u1EA1y \`ganas next\` \u0111\u1EC3 m\u1EDF l\u1EA1i.`
+    };
+  }
+  return ALLOW;
+}
 async function tryHandoff(root, input) {
   if (!input.session_id) return void 0;
   const taskId = await taskForSession(root, input.session_id);
@@ -22667,6 +22942,7 @@ async function sessionEnd(input) {
   await releaseSession(root, input.session_id);
   return ALLOW;
 }
+var NOTE_BODY_LIMIT_CHARS;
 var init_handlers = __esm({
   "src/hooks/io/handlers.ts"() {
     "use strict";
@@ -22679,12 +22955,14 @@ var init_handlers = __esm({
     init_validate();
     init_handoff();
     init_model();
+    init_note();
     init_brief();
     init_state();
     init_fsprobe();
     init_ledger();
     init_policy();
     init_types3();
+    NOTE_BODY_LIMIT_CHARS = 8e3;
   }
 });
 
@@ -22749,6 +23027,7 @@ var init_hook = __esm({
       "pre-tool-use": preToolUse,
       "post-tool-use": postToolUse,
       stop,
+      "subagent-stop": subagentStop,
       "pre-compact": preCompact,
       "session-end": sessionEnd
     };
@@ -22775,7 +23054,7 @@ var COMMANDS = {
   proposal: () => Promise.resolve().then(() => (init_proposal2(), proposal_exports)),
   search: () => Promise.resolve().then(() => (init_search2(), search_exports)),
   commit: () => Promise.resolve().then(() => (init_commit2(), commit_exports)),
-  note: () => Promise.resolve().then(() => (init_note(), note_exports)),
+  note: () => Promise.resolve().then(() => (init_note2(), note_exports)),
   handoff: () => Promise.resolve().then(() => (init_handoff2(), handoff_exports)),
   prune: () => Promise.resolve().then(() => (init_prune2(), prune_exports)),
   ledger: () => Promise.resolve().then(() => (init_ledger2(), ledger_exports)),

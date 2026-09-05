@@ -16845,11 +16845,18 @@ var init_paths = __esm({
 var state_exports = {};
 __export(state_exports, {
   TOUCHED_PATHS_CAP: () => TOUCHED_PATHS_CAP,
+  agentReportedFor: () => agentReportedFor,
+  autoLoopFor: () => autoLoopFor,
+  autoLoopHaltedFor: () => autoLoopHaltedFor,
   baselineFor: () => baselineFor,
   bindSession: () => bindSession,
   clearTouched: () => clearTouched,
   dispatchNudgedFor: () => dispatchNudgedFor,
+  haltAutoLoop: () => haltAutoLoop,
+  incrementAutoLoopRounds: () => incrementAutoLoopRounds,
+  markAgentReported: () => markAgentReported,
   markDispatchNudged: () => markDispatchNudged,
+  markRedTask: () => markRedTask,
   markTouched: () => markTouched,
   readState: () => readState,
   releaseSession: () => releaseSession,
@@ -16872,7 +16879,8 @@ async function readState(root) {
     return {
       version: 1,
       current_task: parsed.current_task ?? null,
-      sessions: parsed.sessions ?? {}
+      sessions: parsed.sessions ?? {},
+      auto_loop: parsed.auto_loop
     };
   } catch {
     return { ...EMPTY };
@@ -16937,6 +16945,55 @@ async function markDispatchNudged(root, sessionId) {
     const rec = s.sessions[sessionId];
     if (rec) rec.dispatch_nudged = true;
   });
+}
+async function agentReportedFor(root, sessionId, taskId, agentId) {
+  if (!sessionId) return false;
+  const rec = (await readState(root)).sessions[sessionId];
+  if (!rec || rec.task !== taskId) return false;
+  return (rec.reported_agents ?? []).includes(agentId);
+}
+async function markAgentReported(root, sessionId, agentId) {
+  await updateState(root, (s) => {
+    const rec = s.sessions[sessionId];
+    if (!rec) return;
+    const list = rec.reported_agents ??= [];
+    if (!list.includes(agentId)) list.push(agentId);
+  });
+}
+async function autoLoopFor(root, sessionId) {
+  const state = await readState(root);
+  return state.auto_loop?.[sessionId];
+}
+async function incrementAutoLoopRounds(root, sessionId) {
+  const state = await updateState(root, (s) => {
+    const loop = s.auto_loop ??= {};
+    const entry = loop[sessionId] ??= { rounds: 0 };
+    entry.rounds += 1;
+  });
+  return state.auto_loop?.[sessionId]?.rounds ?? 0;
+}
+async function autoLoopHaltedFor(root, sessionId) {
+  return (await autoLoopFor(root, sessionId))?.halted === true;
+}
+async function haltAutoLoop(root, sessionId) {
+  await updateState(root, (s) => {
+    const loop = s.auto_loop ??= {};
+    const entry = loop[sessionId] ??= { rounds: 0 };
+    entry.halted = true;
+  });
+}
+async function markRedTask(root, sessionId, taskId) {
+  const state = await updateState(root, (s) => {
+    const loop = s.auto_loop ??= {};
+    const entry = loop[sessionId] ??= { rounds: 0 };
+    if (entry.red_task === taskId) {
+      entry.red_count = (entry.red_count ?? 0) + 1;
+    } else {
+      entry.red_task = taskId;
+      entry.red_count = 1;
+    }
+  });
+  return state.auto_loop?.[sessionId]?.red_count ?? 0;
 }
 async function taskForSession(root, sessionId) {
   const state = await readState(root);
@@ -17489,6 +17546,1473 @@ var init_boundary = __esm({
   }
 });
 
+// src/model/common.ts
+var ID_PATTERNS, zGoalId, zDesignId, zTaskId, zFactId, zClaimId, zLegacyClaimId, zDecisionId, zModuleId, zScopeId, zIceboxId, zProposalId, zIsoDate, zHandle, zNonEmpty, zGlob, zExpect, zProbe, zScoreValue;
+var init_common = __esm({
+  "src/model/common.ts"() {
+    "use strict";
+    init_zod();
+    ID_PATTERNS = {
+      goal: /^G-\d{3,}$/,
+      design: /^D-\d{3,}$/,
+      task: /^T-\d{3,}$/,
+      fact: /^F-[A-Z0-9]+-\d{3,}$/,
+      claim: /^C-\d{3,}$/,
+      legacyClaim: /^LC-\d{3,}$/,
+      decision: /^DEC-\d{3,}$/,
+      /**
+       * Khối trong sơ đồ. Thay cho `Zone` cũ: một khối vừa là vùng code (có `paths`)
+       * vừa là node có contract và bộ verify — không cần hai bản đồ song song.
+       */
+      module: /^M-[a-z0-9][a-z0-9-]*$/,
+      /** Phạm vi công việc = đơn vị bàn giao có ranh giới code và người nghiệm thu. */
+      scope: /^P-[a-z0-9][a-z0-9-]*$/,
+      /** Icebox = việc đã quyết CHƯA làm. Xem docstring đầu `src/model/icebox.ts`. */
+      icebox: /^ICE-\d{3,}$/,
+      /** Đề xuất chờ người duyệt. Xem docstring đầu `src/model/proposal.ts`. */
+      proposal: /^PR-\d{3,}$/
+    };
+    zGoalId = external_exports.string().regex(ID_PATTERNS.goal, "ID goal ph\u1EA3i d\u1EA1ng G-001");
+    zDesignId = external_exports.string().regex(ID_PATTERNS.design, "ID design ph\u1EA3i d\u1EA1ng D-001");
+    zTaskId = external_exports.string().regex(ID_PATTERNS.task, "ID task ph\u1EA3i d\u1EA1ng T-001");
+    zFactId = external_exports.string().regex(ID_PATTERNS.fact, "ID fact ph\u1EA3i d\u1EA1ng F-ACC-007");
+    zClaimId = external_exports.string().regex(ID_PATTERNS.claim, "ID claim ph\u1EA3i d\u1EA1ng C-031");
+    zLegacyClaimId = external_exports.string().regex(ID_PATTERNS.legacyClaim, "ID legacy claim ph\u1EA3i d\u1EA1ng LC-007");
+    zDecisionId = external_exports.string().regex(ID_PATTERNS.decision, "ID decision ph\u1EA3i d\u1EA1ng DEC-004");
+    zModuleId = external_exports.string().regex(ID_PATTERNS.module, "ID kh\u1ED1i ph\u1EA3i d\u1EA1ng M-intent");
+    zScopeId = external_exports.string().regex(ID_PATTERNS.scope, "ID ph\u1EA1m vi ph\u1EA3i d\u1EA1ng P-chat-core");
+    zIceboxId = external_exports.string().regex(ID_PATTERNS.icebox, "ID icebox ph\u1EA3i d\u1EA1ng ICE-001");
+    zProposalId = external_exports.string().regex(ID_PATTERNS.proposal, "ID \u0111\u1EC1 xu\u1EA5t ph\u1EA3i d\u1EA1ng PR-001");
+    zIsoDate = external_exports.string().min(1).refine((s) => !Number.isNaN(Date.parse(s)), "ph\u1EA3i l\xE0 ng\xE0y ISO 8601 h\u1EE3p l\u1EC7");
+    zHandle = external_exports.string().regex(/^@[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'handle ph\u1EA3i d\u1EA1ng "@ten-nguoi"');
+    zNonEmpty = external_exports.string().trim().min(1, "kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng");
+    zGlob = external_exports.string().trim().min(1);
+    zExpect = external_exports.union([
+      external_exports.literal("exit_zero"),
+      external_exports.object({
+        exit_code: external_exports.number().int().optional(),
+        stdout_contains: external_exports.string().optional(),
+        stdout_matches: external_exports.string().optional(),
+        stderr_contains: external_exports.string().optional()
+      })
+    ]).default("exit_zero");
+    zProbe = external_exports.object({
+      run: zNonEmpty.describe("l\u1EC7nh shell ch\u1EA1y \u0111\u01B0\u1EE3c, kh\xF4ng t\u01B0\u01A1ng t\xE1c"),
+      expect: zExpect,
+      /**
+       * Lệnh thoát 0 ⇒ bỏ qua, đánh dấu `unavailable`, **KHÔNG phải `failing`**.
+       * Dùng cho probe cần môi trường ngoài (DB, service, mạng nội bộ).
+       */
+      skip_if: external_exports.string().optional(),
+      timeout_ms: external_exports.number().int().positive().max(6e5).optional(),
+      cwd: external_exports.string().optional()
+    }).strict();
+    zScoreValue = external_exports.union([
+      external_exports.literal(1),
+      external_exports.literal(2),
+      external_exports.literal(3),
+      external_exports.literal(4),
+      external_exports.literal(5)
+    ]);
+  }
+});
+
+// src/model/anchor.ts
+function parseAnchorString(raw) {
+  const s = raw.trim();
+  if (!s) return null;
+  const commit = COMMIT.exec(s);
+  if (commit?.groups) return { kind: "commit", sha: commit.groups["sha"] };
+  const hash = FILE_HASH_RANGE.exec(s);
+  if (hash?.groups) {
+    const line = Number(hash.groups["line"]);
+    const end = hash.groups["end"] ? Number(hash.groups["end"]) : void 0;
+    return end === void 0 ? { kind: "file", path: hash.groups["path"], line } : { kind: "file", path: hash.groups["path"], line, line_end: end };
+  }
+  const colon = FILE_COLON.exec(s);
+  if (colon?.groups) {
+    const line = Number(colon.groups["line"]);
+    const end = colon.groups["end"] ? Number(colon.groups["end"]) : void 0;
+    return end === void 0 ? { kind: "file", path: colon.groups["path"], line } : { kind: "file", path: colon.groups["path"], line, line_end: end };
+  }
+  if (/^https?:\/\//.test(s)) return null;
+  if (!s.includes(" ")) return { kind: "file", path: s };
+  return null;
+}
+function preview(quote2) {
+  const flat = quote2.trim().replace(/\s+/g, " ");
+  return flat.length <= QUOTE_PREVIEW ? flat : `${flat.slice(0, QUOTE_PREVIEW).trimEnd()}\u2026`;
+}
+function formatAnchor(a) {
+  switch (a.kind) {
+    case "file":
+      if (a.line === void 0) return a.path;
+      return a.line_end === void 0 ? `${a.path}:${a.line}` : `${a.path}:${a.line}-${a.line_end}`;
+    case "commit":
+      return `commit:${a.sha.slice(0, 8)}`;
+    case "url":
+      return a.quote ? `${a.url} (l\u1EA5y ${a.fetched_at.slice(0, 10)}) \u2014 "${preview(a.quote)}"` : `${a.url} (l\u1EA5y ${a.fetched_at.slice(0, 10)})`;
+    case "human":
+      return `${a.by} ${a.at.slice(0, 10)}${a.link ? ` \u2014 ${a.link}` : ""}`;
+  }
+}
+var zFileAnchor, zCommitAnchor, zUrlAnchor, zHumanAnchor, zAnchorObject, FILE_HASH_RANGE, FILE_COLON, COMMIT, zAnchor, NEED_ANCHOR, zAnchors, QUOTE_PREVIEW;
+var init_anchor = __esm({
+  "src/model/anchor.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    zFileAnchor = external_exports.object({
+      kind: external_exports.literal("file"),
+      path: zNonEmpty,
+      /** Dòng bắt đầu, 1-indexed. Thiếu = neo vào cả file. */
+      line: external_exports.number().int().positive().optional(),
+      line_end: external_exports.number().int().positive().optional()
+    });
+    zCommitAnchor = external_exports.object({
+      kind: external_exports.literal("commit"),
+      sha: external_exports.string().regex(/^[0-9a-f]{7,40}$/, "sha ph\u1EA3i l\xE0 hex 7\u201340 k\xFD t\u1EF1"),
+      note: external_exports.string().optional()
+    });
+    zUrlAnchor = external_exports.object({
+      kind: external_exports.literal("url"),
+      url: external_exports.string().url(),
+      /** Bắt buộc: web đổi. Một URL không có mốc thời gian lấy về thì không neo được gì. */
+      fetched_at: zIsoDate,
+      quote: external_exports.string().optional()
+    });
+    zHumanAnchor = external_exports.object({
+      kind: external_exports.literal("human"),
+      by: zHandle,
+      at: zIsoDate,
+      /** Link tới ticket/biên bản/chat — để người sau truy lại được. */
+      link: external_exports.string().optional()
+    });
+    zAnchorObject = external_exports.discriminatedUnion("kind", [
+      zFileAnchor,
+      zCommitAnchor,
+      zUrlAnchor,
+      zHumanAnchor
+    ]);
+    FILE_HASH_RANGE = /^(?<path>[^#\s]+)#L(?<line>\d+)(?:-L?(?<end>\d+))?$/;
+    FILE_COLON = /^(?<path>[^:\s]+):(?<line>\d+)(?::(?<end>\d+))?$/;
+    COMMIT = /^commit:(?<sha>[0-9a-f]{7,40})$/;
+    zAnchor = external_exports.union([external_exports.string(), zAnchorObject]).transform((v, ctx) => {
+      if (typeof v !== "string") return v;
+      const parsed = parseAnchorString(v);
+      if (!parsed) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          message: `anchor "${v}" kh\xF4ng nh\u1EADn d\u1EA1ng \u0111\u01B0\u1EE3c. D\xF9ng "src/a.ts#L12", "src/a.ts:12", "commit:abc1234", ho\u1EB7c d\u1EA1ng object cho url/human (url c\u1EA7n fetched_at).`
+        });
+        return external_exports.NEVER;
+      }
+      return parsed;
+    });
+    NEED_ANCHOR = "ph\u1EA3i c\xF3 `anchors` \u2014 b\u1EB1ng ch\u1EE9ng cho ph\xE1t bi\u1EC3u n\xE0y. D\xF9ng `src/a.ts#L42`, `commit:abc1234`, ho\u1EB7c d\u1EA1ng object cho URL (k\xE8m `fetched_at`) / ng\u01B0\u1EDDi (`kind: human`). Kh\xF4ng ch\u1EC9 ra \u0111\u01B0\u1EE3c ngu\u1ED3n th\xEC \u0111\u1EEBng ghi: \u0111\u01B0a v\xE0o `open_questions` c\u1EE7a task thay v\xEC \u0111\u01B0a v\xE0o kho tri th\u1EE9c.";
+    zAnchors = external_exports.array(zAnchor, { required_error: NEED_ANCHOR, invalid_type_error: NEED_ANCHOR }).min(1, NEED_ANCHOR);
+    QUOTE_PREVIEW = 60;
+  }
+});
+
+// src/model/config.ts
+function guideFileName(harness) {
+  return GUIDE_FILE[harness];
+}
+function canDispatchSubagent(harness) {
+  return harness === "claude-code";
+}
+function agentModelAlias(modelId) {
+  return /(opus|sonnet|haiku|fable)/i.exec(modelId)?.[1]?.toLowerCase();
+}
+function enforcementFor(config2, rule) {
+  return config2.enforcement_rules[rule] ?? config2.enforcement;
+}
+function autoLoopFor2(config2) {
+  return config2.auto_loop;
+}
+var ENFORCEMENT, ENFORCEMENT_RULES, MODEL_TIER, HARNESS, GUIDE_FILE, LATEST_SCHEMA_VERSION, zConfig;
+var init_config = __esm({
+  "src/model/config.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    ENFORCEMENT = ["warn", "enforce"];
+    ENFORCEMENT_RULES = [
+      /** Ghi tri thức không có anchor. */
+      "knowledge_anchor",
+      /** Ghi file .ganas/ sai schema. */
+      "schema",
+      /** Kết thúc phiên khi exit_contract chưa thoả. */
+      "exit_contract",
+      /** Tạo/đóng task không neo được vào phạm vi/goal. */
+      "task_link",
+      /** Model tự đặt status: approved/rejected cho proposal thay vì `ganas proposal approve/reject`. */
+      "proposal_decision",
+      /**
+       * Sub-agent kết thúc mà báo cáo (SubagentStop) thiếu tiêu đề bắt buộc.
+       *
+       * Đây là luật QUY TRÌNH (kiểm soát cách một lượt giao việc kết thúc), không
+       * phải luật bảo toàn DỮ LIỆU — khác bốn ngoại lệ chặn vô điều kiện liệt kê ở
+       * `src/hooks/io/CLAUDE.md` (sổ cái xác minh, `config.yaml`, thư mục skill,
+       * ghi đè thực thể). Luật quy trình phải đi qua `enforcementFor()` để dự án
+       * có sẵn adopt được mà không bị chặn cứng ngay từ lần cài đầu tiên.
+       */
+      "subagent_report"
+    ];
+    MODEL_TIER = ["main", "verifier", "scribe"];
+    HARNESS = [
+      "claude-code",
+      "codex",
+      "cursor",
+      "zed",
+      "windsurf",
+      "gemini",
+      "other"
+    ];
+    GUIDE_FILE = {
+      "claude-code": "CLAUDE.md",
+      codex: "AGENTS.md",
+      cursor: "AGENTS.md",
+      zed: "AGENTS.md",
+      windsurf: "AGENTS.md",
+      gemini: "GEMINI.md",
+      other: "AGENTS.md"
+    };
+    LATEST_SCHEMA_VERSION = 1;
+    zConfig = external_exports.object({
+      version: external_exports.literal(LATEST_SCHEMA_VERSION).default(LATEST_SCHEMA_VERSION).describe("phi\xEAn b\u1EA3n schema .ganas/"),
+      project: zNonEmpty,
+      /**
+       * Harness giao việc. Mặc định `claude-code`: đó là harness ganas cưỡng chế
+       * được đầy đủ (hook + skill), và là mặc định của `ganas init`. Dự án cũ
+       * không khai field này vẫn chạy như trước.
+       */
+      harness: external_exports.enum(HARNESS).default("claude-code"),
+      /** Mức mặc định cho mọi luật. */
+      enforcement: external_exports.enum(ENFORCEMENT).default("warn"),
+      /** Ghi đè theo từng luật. Thiếu key ⇒ dùng `enforcement`. */
+      enforcement_rules: external_exports.record(external_exports.enum(ENFORCEMENT_RULES), external_exports.enum(ENFORCEMENT)).default({}),
+      /** Ba key phải khớp đúng `MODEL_TIER` — `Task.model` tham chiếu vào đây. */
+      models: external_exports.object({
+        main: external_exports.string().default("claude-opus-5"),
+        verifier: external_exports.string().default("claude-sonnet-5"),
+        scribe: external_exports.string().default("claude-haiku-4-5")
+      }).default({}),
+      /**
+       * Vòng lặp tự động: gate xanh → commit → next → giao sub-agent kế, không
+       * đợi người gõ lệnh giữa hai task. Xem D-015 vế 2.
+       *
+       * Mặc định TẮT (`enabled: false`) — nghiêm hơn cả `warn`, vì nhánh này
+       * KHÔNG đi qua `enforcementFor()` dù nó gác một hành vi có thể coi là
+       * "chặn": khi tắt, ganas không tự mồi lượt kế tiếp, y hệt hành vi hiện tại
+       * của mọi dự án chưa khai field này (`.default({})` ở cả hai cấp). Cổng
+       * bật/tắt của nhánh này chính là `enabled`, không phải một luật trong
+       * `ENFORCEMENT_RULES` — không có gì để "nới" thành `warn`, vì loop chỉ có
+       * hai trạng thái sinh ra một hành động (mồi lượt kế) hoặc không, không có
+       * trạng thái trung gian kiểu "cảnh báo nhưng vẫn mồi". Đưa nó qua
+       * `enforcementFor()` sẽ tạo ảo giác có mức `warn` cho một thứ không có
+       * hành vi cảnh báo nào để chạy.
+       */
+      auto_loop: external_exports.object({
+        enabled: external_exports.boolean().default(false),
+        /**
+         * Trần số vòng lặp liên tiếp trong CÙNG một task trước khi loop tự
+         * dừng — phanh thật nằm ở bộ đếm riêng trong `state.json`, NGOÀI
+         * `SessionRecord` (xem D-015 vế 2), field này chỉ là ngưỡng.
+         */
+        max_iterations: external_exports.number().int().positive().default(5)
+      }).default({}),
+      session_start: external_exports.object({
+        /**
+         * Tự gửi một câu mở đầu khi phiên bắt đầu (hook trả `initialUserMessage`).
+         * Mặc định tắt: người mở Claude Code để hỏi nhanh một câu không muốn bị
+         * cuốn ngay vào task. Brief vẫn được bơm vào context dù bật hay tắt.
+         */
+        auto_begin: external_exports.boolean().default(false)
+      }).default({}),
+      claim: external_exports.object({
+        /**
+         * Một task bị giữ (claim) quá lâu không còn tin được là phiên đó vẫn
+         * sống — có thể đã crash. Sau ngần này phút, claim cũ bị coi là bỏ
+         * hoang và một phiên khác được phép giành lại. Xem `graph/claim.ts`.
+         */
+        ttl_minutes: external_exports.number().int().positive().default(240)
+      }).default({}),
+      /**
+       * Lệnh kiểm TOÀN DỰ ÁN mà `ganas commit` chạy trên cây sắp được commit
+       * (vd `npm run typecheck`) — khác hẳn các lệnh trong `exit_contract` của
+       * từng task, vốn chỉ kiểm đúng PHẦN task đó chạm tới. Một task có thể có
+       * exit_contract xanh (phần của nó đúng) trong khi cây tổng vẫn không biên
+       * dịch được vì một thay đổi bắt buộc trải sang phạm vi khác — đây là lớp
+       * chặn cho đúng khoảng hở đó, xem PR-007.
+       *
+       * TUỲ CHỌN, mặc định trống: dự án không khai thì `ganas commit` bỏ qua
+       * phép kiểm này kèm một dòng báo, không phải đỏ. Bắt buộc khai sẽ chặn
+       * đứng mọi dự án cũ ngay lần commit đầu tiên — trái luật `enforcement`
+       * mặc định `warn` (xem `.claude/rules/architecture.md`), nên field này
+       * phải mềm y như những luật khác.
+       */
+      build_check: external_exports.string().optional()
+    });
+  }
+});
+
+// src/model/task.ts
+function agentDispatchLines(agent) {
+  const lines = [];
+  if (agent.persona) lines.push(`Vai: ${agent.persona}`);
+  if (agent.objective) lines.push(`Xong ngh\u0129a l\xE0: ${agent.objective}`);
+  agent.steps.forEach((step, i) => lines.push(`B\u01B0\u1EDBc ${i + 1}: ${step}`));
+  for (const rail of agent.guardrails) lines.push(`Kh\xF4ng \u0111\u01B0\u1EE3c: ${rail}`);
+  for (const item of agent.self_check) lines.push(`T\u1EF1 ki\u1EC3m tr\u01B0\u1EDBc khi b\xE1o xong: ${item}`);
+  if (agent.tools.length > 0) {
+    lines.push(
+      `C\xF4ng c\u1EE5 n\xEAn d\xF9ng: ${agent.tools.join(", ")} \u2014 khuy\u1EBFn ngh\u1ECB th\xF4i, ganas kh\xF4ng ch\u1EB7n \u0111\u01B0\u1EE3c c\xF4ng c\u1EE5 n\u1EB1m ngo\xE0i danh s\xE1ch n\xE0y`
+    );
+  }
+  return lines;
+}
+function commitSubject(task, designId) {
+  return `${task.commit_type}(${designId}/${task.id}): ${task.title}`;
+}
+var TASK_STATUS, ESTIMATED_CONTEXT, TASK_ROLE, zArtifactRef, zAgentSpec, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
+var init_task = __esm({
+  "src/model/task.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    init_config();
+    TASK_STATUS = ["todo", "in_progress", "done"];
+    ESTIMATED_CONTEXT = ["small", "medium", "large"];
+    TASK_ROLE = ["design", "build"];
+    zArtifactRef = external_exports.string().regex(
+      /^D-\d{3,}\/A-[A-Za-z0-9][A-Za-z0-9-]*$/,
+      "\u0111\u1ECBa ch\u1EC9 b\u1EA3n v\u1EBD ph\u1EA3i d\u1EA1ng `D-010/A-users-table` (id design, g\u1EA1ch ch\xE9o, id b\u1EA3n v\u1EBD)"
+    );
+    zAgentSpec = external_exports.object({
+      persona: zNonEmpty.optional().describe("agent n\xE0y \u0111\xF3ng vai g\xEC"),
+      objective: zNonEmpty.optional().describe("m\u1ED9t c\xE2u: xong ngh\u0129a l\xE0 g\xEC"),
+      steps: external_exports.array(zNonEmpty).default([]),
+      self_check: external_exports.array(zNonEmpty).default([]),
+      guardrails: external_exports.array(zNonEmpty).default([]),
+      /**
+       * Công cụ nên dùng. ganas KHÔNG cưỡng chế được danh sách này: tool sinh
+       * sub-agent không nhận allowlist từ ganas, nên đây là KHUYẾN NGHỊ in ra cho
+       * người đọc, không phải một hàng rào. Giả vờ cưỡng chế được là đúng lớp lỗi
+       * `test/no-dead-ends.test.ts` sinh ra để chặn — nên `agentDispatchLines()`
+       * tự khai là không kiểm được, ngay trên dòng nó in ra.
+       */
+      tools: external_exports.array(zNonEmpty).default([])
+    }).strict();
+    zContextContract = external_exports.object({
+      must_read: external_exports.array(
+        external_exports.object({
+          path: zNonEmpty,
+          /** Bắt buộc: một danh sách file không có lý do thì phiên sau đọc mò. */
+          why: zNonEmpty
+        })
+      ).default([]),
+      /** Fact phải còn FRESH mới được dùng; brief cảnh báo nếu STALE. */
+      facts: external_exports.array(zFactId).default([]),
+      open_questions: external_exports.array(zNonEmpty).default([])
+    });
+    zExitCommand = external_exports.object({
+      kind: external_exports.literal("command"),
+      run: zNonEmpty,
+      expect: zExpect
+    });
+    zExitArtifact = external_exports.object({
+      kind: external_exports.literal("artifact"),
+      path: zNonEmpty,
+      must_contain: external_exports.string().optional()
+    });
+    zExitHandoff = external_exports.object({
+      kind: external_exports.literal("handoff"),
+      required: external_exports.boolean().default(true)
+    });
+    zExitManual = external_exports.object({
+      kind: external_exports.literal("manual"),
+      check: zNonEmpty
+    });
+    zExitVerification = external_exports.object({
+      kind: external_exports.literal("verification"),
+      target: zNonEmpty.describe(
+        "id target trong s\u1ED5 c\xE1i, vd `M-intent/V-intent-eval` (b\u1EB1ng ch\u1EE9ng c\u1EE7a kh\u1ED1i) ho\u1EB7c `F-ACC-001` (fact)"
+      )
+    });
+    zExitCriterion = external_exports.discriminatedUnion("kind", [
+      zExitCommand,
+      zExitArtifact,
+      zExitHandoff,
+      zExitManual,
+      zExitVerification
+    ]);
+    zTask = external_exports.object({
+      id: zTaskId,
+      title: zNonEmpty,
+      serves: external_exports.array(zGoalId, { required_error: "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?" }).min(1, "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?"),
+      implements: zDesignId.describe("design m\xE0 task n\xE0y hi\u1EC7n th\u1EF1c"),
+      /**
+       * Phạm vi công việc chứa task. Bắt buộc: task không thuộc phạm vi nào thì
+       * không ai nghiệm thu được nó, và tri thức nó sinh ra không biết neo vào đâu.
+       */
+      scope: zScopeId,
+      status: external_exports.enum(TASK_STATUS).default("todo"),
+      estimated_context: external_exports.enum(ESTIMATED_CONTEXT).default("medium"),
+      context_contract: zContextContract.default({ must_read: [], facts: [], open_questions: [] }),
+      /** Kỹ năng cần cho task — brief liệt kê để phiên mới biết nạp gì. */
+      skills: external_exports.array(zNonEmpty).default([]),
+      /**
+       * Tier model nên dùng khi giao task này (cho sub-agent hoặc phiên mới).
+       * Gán lúc chẻ task từ plan — quyết định của người/agent thiết kế, KHÔNG
+       * suy tự động từ module.nature (heuristic không đáng tin bằng người biết rõ
+       * việc). Không gán thì brief không gợi ý model nào — không đoán bừa.
+       */
+      model: external_exports.enum(MODEL_TIER).optional(),
+      /**
+       * Vai của task: `design` (vẽ bản thiết kế) hay `build` (hiện thực code
+       * theo bản vẽ). Gán lúc chẻ task — quyết định của NGƯỜI, không suy tự
+       * động, đúng lý lẽ đã áp cho `model` ngay phía trên: heuristic (vd "task
+       * không có `touches` thì chắc là design") không đáng tin bằng người biết
+       * rõ việc, và đoán sai thì không lỗi nào nổi lên.
+       *
+       * Mặc định `build`: toàn bộ task khai từ trước khi trường này ra đời là
+       * hiện thực code, và phần lớn task tương lai cũng vậy — coi "build" là
+       * ngầm định để 49 task cũ adopt được mà không phải sửa file nào, thay vì
+       * bắt mọi task khai tay một trường vốn hầu như luôn cùng một giá trị.
+       * Đây KHÔNG phải suy luận: mặc định chỉ chọn giá trị PHỔ BIẾN NHẤT, còn
+       * `design` vẫn phải khai tay — không có tín hiệu nào (kể cả `touches`
+       * rỗng, vốn có nhiều lý do khác) tự động biến một task thành design.
+       */
+      role: external_exports.enum(TASK_ROLE).default("build"),
+      /**
+       * Loại commit theo conventional commits cho commit message của task này.
+       * Áp dụng khi gọi `ganas commit`. Gán lúc chẻ task — quyết định của
+       * người thiết kế biết task này sửa lỗi, thêm tính năng hay refactor.
+       *
+       * Mặc định `chore`: hầu hết commit là công việc hành chính (cập nhật
+       * `.ganas/`, ghi fact, chẻ task).
+       */
+      commit_type: external_exports.enum(["feat", "fix", "refactor", "docs", "test", "chore", "perf", "build", "ci"]).default("chore"),
+      /**
+       * Bản vẽ mà task này CẦN — hợp đồng vào (input_contract).
+       *
+       * Đây là thứ thay `context_contract.must_read` cho phần hợp đồng: brief bơm
+       * thẳng `shape` của đúng những bản vẽ này, thay vì đưa một danh sách ĐƯỜNG
+       * DẪN rồi bắt agent mở cả kho. Một design mười bản vẽ mà task chỉ dùng hai
+       * thì tám cái còn lại là nhiễu — và agent vẫn sẽ suy diễn theo nhiễu đó.
+       *
+       * `.default([])`: mọi task khai trước khi trường này ra đời phải adopt được
+       * mà không phải sửa file nào.
+       */
+      consumes: external_exports.array(zArtifactRef).default([]),
+      /**
+       * Bản vẽ mà task này SINH RA — vế ngược của `consumes`.
+       *
+       * Nhờ hai trường đó, câu "bước sau là task nào" SUY ĐƯỢC: task nào
+       * `consumes` thứ task này `produces` thì đó là bước sau. Vì vậy KHÔNG có
+       * trường `next`: hai câu trả lời cho một câu hỏi thì có ngày lệch nhau —
+       * đúng lý lẽ đã dùng cho `blocked_by` so với một `status: blocked` (xem
+       * docstring `TASK_STATUS` đầu file).
+       *
+       * Khai `produces` thì `exit_contract` phải có tiêu chí `verification` trỏ
+       * vào chính bản vẽ đó — luật `spine/task-produces-without-verification`,
+       * đúng khuôn `touches` → `spine/task-missing-verification`.
+       */
+      produces: external_exports.array(zArtifactRef).default([]),
+      /**
+       * Bản giao việc cho sub-agent. TUỲ CHỌN — chỉ điền khi task thật sự sẽ được
+       * giao đi. Điền cho đủ lệ vào mọi task đang mở là đưa văn xuôi chết vào
+       * đường nóng của `loadGraph`, chạy lại mỗi lần hook chạy.
+       */
+      agent: zAgentSpec.optional(),
+      /**
+       * Khối trong sơ đồ mà task này chạm tới.
+       *
+       * Đây là điểm nối giữa trục VIỆC và trục HỆ THỐNG: chạm khối nào thì phải để
+       * lại bằng chứng cho khối đó (luật `spine/task-missing-verification`).
+       */
+      touches: external_exports.array(zModuleId).default([]),
+      exit_contract: external_exports.array(zExitCriterion, {
+        required_error: 'task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong? Kh\xF4ng c\xF3 ti\xEAu ch\xED ki\u1EC3m ch\u1EE9ng \u0111\u01B0\u1EE3c th\xEC Stop hook kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c, v\xE0 "xong" tr\u1EDF th\xE0nh \xFD ki\u1EBFn.'
+      }).min(1, "task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong?"),
+      blocked_by: external_exports.array(zTaskId).default([]),
+      created_at: zIsoDate.optional(),
+      done_at: zIsoDate.optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((t, ctx) => {
+      if (t.blocked_by.includes(t.id)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["blocked_by"],
+          message: `task ${t.id} kh\xF4ng th\u1EC3 t\u1EF1 ch\u1EB7n ch\xEDnh n\xF3`
+        });
+      }
+      if (t.status === "done" && !t.done_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["done_at"],
+          message: `task ${t.id} \u0111\xE1nh d\u1EA5u done nh\u01B0ng thi\u1EBFu done_at`
+        });
+      }
+      const dupServes = t.serves.find((g, i) => t.serves.indexOf(g) !== i);
+      if (dupServes) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["serves"],
+          message: `task ${t.id} li\u1EC7t k\xEA goal ${dupServes} hai l\u1EA7n`
+        });
+      }
+    });
+  }
+});
+
+// src/model/design.ts
+function artifactStatement(design, artifact) {
+  return `${design.id}/${artifact.id} (${artifact.kind}) trong ${artifact.module ?? artifact.path}: ${artifact.shape}`;
+}
+function artifactIssues(design, lookupModule) {
+  const issues = [];
+  design.artifacts.forEach((a, index) => {
+    const add = (code, message, hint) => {
+      issues.push({ artifactId: a.id, index, code, message, hint });
+    };
+    if (!a.module) {
+      if (!a.probe) {
+        add(
+          "missing-probe",
+          `b\u1EA3n v\u1EBD ${design.id}/${a.id} ch\u01B0a c\xF3 \`probe\` \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1ED1i chi\u1EBFu n\xF3 v\u1EDBi file th\u1EADt`,
+          'Th\xEAm `probe: { run: "...", expect: exit_zero }`. B\u1EA3n v\u1EBD kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c th\xEC n\xF3 l\xE0 v\u0103n xu\xF4i, ch\u1EC9 kh\xE1c ch\u1ED7 \u0111\u1EB7t.'
+        );
+      }
+      return;
+    }
+    const mod = lookupModule(a.module);
+    if (!mod) {
+      add(
+        "missing-module",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} thu\u1ED9c kh\u1ED1i \`${a.module}\` nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng t\u1ED3n t\u1EA1i`,
+        `T\u1EA1o .ganas/modules/${a.module}.yaml, ho\u1EB7c s\u1EEDa \`module\` c\u1EE7a b\u1EA3n v\u1EBD. B\u1EA3n v\u1EBD kh\xF4ng neo \u0111\u01B0\u1EE3c v\xE0o kh\u1ED1i th\xEC kh\xF4ng c\xF3 file n\xE0o \u0111\u1EC3 t\xEDnh STALE \u2014 n\xF3 s\u1EBD xanh v\u0129nh vi\u1EC5n.`
+      );
+      return;
+    }
+    if (!a.probe) {
+      add(
+        "missing-probe",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} ch\u01B0a c\xF3 \`probe\` \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1ED1i chi\u1EBFu n\xF3 v\u1EDBi code th\u1EADt`,
+        'Th\xEAm `probe: { run: "...", expect: exit_zero }`. B\u1EA3n v\u1EBD kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c th\xEC n\xF3 l\xE0 v\u0103n xu\xF4i, ch\u1EC9 kh\xE1c ch\u1ED7 \u0111\u1EB7t.'
+      );
+    }
+    if (!a.port) return;
+    const ports = a.port.side === "out" ? mod.contract.outputs : mod.contract.inputs;
+    const sideLabel = a.port.side === "out" ? "c\u1ED5ng ra" : "c\u1ED5ng v\xE0o";
+    const port = ports.find((p) => p.name === a.port?.name);
+    if (!port) {
+      add(
+        "port-not-found",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} neo v\xE0o ${sideLabel} \`${a.port.name}\` c\u1EE7a kh\u1ED1i ${a.module}, nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng khai c\u1ED5ng n\xE0o t\xEAn v\u1EADy`,
+        `Th\xEAm c\u1ED5ng v\xE0o \`contract.${a.port.side === "out" ? "outputs" : "inputs"}\` c\u1EE7a ${a.module}, ho\u1EB7c b\u1ECF \`port\` kh\u1ECFi b\u1EA3n v\u1EBD.`
+      );
+      return;
+    }
+    if (port.shape.trim() !== a.shape.trim()) {
+      add(
+        "shape-drift",
+        `b\u1EA3n v\u1EBD ${design.id}/${a.id} khai shape \`${a.shape.trim()}\` nh\u01B0ng ${sideLabel} \`${port.name}\` c\u1EE7a ${a.module} khai \`${port.shape.trim()}\` \u2014 hai b\u1EA3n v\u1EBD c\u1EE7a c\xF9ng m\u1ED9t th\u1EE9`,
+        "S\u1EEDa m\u1ED9t trong hai cho kh\u1EDBp. Ph\xE9p so l\xE0 `.trim()` r\u1ED3i so t\u1EEBng k\xFD t\u1EF1, \u0111\xFAng nh\u01B0 `portIssues()` \u2014 kho\u1EA3ng tr\u1EAFng \u0111\u1EA7u/cu\u1ED1i kh\xF4ng t\xEDnh, c\xF2n l\u1EA1i t\xEDnh h\u1EBFt."
+      );
+    }
+  });
+  return issues;
+}
+var DESIGN_STATUS, ARTIFACT_KIND, zArtifactId, zArtifactPort, zDesignArtifact, zDesign;
+var init_design = __esm({
+  "src/model/design.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    init_task();
+    DESIGN_STATUS = ["draft", "active", "superseded", "archived", "done"];
+    ARTIFACT_KIND = ["schema", "migration", "function", "api", "type", "doc"];
+    zArtifactId = external_exports.string().regex(/^A-[a-z0-9][a-z0-9-]*$/i, "ID b\u1EA3n v\u1EBD ph\u1EA3i d\u1EA1ng A-users-table");
+    zArtifactPort = external_exports.object({
+      side: external_exports.enum(["in", "out"]),
+      name: zNonEmpty
+    }).strict();
+    zDesignArtifact = external_exports.object({
+      id: zArtifactId,
+      kind: external_exports.enum(ARTIFACT_KIND),
+      /**
+       * Khối chứa code mà bản vẽ này mô tả. Cũng là nguồn tính STALE.
+       *
+       * `.optional()` chỉ vì `kind: doc` neo bằng `path` thay vì bằng khối — với
+       * mọi kind khác nó vẫn BẮT BUỘC, và `superRefine` bên dưới ép điều đó thành
+       * lỗi PARSE.
+       */
+      module: zModuleId.optional(),
+      /**
+       * File tài liệu mà bản vẽ `doc` mô tả — nguồn tính STALE thay cho
+       * `module.paths`.
+       *
+       * Phải là ĐƯỜNG DẪN có thư mục (`docs/CONCEPTS.md`), không phải một tên
+       * file trần: `globsOf()` (`src/graph/freshness.ts`) chỉ nhận phần tử có
+       * `*` hoặc `/`, nên một `path` trần khiến context rỗng và bản vẽ XANH VĨNH
+       * VIỄN — đúng cái bẫy mà docstring `scopeTargets()` (`src/verify/run.ts`)
+       * đã trả giá một lần.
+       */
+      path: zNonEmpty.optional(),
+      shape: zNonEmpty.describe('h\xECnh d\u1EA1ng, vd "(userId: string) => Date | null"'),
+      port: zArtifactPort.optional(),
+      probe: zProbe.optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((a, ctx) => {
+      if (a.kind === "doc") {
+        if (!a.path) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["path"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc n\xEAn ph\u1EA3i c\xF3 \`path\` \u2014 t\xE0i li\u1EC7u neo v\xE0o m\u1ED9t file, kh\xF4ng v\xE0o kh\u1ED1i`
+          });
+        }
+        if (a.module) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["module"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc th\xEC kh\xF4ng \u0111\u01B0\u1EE3c khai \`module\` \u2014 ch\u1ECDn m\u1ED9t trong hai, \`path\` cho t\xE0i li\u1EC7u`
+          });
+        }
+        if (a.path && !a.path.includes("/")) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["path"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai \`path: ${a.path}\` \u2014 t\xEAn file tr\u1EA7n kh\xF4ng t\xEDnh \u0111\u01B0\u1EE3c \u0111\u1ED9 t\u01B0\u01A1i, b\u1EA3n v\u1EBD s\u1EBD xanh v\u0129nh vi\u1EC5n d\xF9 t\xE0i li\u1EC7u \u0111\xE3 \u0111\u1ED5i. \u0110\u1EB7t t\xE0i li\u1EC7u trong m\u1ED9t th\u01B0 m\u1EE5c, vd \`docs/${a.path}\`.`
+          });
+        }
+        if (a.port) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["port"],
+            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc th\xEC kh\xF4ng \u0111\u01B0\u1EE3c khai \`port\` \u2014 c\u1ED5ng l\xE0 c\u1EE7a kh\u1ED1i, m\xE0 b\u1EA3n v\u1EBD doc kh\xF4ng neo v\xE0o kh\u1ED1i n\xE0o`
+          });
+        }
+        return;
+      }
+      if (!a.module) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["module"],
+          message: `b\u1EA3n v\u1EBD ${a.id} (kind: ${a.kind}) ph\u1EA3i khai \`module\` \u2014 ch\u1EC9 kind: doc m\u1EDBi neo b\u1EB1ng \`path\``
+        });
+      }
+      if (a.path) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["path"],
+          message: `b\u1EA3n v\u1EBD ${a.id} (kind: ${a.kind}) m\xF4 t\u1EA3 CODE n\xEAn neo b\u1EB1ng \`module\`, kh\xF4ng b\u1EB1ng \`path\``
+        });
+      }
+    });
+    zDesign = external_exports.object({
+      id: zDesignId,
+      title: zNonEmpty,
+      serves: external_exports.array(zGoalId, {
+        required_error: "design ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o? Kh\xF4ng c\xF3 goal th\xEC kh\xF4ng c\u1EA7n design.",
+        invalid_type_error: "`serves` ph\u1EA3i l\xE0 danh s\xE1ch ID goal, vd:\n  serves:\n    - G-001"
+      }).min(
+        1,
+        "design ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o? Kh\xF4ng c\xF3 goal th\xEC kh\xF4ng c\u1EA7n design."
+      ),
+      summary: zNonEmpty.describe("m\u1ED9t \u0111o\u1EA1n: c\xE1ch ti\u1EBFp c\u1EADn v\xE0 v\xEC sao ch\u1ECDn n\xF3"),
+      status: external_exports.enum(DESIGN_STATUS).default("draft"),
+      /** Các quyết định người đã chốt mà design này dựa vào. */
+      decisions: external_exports.array(zDecisionId).default([]),
+      supersedes: external_exports.array(zDesignId).default([]),
+      /**
+       * Hợp đồng ra của CHẶNG — dùng chung `zExitCriterion` với task, cố ý.
+       *
+       * Task trả lời "bước này xong chưa"; design trả lời "chặng này đóng được
+       * chưa". Hai câu hỏi khác nhau nhưng cùng một loại bằng chứng, nên loại
+       * tiêu chí thứ hai chỉ làm hai bảng trôi khỏi nhau.
+       *
+       * Đây cũng là chỗ nợ tiếp nối phải sống. Trước đó nó sống trong `notes`
+       * văn xuôi — không schema, không validator — và T-039 (xem
+       * `.ganas/tasks/T-048.yaml`) bay hơi đúng vì thế.
+       *
+       * `.default([])` chứ không `.min(1)`: bảy design đã có phải adopt được.
+       * Chỗ ép là luật `spine/design-missing-exit-contract`, ở mức warning.
+       */
+      /**
+       * Bản vẽ của chặng — hình dạng dữ liệu và chữ ký mà code phải khớp.
+       *
+       * Đây là cạnh Design → Module mà xương sống vốn thiếu: trước đây đường duy
+       * nhất từ design xuống code là `task.implements` (ngược chiều) rồi mới
+       * `task.touches`. Nghĩa là design không nói được nó CHỐT cái gì, chỉ nói
+       * được ai đang làm nó.
+       *
+       * `.default([])` chứ không `.min(1)`: chín design đã có phải adopt được.
+       */
+      artifacts: external_exports.array(zDesignArtifact).default([]),
+      exit_contract: external_exports.array(zExitCriterion).default([]),
+      created_at: zIsoDate.optional(),
+      done_at: zIsoDate.optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((d, ctx) => {
+      const dup = d.serves.find((g, i) => d.serves.indexOf(g) !== i);
+      if (dup) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["serves"],
+          message: `design ${d.id} li\u1EC7t k\xEA goal ${dup} hai l\u1EA7n`
+        });
+      }
+      if (d.status === "done" && !d.done_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["done_at"],
+          message: `design ${d.id} \u0111\xE1nh d\u1EA5u done nh\u01B0ng thi\u1EBFu done_at`
+        });
+      }
+      const artifactIds = d.artifacts.map((a) => a.id);
+      const dupArtifact = artifactIds.find((id, i) => artifactIds.indexOf(id) !== i);
+      if (dupArtifact) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["artifacts"],
+          message: `design ${d.id} c\xF3 hai b\u1EA3n v\u1EBD tr\xF9ng id "${dupArtifact}"`
+        });
+      }
+      if (d.supersedes.includes(d.id)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["supersedes"],
+          message: `design ${d.id} kh\xF4ng th\u1EC3 thay th\u1EBF ch\xEDnh n\xF3`
+        });
+      }
+    });
+  }
+});
+
+// src/model/goal.ts
+var zAcceptanceCommand, zAcceptanceManual, zAcceptance, GOAL_STATUS, zGoal;
+var init_goal = __esm({
+  "src/model/goal.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    zAcceptanceCommand = external_exports.object({
+      id: zNonEmpty,
+      kind: external_exports.literal("command"),
+      run: zNonEmpty.describe("l\u1EC7nh shell ch\u1EA1y \u0111\u01B0\u1EE3c, kh\xF4ng t\u01B0\u01A1ng t\xE1c"),
+      expect: zExpect
+    });
+    zAcceptanceManual = external_exports.object({
+      id: zNonEmpty,
+      kind: external_exports.literal("manual"),
+      check: zNonEmpty.describe("\u0111i\u1EC1u ng\u01B0\u1EDDi ph\u1EA3i x\xE1c nh\u1EADn, vi\u1EBFt \u0111\u1EE7 c\u1EE5 th\u1EC3 \u0111\u1EC3 tr\u1EA3 l\u1EDDi c\xF3/kh\xF4ng"),
+      /** Bắt buộc: tiêu chí thủ công không có người ký thì không ai nghiệm thu. */
+      owner: zHandle
+    });
+    zAcceptance = external_exports.discriminatedUnion("kind", [zAcceptanceCommand, zAcceptanceManual]);
+    GOAL_STATUS = ["draft", "active", "closed"];
+    zGoal = external_exports.object({
+      id: zGoalId,
+      title: zNonEmpty,
+      /** Kết quả người dùng cảm nhận được, không phải việc phải làm. */
+      outcome: zNonEmpty,
+      acceptance: external_exports.array(zAcceptance, {
+        required_error: "goal ph\u1EA3i c\xF3 `acceptance` \u2014 l\xE0m sao bi\u1EBFt m\u1EE5c ti\xEAu \u0111\xE3 \u0111\u1EA1t? Kh\xF4ng \u0111o \u0111\u01B0\u1EE3c th\xEC \u0111\xF3 l\xE0 nguy\u1EC7n v\u1ECDng, kh\xF4ng ph\u1EA3i m\u1EE5c ti\xEAu."
+      }).min(
+        1,
+        "goal ph\u1EA3i c\xF3 \xEDt nh\u1EA5t m\u1ED9t ti\xEAu ch\xED nghi\u1EC7m thu \u2014 kh\xF4ng \u0111o \u0111\u01B0\u1EE3c th\xEC kh\xF4ng bao gi\u1EDD \u0111\xF3ng \u0111\u01B0\u1EE3c"
+      ),
+      status: external_exports.enum(GOAL_STATUS).default("draft"),
+      /** Chữ ký người. Model không được tự đặt mục tiêu — xem luật trong plan. */
+      approved_by: zHandle.optional(),
+      approved_at: zIsoDate.optional(),
+      created_at: zIsoDate.optional(),
+      closed_at: zIsoDate.optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((g, ctx) => {
+      if (g.status === "active" && !g.approved_by) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["approved_by"],
+          message: `goal ${g.id} \u1EDF tr\u1EA1ng th\xE1i "active" nh\u01B0ng ch\u01B0a c\xF3 approved_by. M\u1EE5c ti\xEAu ph\u1EA3i do ng\u01B0\u1EDDi ch\u1ED1t, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 model t\u1EF1 \u0111\u1EB7t. Gi\u1EEF \u1EDF "draft" cho t\u1EDBi khi c\xF3 ng\u01B0\u1EDDi duy\u1EC7t.`
+        });
+      }
+      if (g.approved_by && !g.approved_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["approved_at"],
+          message: `goal ${g.id} c\xF3 approved_by nh\u01B0ng thi\u1EBFu approved_at`
+        });
+      }
+      const ids = g.acceptance.map((a) => a.id);
+      const dup = ids.find((id, i) => ids.indexOf(id) !== i);
+      if (dup) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["acceptance"],
+          message: `goal ${g.id} c\xF3 ti\xEAu ch\xED nghi\u1EC7m thu tr\xF9ng id "${dup}"`
+        });
+      }
+    });
+  }
+});
+
+// src/model/knowledge.ts
+function freshnessOf({ fact, depsChangedAt, now = Date.now() }) {
+  if (!fact.last_verified_at) return "never_verified";
+  if (fact.last_result === "fail") return "failing";
+  const verifiedAt = Date.parse(fact.last_verified_at);
+  if (Number.isNaN(verifiedAt)) return "never_verified";
+  if (depsChangedAt !== void 0 && depsChangedAt > verifiedAt) return "stale";
+  if (fact.ttl_days > 0 && now - verifiedAt > fact.ttl_days * 864e5) return "stale";
+  return "fresh";
+}
+var VERIFY_RESULT, CLOCK_SKEW_MS, zFact, PROVENANCE, TRUST, zClaim, zDecision;
+var init_knowledge = __esm({
+  "src/model/knowledge.ts"() {
+    "use strict";
+    init_zod();
+    init_anchor();
+    init_common();
+    VERIFY_RESULT = ["pass", "fail", "unknown"];
+    CLOCK_SKEW_MS = 5 * 6e4;
+    zFact = external_exports.object({
+      id: zFactId,
+      statement: zNonEmpty,
+      /**
+       * Phạm vi mà phát biểu này đúng. Bắt buộc, và KHÔNG suy tự động từ
+       * `depends_on` ∩ `module.paths`: fact không có `depends_on` sẽ mất phạm vi,
+       * fact chạm hai khối sẽ có hai phạm vi — đúng thứ mush cần tránh. Công cụ
+       * chỉ GỢI Ý (`ganas scope assign`), người quyết.
+       */
+      scope: zScopeId,
+      verify: zProbe,
+      /** Glob các file mà fact này phụ thuộc. Đổi file ⇒ fact thành STALE. */
+      depends_on: external_exports.array(zGlob).default([]),
+      /** Hết hạn theo thời gian, kể cả khi không file nào đổi. 0 = không hết hạn. */
+      ttl_days: external_exports.number().int().min(0).default(0),
+      last_verified_at: zIsoDate.optional(),
+      verified_by: external_exports.string().optional().describe("session id ho\u1EB7c @handle"),
+      last_result: external_exports.enum(VERIFY_RESULT).default("unknown"),
+      anchors: external_exports.array(zAnchor).default([]),
+      /** Nếu fact này được thăng cấp từ một claim kế thừa, giữ lại vết. */
+      promoted_from: external_exports.union([zClaimId, zLegacyClaimId]).optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((f, ctx) => {
+      if (f.last_verified_at) {
+        const t = Date.parse(f.last_verified_at);
+        if (t > Date.now() + CLOCK_SKEW_MS) {
+          ctx.addIssue({
+            code: external_exports.ZodIssueCode.custom,
+            path: ["last_verified_at"],
+            message: `fact ${f.id} c\xF3 last_verified_at \u1EDF t\u01B0\u01A1ng lai (${f.last_verified_at}). Ch\u1EC9 \u0111\u1EB7t tr\u01B0\u1EDDng n\xE0y b\u1EB1ng c\xE1ch ch\u1EA1y \`ganas verify\` th\u1EADt, kh\xF4ng \u0111i\u1EC1n tay.`
+          });
+        }
+      }
+      if (f.last_result !== "unknown" && !f.last_verified_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["last_result"],
+          message: `fact ${f.id} khai last_result="${f.last_result}" nh\u01B0ng kh\xF4ng c\xF3 last_verified_at`
+        });
+      }
+    });
+    PROVENANCE = ["session", "human", "imported"];
+    TRUST = ["unverified", "confirmed", "refuted", "unprovable"];
+    zClaim = external_exports.object({
+      id: external_exports.union([zClaimId, zLegacyClaimId]),
+      statement: zNonEmpty,
+      /** Phạm vi mà giả thuyết này nói về. Bắt buộc, như fact. */
+      scope: zScopeId,
+      anchors: zAnchors,
+      provenance: external_exports.enum(PROVENANCE),
+      trust: external_exports.enum(TRUST).default("unverified"),
+      /** Phiên nào sinh ra claim này (nếu do phiên ghi). */
+      source_session: external_exports.string().optional(),
+      /** Kết quả đối chất: probe đã sinh ra, và vì sao kết luận vậy. */
+      verdict: external_exports.object({
+        at: zIsoDate,
+        probe: zProbe.optional(),
+        evidence: zNonEmpty.describe("b\u1EB1ng ch\u1EE9ng d\u1EABn t\u1EDBi k\u1EBFt lu\u1EADn, c\xF3 anchor"),
+        /** Fact được tạo ra nếu claim này confirmed. */
+        promoted_to: zFactId.optional()
+      }).optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((c, ctx) => {
+      const isLegacy = c.id.startsWith("LC-");
+      if (isLegacy && c.provenance !== "imported") {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["provenance"],
+          message: `claim ${c.id} d\xF9ng ti\u1EC1n t\u1ED1 LC- n\xEAn provenance ph\u1EA3i l\xE0 "imported"`
+        });
+      }
+      if (!isLegacy && c.provenance === "imported") {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["id"],
+          message: `claim import t\u1EEB t\xE0i li\u1EC7u c\u0169 ph\u1EA3i d\xF9ng ti\u1EC1n t\u1ED1 LC- (hi\u1EC7n l\xE0 ${c.id})`
+        });
+      }
+      if (c.trust !== "unverified" && !c.verdict) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["verdict"],
+          message: `claim ${c.id} c\xF3 trust="${c.trust}" nh\u01B0ng thi\u1EBFu verdict. \u0110\u1ED5i m\u1EE9c tin c\u1EADy ph\u1EA3i k\xE8m b\u1EB1ng ch\u1EE9ng, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1ED5i tr\u1EA7n.`
+        });
+      }
+      if (c.verdict?.promoted_to && c.trust !== "confirmed") {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["verdict", "promoted_to"],
+          message: `claim ${c.id} ch\u1EC9 \u0111\u01B0\u1EE3c th\u0103ng c\u1EA5p th\xE0nh fact khi trust="confirmed"`
+        });
+      }
+    });
+    zDecision = external_exports.object({
+      id: zDecisionId,
+      statement: zNonEmpty,
+      /**
+       * Phạm vi áp dụng. **Tuỳ chọn, thiếu = áp cho toàn dự án** — ngược với
+       * fact/claim, và có lý do: fact ngoài phạm vi mà được tin ⇒ ảo giác; còn
+       * decision bị thu hẹp nhầm ⇒ model vi phạm một ràng buộc người đã chốt,
+       * tệ hơn. Mặc định an toàn của mỗi loại nằm ở hai phía đối nhau.
+       */
+      scope: zScopeId.optional(),
+      /** Bắt buộc. Không có người ký thì không phải quyết định. */
+      decided_by: zHandle,
+      decided_at: zIsoDate,
+      link: external_exports.string().optional().describe("ticket / bi\xEAn b\u1EA3n / link chat"),
+      /** Điều gì buộc phải chọn — bối cảnh, ràng buộc, lựa chọn khác đã cân nhắc. */
+      context: external_exports.string().optional(),
+      /** Phải sống với gì sau khi chọn — đánh đổi, rủi ro chấp nhận, việc kéo theo. */
+      consequence: external_exports.string().optional(),
+      supersedes: external_exports.array(zDecisionId).default([]),
+      notes: external_exports.string().optional()
+    }).strict();
+  }
+});
+
+// src/model/icebox.ts
+var ICEBOX_STATUS, zIcebox;
+var init_icebox = __esm({
+  "src/model/icebox.ts"() {
+    "use strict";
+    init_zod();
+    init_anchor();
+    init_common();
+    init_knowledge();
+    ICEBOX_STATUS = ["open", "closed", "promoted"];
+    zIcebox = external_exports.object({
+      id: zIceboxId,
+      title: zNonEmpty,
+      /** Thời điểm phát hiện. KHÔNG default `now` — lệnh `add` sẽ điền. */
+      found_at: zIsoDate,
+      /**
+       * Per-record, không per-project: "sửa kiến trúc khi rảnh" và "kiểm lại
+       * sau sprint" là hai chân trời khác nhau. Cùng khuôn `Fact.ttl_days`.
+       */
+      review_after_days: external_exports.number().int().min(1).default(30),
+      /** Quan trọng đến đâu nếu bỏ qua. Cùng thang với `DebtScore.weight`. */
+      weight: zScoreValue,
+      /** Dễ sửa đến đâu. Cùng thang với `DebtScore.ease`. */
+      ease: zScoreValue,
+      /**
+       * Lý do hoãn, bắt buộc, không rỗng. Trường giữ sổ này trung thực — sáu
+       * tháng sau không ai biết lý do hoãn còn đúng không nếu không ghi. Đây là
+       * thứ phân biệt "hoãn có ý thức" với "quên".
+       */
+      why_deferred: zNonEmpty,
+      anchors: zAnchors,
+      /**
+       * Tuỳ chọn CÓ CHỦ ĐÍCH, khác `Module.scope` bắt buộc: phát hiện giữa
+       * phiên thường chưa biết thuộc phạm vi nào, bắt buộc = ép bịa. Luật
+       * validate ở bước sau sẽ nhắc khi thiếu, không phải schema này.
+       */
+      scope: zScopeId.optional(),
+      status: external_exports.enum(ICEBOX_STATUS).default("open"),
+      closed_at: zIsoDate.optional(),
+      closed_reason: zNonEmpty.optional(),
+      promoted_to: zTaskId.optional(),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((i, ctx) => {
+      if (i.status !== "open" && !i.closed_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["closed_at"],
+          message: `icebox ${i.id} c\xF3 status="${i.status}" nh\u01B0ng thi\u1EBFu closed_at`
+        });
+      }
+      if (i.status === "closed" && !i.closed_reason) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["closed_reason"],
+          message: `icebox ${i.id} \u0111\xF3ng (status="closed") nh\u01B0ng thi\u1EBFu closed_reason. \u0110\xF3ng m\xE0 kh\xF4ng n\xF3i v\xEC sao th\xEC phi\xEAn sau \u0111\u1EC1 xu\u1EA5t l\u1EA1i \u0111\xFAng th\u1EE9 v\u1EEBa b\u1ECB lo\u1EA1i.`
+        });
+      }
+      if (i.status === "promoted" && !i.promoted_to) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["promoted_to"],
+          message: `icebox ${i.id} c\xF3 status="promoted" nh\u01B0ng thi\u1EBFu promoted_to`
+        });
+      }
+      if (i.promoted_to && i.status !== "promoted") {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["promoted_to"],
+          message: `icebox ${i.id} ch\u1EC9 \u0111\u01B0\u1EE3c c\xF3 promoted_to khi status="promoted"`
+        });
+      }
+      if (i.status === "open" && (i.closed_at !== void 0 || i.closed_reason !== void 0)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["status"],
+          message: `icebox ${i.id} status="open" nh\u01B0ng c\xF3 closed_at/closed_reason \u2014 \u0111\xF3ng ch\u01B0a x\u1EA3y ra nh\u01B0ng l\u1EA1i c\xF3 d\u1EA5u v\u1EBFt \u0111\xE3 \u0111\xF3ng`
+        });
+      }
+      const t = Date.parse(i.found_at);
+      if (t > Date.now() + CLOCK_SKEW_MS) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["found_at"],
+          message: `icebox ${i.id} c\xF3 found_at \u1EDF t\u01B0\u01A1ng lai (${i.found_at}). Ch\u1EC9 \u0111\u1EB7t tr\u01B0\u1EDDng n\xE0y b\u1EB1ng th\u1EDDi \u0111i\u1EC3m ph\xE1t hi\u1EC7n th\u1EADt.`
+        });
+      }
+    });
+  }
+});
+
+// src/model/verification.ts
+function evalWeakness(v) {
+  if (v.threshold <= 0.5) {
+    return {
+      reason: `ng\u01B0\u1EE1ng ${v.threshold} qu\xE1 th\u1EA5p \u2014 \u0111o\xE1n b\u1EEBa c\u0169ng qua \u0111\u01B0\u1EE3c. Ng\u01B0\u1EE1ng d\u01B0\u1EDBi 0.5 th\xEC "pass" kh\xF4ng mang th\xF4ng tin.`
+    };
+  }
+  return null;
+}
+var VERIFICATION_TIER, EVAL_ADAPTER, zVerificationId, base, zProbeVerification, zEvalVerification, zContractVerification, zVerification;
+var init_verification = __esm({
+  "src/model/verification.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    VERIFICATION_TIER = ["smoke", "full"];
+    EVAL_ADAPTER = ["json", "promptfoo"];
+    zVerificationId = external_exports.string().regex(/^V-[a-z0-9][a-z0-9-]*$/i, "ID verification ph\u1EA3i d\u1EA1ng V-intent-smoke");
+    base = {
+      id: zVerificationId,
+      /**
+       * `smoke` rẻ, chạy thường xuyên; `full` tốn tiền, chạy khi cần.
+       * Eval gọi LLM tốn tiền thật — mặc định `ganas verify` chỉ chạy smoke.
+       */
+      tier: external_exports.enum(VERIFICATION_TIER).default("smoke"),
+      /** Hết hạn theo thời gian kể cả khi không có gì đổi. 0 = không hết hạn. */
+      ttl_days: external_exports.number().int().min(0).default(0),
+      /**
+       * Lệnh thoát 0 ⇒ bỏ qua, đánh dấu `unavailable`, **KHÔNG phải `failing`**.
+       *
+       * Báo fail sai độc ngang báo fresh sai: một khối cần DB sẽ báo động giả mỗi
+       * phiên, và sau vài lần người ta học cách phớt lờ toàn bộ mục cảnh báo —
+       * lúc đó cơ chế còn nguyên nhưng đã chết.
+       */
+      skip_if: external_exports.string().optional(),
+      notes: external_exports.string().optional()
+    };
+    zProbeVerification = external_exports.object({
+      ...base,
+      kind: external_exports.literal("probe"),
+      run: zNonEmpty.describe("l\u1EC7nh shell ch\u1EA1y \u0111\u01B0\u1EE3c, kh\xF4ng t\u01B0\u01A1ng t\xE1c"),
+      expect: zExpect,
+      timeout_ms: external_exports.number().int().positive().max(6e5).optional()
+    });
+    zEvalVerification = external_exports.object({
+      ...base,
+      kind: external_exports.literal("eval"),
+      /** ganas gọi lệnh này và đọc kết quả — nó KHÔNG tự chạy eval. */
+      run: zNonEmpty.describe("l\u1EC7nh ch\u1EA1y b\u1ED9 eval, ghi k\u1EBFt qu\u1EA3 ra $GANAS_EVAL_OUT"),
+      adapter: external_exports.enum(EVAL_ADAPTER).default("json"),
+      threshold: external_exports.number().min(0).max(1),
+      /**
+       * Vùng đệm quanh ngưỡng. Điểm rơi vào [threshold, threshold+margin) là
+       * `marginal` — không phải pass. Eval có nhiễu; coi 0.901 là "đạt" trong khi
+       * ngưỡng là 0.9 chỉ là tự lừa mình.
+       */
+      margin: external_exports.number().min(0).max(0.5).default(0),
+      timeout_ms: external_exports.number().int().positive().max(36e5).optional(),
+      /* --- Dấu vân tay: kết quả eval chỉ đúng với đúng bộ này ----------------- */
+      /** File dataset. Đổi dataset ⇒ kết quả cũ vô nghĩa. */
+      dataset: external_exports.string().optional(),
+      /** File prompt/template. Sửa một dòng ⇒ kết quả cũ vô nghĩa. */
+      prompt: external_exports.string().optional(),
+      /** Model đã dùng. Provider đổi model dưới chân bạn ⇒ kết quả cũ vô nghĩa. */
+      model: external_exports.string().optional()
+    });
+    zContractVerification = external_exports.object({
+      ...base,
+      kind: external_exports.literal("contract"),
+      /** Khối phía sau trong sơ đồ mà cạnh này nối tới. */
+      to: zNonEmpty.describe("id kh\u1ED1i \u0111\xEDch"),
+      /** Lệnh kiểm bổ sung (typecheck, schema check). Thiếu thì chỉ so contract khai báo. */
+      run: external_exports.string().optional()
+    });
+    zVerification = external_exports.discriminatedUnion("kind", [
+      zProbeVerification,
+      zEvalVerification,
+      zContractVerification
+    ]);
+  }
+});
+
+// src/model/module.ts
+function subtreeClaim(glob) {
+  const normalized = glob.split("\\").join("/").replace(/^\.\//, "");
+  const m = /^([^*?[{]+)\/\*\*(\/.*)?$/.exec(normalized);
+  const dir = m?.[1]?.replace(/\/+$/, "");
+  return dir ? dir : void 0;
+}
+function moduleGuideDir(paths) {
+  const claims = /* @__PURE__ */ new Set();
+  for (const p of paths) {
+    const dir = subtreeClaim(p);
+    if (dir !== void 0) claims.add(dir);
+  }
+  return claims.size === 1 ? [...claims][0] : void 0;
+}
+function claimsOf(paths) {
+  return paths.map((raw) => {
+    const normalized = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
+    const cut = normalized.search(/[*?[{]/);
+    if (cut === -1) return { kind: "file", value: normalized };
+    const head = normalized.slice(0, cut);
+    const slash = head.lastIndexOf("/");
+    return { kind: "subtree", value: slash === -1 ? "" : head.slice(0, slash) };
+  });
+}
+function inside(file, dir) {
+  return dir === "" || file === dir || file.startsWith(`${dir}/`);
+}
+function claimsTouch(a, b) {
+  if (a.kind === "file" && b.kind === "file") return a.value === b.value;
+  if (a.kind === "file") return inside(a.value, b.value);
+  if (b.kind === "file") return inside(b.value, a.value);
+  return inside(a.value, b.value) || inside(b.value, a.value);
+}
+function modulePathsOverlap(a, b) {
+  const ca = claimsOf(a);
+  const cb = claimsOf(b);
+  return ca.some((x) => cb.some((y) => claimsTouch(x, y)));
+}
+var MODULE_NATURE, MODULE_STATUS, zPort, zContract, zModule;
+var init_module = __esm({
+  "src/model/module.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    init_verification();
+    MODULE_NATURE = ["llm", "code", "data", "io"];
+    MODULE_STATUS = ["unmapped", "surveyed", "implemented", "verified"];
+    zPort = external_exports.object({
+      name: zNonEmpty,
+      shape: zNonEmpty.describe('m\xF4 t\u1EA3 ki\u1EC3u, vd "string" ho\u1EB7c "{ intent: string, score: number }"'),
+      /** Cổng không bắt buộc — khối phía sau không đòi thì vẫn tương thích. */
+      optional: external_exports.boolean().default(false),
+      notes: external_exports.string().optional()
+    });
+    zContract = external_exports.object({
+      inputs: external_exports.array(zPort).default([]),
+      outputs: external_exports.array(zPort).default([])
+    });
+    zModule = external_exports.object({
+      id: zModuleId,
+      title: zNonEmpty,
+      scope: zScopeId.optional().describe("ph\u1EA1m vi c\xF4ng vi\u1EC7c ch\u1EE9a kh\u1ED1i n\xE0y; thi\u1EBFu = kh\u1ED1i l\u1EBB, s\u1EBD b\u1ECB c\u1EA3nh b\xE1o"),
+      nature: external_exports.enum(MODULE_NATURE),
+      /** Code của khối nằm ở đâu. Cũng là căn cứ tính STALE khi file đổi. */
+      paths: external_exports.array(zGlob).default([]),
+      entrypoints: external_exports.array(zNonEmpty).default([]),
+      contract: zContract.default({ inputs: [], outputs: [] }),
+      /** Cạnh của sơ đồ: khối này cần khối nào chạy trước. */
+      depends_on: external_exports.array(zModuleId).default([]),
+      status: external_exports.enum(MODULE_STATUS).default("unmapped"),
+      owner: zHandle.optional(),
+      /** Rỗng ⇒ khối `unverified` ⇒ mọi luồng đi qua nó đều không tin được. */
+      verify: external_exports.array(zVerification).default([]),
+      /**
+       * Kỹ năng gắn với khối — mô tả cách làm việc trong vùng code này (quy ước
+       * riêng, cách chunking riêng, v.v.). Gán một lần khi khảo sát/định nghĩa
+       * khối, không phải lúc chẻ task — mọi task chạm khối này tự động thấy skill
+       * qua brief, không cần khai lại.
+       */
+      skills: external_exports.array(zNonEmpty).default([]),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((m, ctx) => {
+      if (m.depends_on.includes(m.id)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["depends_on"],
+          message: `kh\u1ED1i ${m.id} kh\xF4ng th\u1EC3 ph\u1EE5 thu\u1ED9c ch\xEDnh n\xF3`
+        });
+      }
+      const dup = m.depends_on.find((d, i) => m.depends_on.indexOf(d) !== i);
+      if (dup) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["depends_on"],
+          message: `kh\u1ED1i ${m.id} li\u1EC7t k\xEA ${dup} hai l\u1EA7n`
+        });
+      }
+      const vids = m.verify.map((v) => v.id);
+      const dupV = vids.find((v, i) => vids.indexOf(v) !== i);
+      if (dupV) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["verify"],
+          message: `kh\u1ED1i ${m.id} c\xF3 hai b\u1EB1ng ch\u1EE9ng tr\xF9ng id "${dupV}"`
+        });
+      }
+      if (m.status === "verified" && m.verify.length === 0) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["status"],
+          message: `kh\u1ED1i ${m.id} khai status "verified" nh\u01B0ng \`verify\` r\u1ED7ng \u2014 kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng n\xE0o th\xEC d\u1EF1a v\xE0o \u0111\xE2u m\xE0 n\xF3i \u0111\xE3 verify?`
+        });
+      }
+      if (m.nature === "llm" && m.verify.length > 0 && !m.verify.some((v) => v.kind === "eval")) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["verify"],
+          message: `kh\u1ED1i ${m.id} c\xF3 nature "llm" nh\u01B0ng kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng n\xE0o kind "eval". Probe ki\u1EC3m \u0111\u01B0\u1EE3c c\u1EA5u tr\xFAc, kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c h\xE0nh vi c\u1EE7a LLM.`
+        });
+      }
+      if (m.status !== "unmapped" && m.paths.length === 0) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["paths"],
+          message: `kh\u1ED1i ${m.id} \u0111\xE3 ${m.status} nh\u01B0ng ch\u01B0a khai \`paths\` \u2014 code c\u1EE7a n\xF3 n\u1EB1m \u1EDF \u0111\xE2u?`
+        });
+      }
+    });
+  }
+});
+
+// src/model/proposal.ts
+var PROPOSAL_STATUS, zPromotedTarget, zProposal;
+var init_proposal = __esm({
+  "src/model/proposal.ts"() {
+    "use strict";
+    init_zod();
+    init_anchor();
+    init_common();
+    init_knowledge();
+    PROPOSAL_STATUS = ["pending", "approved", "rejected", "superseded"];
+    zPromotedTarget = external_exports.union([zDesignId, zTaskId, zIceboxId], {
+      errorMap: () => ({
+        message: "`promoted_to` ph\u1EA3i l\xE0 ID design (D-001), task (T-001) ho\u1EB7c icebox (ICE-001)"
+      })
+    });
+    zProposal = external_exports.object({
+      id: zProposalId,
+      title: zNonEmpty,
+      /** Bắt buộc — xem docstring trên. */
+      scope: zScopeId,
+      /**
+       * Chỗ lệch là gì. Tách khỏi `proposed_change` có chủ đích: người duyệt phải
+       * đọc được vấn đề trước khi đọc giải pháp, nếu không thì mọi đề xuất đều
+       * "nghe hợp lý" — đó là cách một refactor không cần thiết được duyệt.
+       */
+      problem: zNonEmpty,
+      proposed_change: zNonEmpty,
+      /**
+       * Bằng chứng, không rỗng. Cùng luật đã áp cho fact/claim
+       * (`.claude/rules/ganas-knowledge.md`): không chỉ được nguồn thì không phải
+       * phát hiện, chỉ là ý kiến — và ý kiến thì không đáng để người bỏ thời gian
+       * duyệt.
+       */
+      anchors: zAnchors,
+      /** Quan trọng đến đâu nếu bỏ qua. Cùng thang `DebtScore.weight`. */
+      weight: zScoreValue,
+      /** Dễ sửa đến đâu. Cùng thang `DebtScore.ease`. */
+      ease: zScoreValue,
+      /** Thời điểm phát hiện. KHÔNG default `now` — lệnh `new` sẽ điền. */
+      found_at: zIsoDate,
+      status: external_exports.enum(PROPOSAL_STATUS).default("pending"),
+      /**
+       * Ai đã trả lời, và lúc nào. Người, luôn luôn: duyệt là việc của người,
+       * cùng luật đã áp cho `Decision.decided_by`. Model tự điền hai trường này
+       * là giả mạo một quyết định chưa xảy ra — hook chặn ở tầng ghi file.
+       */
+      decided_by: zHandle.optional(),
+      decided_at: zIsoDate.optional(),
+      /**
+       * Bắt buộc khi từ chối. "Không refactor" mà không nói vì sao thì phiên sau
+       * đề xuất lại đúng thứ vừa bị loại, và người duyệt phải trả lời hai lần.
+       */
+      why_rejected: zNonEmpty.optional(),
+      /** Cạnh MỘT CHIỀU tới thứ sinh ra từ đề xuất này. */
+      promoted_to: zPromotedTarget.optional(),
+      /** Đề xuất cũ mà bản này thay thế. Cùng khuôn `Design.supersedes`. */
+      supersedes: external_exports.array(zProposalId).default([]),
+      notes: external_exports.string().optional()
+    }).strict().superRefine((p, ctx) => {
+      const decided = p.status === "approved" || p.status === "rejected";
+      if (decided && !p.decided_by) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["decided_by"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 status="${p.status}" nh\u01B0ng thi\u1EBFu decided_by \u2014 duy\u1EC7t hay t\u1EEB ch\u1ED1i \u0111\u1EC1u l\xE0 vi\u1EC7c c\u1EE7a ng\u01B0\u1EDDi, ph\u1EA3i ghi t\xEAn ng\u01B0\u1EDDi \u0111\xF3.`
+        });
+      }
+      if (decided && !p.decided_at) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["decided_at"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 status="${p.status}" nh\u01B0ng thi\u1EBFu decided_at`
+        });
+      }
+      if (p.status === "rejected" && !p.why_rejected) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["why_rejected"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} b\u1ECB t\u1EEB ch\u1ED1i nh\u01B0ng thi\u1EBFu why_rejected. T\u1EEB ch\u1ED1i kh\xF4ng n\xF3i l\xFD do th\xEC phi\xEAn sau \u0111\u1EC1 xu\u1EA5t l\u1EA1i \u0111\xFAng th\u1EE9 v\u1EEBa b\u1ECB lo\u1EA1i.`
+        });
+      }
+      if (p.status === "pending") {
+        for (const [field, value] of [
+          ["decided_by", p.decided_by],
+          ["decided_at", p.decided_at],
+          ["why_rejected", p.why_rejected]
+        ]) {
+          if (value !== void 0) {
+            ctx.addIssue({
+              code: external_exports.ZodIssueCode.custom,
+              path: [field],
+              message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF2n status="pending" nh\u01B0ng \u0111\xE3 c\xF3 ${field} \u2014 ch\u01B0a ai tr\u1EA3 l\u1EDDi m\xE0 \u0111\xE3 c\xF3 d\u1EA5u v\u1EBFt \u0111\xE3 tr\u1EA3 l\u1EDDi.`
+            });
+          }
+        }
+      }
+      if (p.promoted_to && p.status !== "approved") {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["promoted_to"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} ch\u1EC9 \u0111\u01B0\u1EE3c c\xF3 promoted_to khi status="approved"`
+        });
+      }
+      if (p.supersedes.includes(p.id)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["supersedes"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} kh\xF4ng th\u1EC3 thay th\u1EBF ch\xEDnh n\xF3`
+        });
+      }
+      const dup = p.supersedes.find((x, i) => p.supersedes.indexOf(x) !== i);
+      if (dup) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["supersedes"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} li\u1EC7t k\xEA ${dup} hai l\u1EA7n`
+        });
+      }
+      if (Date.parse(p.found_at) > Date.now() + CLOCK_SKEW_MS) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["found_at"],
+          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 found_at \u1EDF t\u01B0\u01A1ng lai (${p.found_at})`
+        });
+      }
+    });
+  }
+});
+
+// src/model/scope.ts
+var SEMVER, SCOPE_STATUS, zScope;
+var init_scope = __esm({
+  "src/model/scope.ts"() {
+    "use strict";
+    init_zod();
+    init_common();
+    init_verification();
+    SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+    SCOPE_STATUS = ["draft", "active", "delivered"];
+    zScope = external_exports.object({
+      id: zScopeId,
+      title: zNonEmpty,
+      version: external_exports.string().regex(SEMVER, "version ph\u1EA3i theo semver, vd 0.3.0"),
+      /**
+       * Người ký nghiệm thu. Không ai ký thì không ai nghiệm thu được — luật
+       * `scope/without-owner` cảnh báo khi phạm vi `active` mà thiếu.
+       */
+      owner: zHandle.optional(),
+      status: external_exports.enum(SCOPE_STATUS).default("draft"),
+      /** Ranh giới code của phạm vi, gián tiếp qua `module.paths`. */
+      modules: external_exports.array(zModuleId).min(1, "ph\u1EA1m vi ph\u1EA3i ch\u1EE9a \xEDt nh\u1EA5t m\u1ED9t kh\u1ED1i"),
+      /** Khối đầu luồng — dùng để phát hiện khối mồ côi. */
+      entry: zModuleId,
+      /** Nghiệm thu ở mức phạm vi — chạy trên luồng ghép, không phải từng khối. */
+      acceptance: external_exports.array(zVerification).default([]),
+      /**
+       * Bối cảnh của phạm vi: cái gì TRONG, cái gì NGOÀI, đã hỏi ai.
+       *
+       * Mọi record khác (module, task, fact, claim, decision, goal, design,
+       * verification) đều nhận `notes`; scope là ngoại lệ duy nhất, nên phần
+       * đáng ghi nhất của một phạm vi phải nhét vào comment YAML — mà comment
+       * thì `ganas brief` không đọc được.
+       */
+      notes: external_exports.string().optional()
+    }).strict().superRefine((s, ctx) => {
+      const dup = s.modules.find((m, i) => s.modules.indexOf(m) !== i);
+      if (dup) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["modules"],
+          message: `ph\u1EA1m vi ${s.id} li\u1EC7t k\xEA kh\u1ED1i ${dup} hai l\u1EA7n`
+        });
+      }
+      if (!s.modules.includes(s.entry)) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["entry"],
+          message: `ph\u1EA1m vi ${s.id} khai entry: ${s.entry} nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng n\u1EB1m trong \`modules\``
+        });
+      }
+      const ids = s.acceptance.map((a) => a.id);
+      const dupA = ids.find((a, i) => ids.indexOf(a) !== i);
+      if (dupA) {
+        ctx.addIssue({
+          code: external_exports.ZodIssueCode.custom,
+          path: ["acceptance"],
+          message: `ph\u1EA1m vi ${s.id} c\xF3 hai ti\xEAu ch\xED nghi\u1EC7m thu tr\xF9ng id "${dupA}"`
+        });
+      }
+    });
+  }
+});
+
+// src/model/index.ts
+var init_model = __esm({
+  "src/model/index.ts"() {
+    "use strict";
+    init_anchor();
+    init_common();
+    init_config();
+    init_design();
+    init_goal();
+    init_icebox();
+    init_knowledge();
+    init_module();
+    init_proposal();
+    init_scope();
+    init_task();
+    init_verification();
+  }
+});
+
 // src/util/lock.ts
 import { mkdir as mkdir2, open, rm as rm2, stat as stat2 } from "node:fs/promises";
 import { dirname as dirname3 } from "node:path";
@@ -17667,7 +19191,17 @@ async function runContext(root, by) {
     host: hostname2()
   };
 }
-var FINGERPRINT_FIELDS, CHAIN_GENESIS, LEDGER_LOCK_TTL_MS, corruptLines;
+async function commitStatus(root, sha) {
+  if (!SHA_SHAPE.test(sha)) return "unknown";
+  const known = await runShell(`git cat-file -e ${sha}^{commit}`, { cwd: root, timeoutMs: 5e3 });
+  if (known.code !== 0) return "unknown";
+  const ancestor = await runShell(`git merge-base --is-ancestor ${sha} HEAD`, {
+    cwd: root,
+    timeoutMs: 5e3
+  });
+  return ancestor.code === 0 ? "ancestor" : "rewritten";
+}
+var FINGERPRINT_FIELDS, CHAIN_GENESIS, LEDGER_LOCK_TTL_MS, corruptLines, SHA_SHAPE;
 var init_ledger = __esm({
   "src/verify/ledger.ts"() {
     "use strict";
@@ -17679,6 +19213,7 @@ var init_ledger = __esm({
     CHAIN_GENESIS = "0".repeat(64);
     LEDGER_LOCK_TTL_MS = 5e3;
     corruptLines = /* @__PURE__ */ new Map();
+    SHA_SHAPE = /^[0-9a-f]{4,40}$/i;
   }
 });
 
@@ -25009,1424 +26544,6 @@ var require_dist2 = __commonJS({
   }
 });
 
-// src/model/common.ts
-var ID_PATTERNS, zGoalId, zDesignId, zTaskId, zFactId, zClaimId, zLegacyClaimId, zDecisionId, zModuleId, zScopeId, zIceboxId, zProposalId, zIsoDate, zHandle, zNonEmpty, zGlob, zExpect, zProbe, zScoreValue;
-var init_common = __esm({
-  "src/model/common.ts"() {
-    "use strict";
-    init_zod();
-    ID_PATTERNS = {
-      goal: /^G-\d{3,}$/,
-      design: /^D-\d{3,}$/,
-      task: /^T-\d{3,}$/,
-      fact: /^F-[A-Z0-9]+-\d{3,}$/,
-      claim: /^C-\d{3,}$/,
-      legacyClaim: /^LC-\d{3,}$/,
-      decision: /^DEC-\d{3,}$/,
-      /**
-       * Khối trong sơ đồ. Thay cho `Zone` cũ: một khối vừa là vùng code (có `paths`)
-       * vừa là node có contract và bộ verify — không cần hai bản đồ song song.
-       */
-      module: /^M-[a-z0-9][a-z0-9-]*$/,
-      /** Phạm vi công việc = đơn vị bàn giao có ranh giới code và người nghiệm thu. */
-      scope: /^P-[a-z0-9][a-z0-9-]*$/,
-      /** Icebox = việc đã quyết CHƯA làm. Xem docstring đầu `src/model/icebox.ts`. */
-      icebox: /^ICE-\d{3,}$/,
-      /** Đề xuất chờ người duyệt. Xem docstring đầu `src/model/proposal.ts`. */
-      proposal: /^PR-\d{3,}$/
-    };
-    zGoalId = external_exports.string().regex(ID_PATTERNS.goal, "ID goal ph\u1EA3i d\u1EA1ng G-001");
-    zDesignId = external_exports.string().regex(ID_PATTERNS.design, "ID design ph\u1EA3i d\u1EA1ng D-001");
-    zTaskId = external_exports.string().regex(ID_PATTERNS.task, "ID task ph\u1EA3i d\u1EA1ng T-001");
-    zFactId = external_exports.string().regex(ID_PATTERNS.fact, "ID fact ph\u1EA3i d\u1EA1ng F-ACC-007");
-    zClaimId = external_exports.string().regex(ID_PATTERNS.claim, "ID claim ph\u1EA3i d\u1EA1ng C-031");
-    zLegacyClaimId = external_exports.string().regex(ID_PATTERNS.legacyClaim, "ID legacy claim ph\u1EA3i d\u1EA1ng LC-007");
-    zDecisionId = external_exports.string().regex(ID_PATTERNS.decision, "ID decision ph\u1EA3i d\u1EA1ng DEC-004");
-    zModuleId = external_exports.string().regex(ID_PATTERNS.module, "ID kh\u1ED1i ph\u1EA3i d\u1EA1ng M-intent");
-    zScopeId = external_exports.string().regex(ID_PATTERNS.scope, "ID ph\u1EA1m vi ph\u1EA3i d\u1EA1ng P-chat-core");
-    zIceboxId = external_exports.string().regex(ID_PATTERNS.icebox, "ID icebox ph\u1EA3i d\u1EA1ng ICE-001");
-    zProposalId = external_exports.string().regex(ID_PATTERNS.proposal, "ID \u0111\u1EC1 xu\u1EA5t ph\u1EA3i d\u1EA1ng PR-001");
-    zIsoDate = external_exports.string().min(1).refine((s) => !Number.isNaN(Date.parse(s)), "ph\u1EA3i l\xE0 ng\xE0y ISO 8601 h\u1EE3p l\u1EC7");
-    zHandle = external_exports.string().regex(/^@[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'handle ph\u1EA3i d\u1EA1ng "@ten-nguoi"');
-    zNonEmpty = external_exports.string().trim().min(1, "kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng");
-    zGlob = external_exports.string().trim().min(1);
-    zExpect = external_exports.union([
-      external_exports.literal("exit_zero"),
-      external_exports.object({
-        exit_code: external_exports.number().int().optional(),
-        stdout_contains: external_exports.string().optional(),
-        stdout_matches: external_exports.string().optional(),
-        stderr_contains: external_exports.string().optional()
-      })
-    ]).default("exit_zero");
-    zProbe = external_exports.object({
-      run: zNonEmpty.describe("l\u1EC7nh shell ch\u1EA1y \u0111\u01B0\u1EE3c, kh\xF4ng t\u01B0\u01A1ng t\xE1c"),
-      expect: zExpect,
-      /**
-       * Lệnh thoát 0 ⇒ bỏ qua, đánh dấu `unavailable`, **KHÔNG phải `failing`**.
-       * Dùng cho probe cần môi trường ngoài (DB, service, mạng nội bộ).
-       */
-      skip_if: external_exports.string().optional(),
-      timeout_ms: external_exports.number().int().positive().max(6e5).optional(),
-      cwd: external_exports.string().optional()
-    }).strict();
-    zScoreValue = external_exports.union([
-      external_exports.literal(1),
-      external_exports.literal(2),
-      external_exports.literal(3),
-      external_exports.literal(4),
-      external_exports.literal(5)
-    ]);
-  }
-});
-
-// src/model/anchor.ts
-function parseAnchorString(raw) {
-  const s = raw.trim();
-  if (!s) return null;
-  const commit = COMMIT.exec(s);
-  if (commit?.groups) return { kind: "commit", sha: commit.groups["sha"] };
-  const hash = FILE_HASH_RANGE.exec(s);
-  if (hash?.groups) {
-    const line = Number(hash.groups["line"]);
-    const end = hash.groups["end"] ? Number(hash.groups["end"]) : void 0;
-    return end === void 0 ? { kind: "file", path: hash.groups["path"], line } : { kind: "file", path: hash.groups["path"], line, line_end: end };
-  }
-  const colon = FILE_COLON.exec(s);
-  if (colon?.groups) {
-    const line = Number(colon.groups["line"]);
-    const end = colon.groups["end"] ? Number(colon.groups["end"]) : void 0;
-    return end === void 0 ? { kind: "file", path: colon.groups["path"], line } : { kind: "file", path: colon.groups["path"], line, line_end: end };
-  }
-  if (/^https?:\/\//.test(s)) return null;
-  if (!s.includes(" ")) return { kind: "file", path: s };
-  return null;
-}
-function preview(quote2) {
-  const flat = quote2.trim().replace(/\s+/g, " ");
-  return flat.length <= QUOTE_PREVIEW ? flat : `${flat.slice(0, QUOTE_PREVIEW).trimEnd()}\u2026`;
-}
-function formatAnchor(a) {
-  switch (a.kind) {
-    case "file":
-      if (a.line === void 0) return a.path;
-      return a.line_end === void 0 ? `${a.path}:${a.line}` : `${a.path}:${a.line}-${a.line_end}`;
-    case "commit":
-      return `commit:${a.sha.slice(0, 8)}`;
-    case "url":
-      return a.quote ? `${a.url} (l\u1EA5y ${a.fetched_at.slice(0, 10)}) \u2014 "${preview(a.quote)}"` : `${a.url} (l\u1EA5y ${a.fetched_at.slice(0, 10)})`;
-    case "human":
-      return `${a.by} ${a.at.slice(0, 10)}${a.link ? ` \u2014 ${a.link}` : ""}`;
-  }
-}
-var zFileAnchor, zCommitAnchor, zUrlAnchor, zHumanAnchor, zAnchorObject, FILE_HASH_RANGE, FILE_COLON, COMMIT, zAnchor, NEED_ANCHOR, zAnchors, QUOTE_PREVIEW;
-var init_anchor = __esm({
-  "src/model/anchor.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    zFileAnchor = external_exports.object({
-      kind: external_exports.literal("file"),
-      path: zNonEmpty,
-      /** Dòng bắt đầu, 1-indexed. Thiếu = neo vào cả file. */
-      line: external_exports.number().int().positive().optional(),
-      line_end: external_exports.number().int().positive().optional()
-    });
-    zCommitAnchor = external_exports.object({
-      kind: external_exports.literal("commit"),
-      sha: external_exports.string().regex(/^[0-9a-f]{7,40}$/, "sha ph\u1EA3i l\xE0 hex 7\u201340 k\xFD t\u1EF1"),
-      note: external_exports.string().optional()
-    });
-    zUrlAnchor = external_exports.object({
-      kind: external_exports.literal("url"),
-      url: external_exports.string().url(),
-      /** Bắt buộc: web đổi. Một URL không có mốc thời gian lấy về thì không neo được gì. */
-      fetched_at: zIsoDate,
-      quote: external_exports.string().optional()
-    });
-    zHumanAnchor = external_exports.object({
-      kind: external_exports.literal("human"),
-      by: zHandle,
-      at: zIsoDate,
-      /** Link tới ticket/biên bản/chat — để người sau truy lại được. */
-      link: external_exports.string().optional()
-    });
-    zAnchorObject = external_exports.discriminatedUnion("kind", [
-      zFileAnchor,
-      zCommitAnchor,
-      zUrlAnchor,
-      zHumanAnchor
-    ]);
-    FILE_HASH_RANGE = /^(?<path>[^#\s]+)#L(?<line>\d+)(?:-L?(?<end>\d+))?$/;
-    FILE_COLON = /^(?<path>[^:\s]+):(?<line>\d+)(?::(?<end>\d+))?$/;
-    COMMIT = /^commit:(?<sha>[0-9a-f]{7,40})$/;
-    zAnchor = external_exports.union([external_exports.string(), zAnchorObject]).transform((v, ctx) => {
-      if (typeof v !== "string") return v;
-      const parsed = parseAnchorString(v);
-      if (!parsed) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          message: `anchor "${v}" kh\xF4ng nh\u1EADn d\u1EA1ng \u0111\u01B0\u1EE3c. D\xF9ng "src/a.ts#L12", "src/a.ts:12", "commit:abc1234", ho\u1EB7c d\u1EA1ng object cho url/human (url c\u1EA7n fetched_at).`
-        });
-        return external_exports.NEVER;
-      }
-      return parsed;
-    });
-    NEED_ANCHOR = "ph\u1EA3i c\xF3 `anchors` \u2014 b\u1EB1ng ch\u1EE9ng cho ph\xE1t bi\u1EC3u n\xE0y. D\xF9ng `src/a.ts#L42`, `commit:abc1234`, ho\u1EB7c d\u1EA1ng object cho URL (k\xE8m `fetched_at`) / ng\u01B0\u1EDDi (`kind: human`). Kh\xF4ng ch\u1EC9 ra \u0111\u01B0\u1EE3c ngu\u1ED3n th\xEC \u0111\u1EEBng ghi: \u0111\u01B0a v\xE0o `open_questions` c\u1EE7a task thay v\xEC \u0111\u01B0a v\xE0o kho tri th\u1EE9c.";
-    zAnchors = external_exports.array(zAnchor, { required_error: NEED_ANCHOR, invalid_type_error: NEED_ANCHOR }).min(1, NEED_ANCHOR);
-    QUOTE_PREVIEW = 60;
-  }
-});
-
-// src/model/config.ts
-function guideFileName(harness) {
-  return GUIDE_FILE[harness];
-}
-function canDispatchSubagent(harness) {
-  return harness === "claude-code";
-}
-function agentModelAlias(modelId) {
-  return /(opus|sonnet|haiku|fable)/i.exec(modelId)?.[1]?.toLowerCase();
-}
-function enforcementFor(config2, rule) {
-  return config2.enforcement_rules[rule] ?? config2.enforcement;
-}
-var ENFORCEMENT, ENFORCEMENT_RULES, MODEL_TIER, HARNESS, GUIDE_FILE, LATEST_SCHEMA_VERSION, zConfig;
-var init_config = __esm({
-  "src/model/config.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    ENFORCEMENT = ["warn", "enforce"];
-    ENFORCEMENT_RULES = [
-      /** Ghi tri thức không có anchor. */
-      "knowledge_anchor",
-      /** Ghi file .ganas/ sai schema. */
-      "schema",
-      /** Kết thúc phiên khi exit_contract chưa thoả. */
-      "exit_contract",
-      /** Tạo/đóng task không neo được vào phạm vi/goal. */
-      "task_link",
-      /** Model tự đặt status: approved/rejected cho proposal thay vì `ganas proposal approve/reject`. */
-      "proposal_decision"
-    ];
-    MODEL_TIER = ["main", "verifier", "scribe"];
-    HARNESS = [
-      "claude-code",
-      "codex",
-      "cursor",
-      "zed",
-      "windsurf",
-      "gemini",
-      "other"
-    ];
-    GUIDE_FILE = {
-      "claude-code": "CLAUDE.md",
-      codex: "AGENTS.md",
-      cursor: "AGENTS.md",
-      zed: "AGENTS.md",
-      windsurf: "AGENTS.md",
-      gemini: "GEMINI.md",
-      other: "AGENTS.md"
-    };
-    LATEST_SCHEMA_VERSION = 1;
-    zConfig = external_exports.object({
-      version: external_exports.literal(LATEST_SCHEMA_VERSION).default(LATEST_SCHEMA_VERSION).describe("phi\xEAn b\u1EA3n schema .ganas/"),
-      project: zNonEmpty,
-      /**
-       * Harness giao việc. Mặc định `claude-code`: đó là harness ganas cưỡng chế
-       * được đầy đủ (hook + skill), và là mặc định của `ganas init`. Dự án cũ
-       * không khai field này vẫn chạy như trước.
-       */
-      harness: external_exports.enum(HARNESS).default("claude-code"),
-      /** Mức mặc định cho mọi luật. */
-      enforcement: external_exports.enum(ENFORCEMENT).default("warn"),
-      /** Ghi đè theo từng luật. Thiếu key ⇒ dùng `enforcement`. */
-      enforcement_rules: external_exports.record(external_exports.enum(ENFORCEMENT_RULES), external_exports.enum(ENFORCEMENT)).default({}),
-      /** Ba key phải khớp đúng `MODEL_TIER` — `Task.model` tham chiếu vào đây. */
-      models: external_exports.object({
-        main: external_exports.string().default("claude-opus-5"),
-        verifier: external_exports.string().default("claude-sonnet-5"),
-        scribe: external_exports.string().default("claude-haiku-4-5")
-      }).default({}),
-      session_start: external_exports.object({
-        /**
-         * Tự gửi một câu mở đầu khi phiên bắt đầu (hook trả `initialUserMessage`).
-         * Mặc định tắt: người mở Claude Code để hỏi nhanh một câu không muốn bị
-         * cuốn ngay vào task. Brief vẫn được bơm vào context dù bật hay tắt.
-         */
-        auto_begin: external_exports.boolean().default(false)
-      }).default({}),
-      claim: external_exports.object({
-        /**
-         * Một task bị giữ (claim) quá lâu không còn tin được là phiên đó vẫn
-         * sống — có thể đã crash. Sau ngần này phút, claim cũ bị coi là bỏ
-         * hoang và một phiên khác được phép giành lại. Xem `graph/claim.ts`.
-         */
-        ttl_minutes: external_exports.number().int().positive().default(240)
-      }).default({}),
-      /**
-       * Lệnh kiểm TOÀN DỰ ÁN mà `ganas commit` chạy trên cây sắp được commit
-       * (vd `npm run typecheck`) — khác hẳn các lệnh trong `exit_contract` của
-       * từng task, vốn chỉ kiểm đúng PHẦN task đó chạm tới. Một task có thể có
-       * exit_contract xanh (phần của nó đúng) trong khi cây tổng vẫn không biên
-       * dịch được vì một thay đổi bắt buộc trải sang phạm vi khác — đây là lớp
-       * chặn cho đúng khoảng hở đó, xem PR-007.
-       *
-       * TUỲ CHỌN, mặc định trống: dự án không khai thì `ganas commit` bỏ qua
-       * phép kiểm này kèm một dòng báo, không phải đỏ. Bắt buộc khai sẽ chặn
-       * đứng mọi dự án cũ ngay lần commit đầu tiên — trái luật `enforcement`
-       * mặc định `warn` (xem `.claude/rules/architecture.md`), nên field này
-       * phải mềm y như những luật khác.
-       */
-      build_check: external_exports.string().optional()
-    });
-  }
-});
-
-// src/model/task.ts
-function agentDispatchLines(agent) {
-  const lines = [];
-  if (agent.persona) lines.push(`Vai: ${agent.persona}`);
-  if (agent.objective) lines.push(`Xong ngh\u0129a l\xE0: ${agent.objective}`);
-  agent.steps.forEach((step, i) => lines.push(`B\u01B0\u1EDBc ${i + 1}: ${step}`));
-  for (const rail of agent.guardrails) lines.push(`Kh\xF4ng \u0111\u01B0\u1EE3c: ${rail}`);
-  for (const item of agent.self_check) lines.push(`T\u1EF1 ki\u1EC3m tr\u01B0\u1EDBc khi b\xE1o xong: ${item}`);
-  if (agent.tools.length > 0) {
-    lines.push(
-      `C\xF4ng c\u1EE5 n\xEAn d\xF9ng: ${agent.tools.join(", ")} \u2014 khuy\u1EBFn ngh\u1ECB th\xF4i, ganas kh\xF4ng ch\u1EB7n \u0111\u01B0\u1EE3c c\xF4ng c\u1EE5 n\u1EB1m ngo\xE0i danh s\xE1ch n\xE0y`
-    );
-  }
-  return lines;
-}
-var TASK_STATUS, ESTIMATED_CONTEXT, TASK_ROLE, zArtifactRef, zAgentSpec, zContextContract, zExitCommand, zExitArtifact, zExitHandoff, zExitManual, zExitVerification, zExitCriterion, zTask;
-var init_task = __esm({
-  "src/model/task.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    init_config();
-    TASK_STATUS = ["todo", "in_progress", "done"];
-    ESTIMATED_CONTEXT = ["small", "medium", "large"];
-    TASK_ROLE = ["design", "build"];
-    zArtifactRef = external_exports.string().regex(
-      /^D-\d{3,}\/A-[A-Za-z0-9][A-Za-z0-9-]*$/,
-      "\u0111\u1ECBa ch\u1EC9 b\u1EA3n v\u1EBD ph\u1EA3i d\u1EA1ng `D-010/A-users-table` (id design, g\u1EA1ch ch\xE9o, id b\u1EA3n v\u1EBD)"
-    );
-    zAgentSpec = external_exports.object({
-      persona: zNonEmpty.optional().describe("agent n\xE0y \u0111\xF3ng vai g\xEC"),
-      objective: zNonEmpty.optional().describe("m\u1ED9t c\xE2u: xong ngh\u0129a l\xE0 g\xEC"),
-      steps: external_exports.array(zNonEmpty).default([]),
-      self_check: external_exports.array(zNonEmpty).default([]),
-      guardrails: external_exports.array(zNonEmpty).default([]),
-      /**
-       * Công cụ nên dùng. ganas KHÔNG cưỡng chế được danh sách này: tool sinh
-       * sub-agent không nhận allowlist từ ganas, nên đây là KHUYẾN NGHỊ in ra cho
-       * người đọc, không phải một hàng rào. Giả vờ cưỡng chế được là đúng lớp lỗi
-       * `test/no-dead-ends.test.ts` sinh ra để chặn — nên `agentDispatchLines()`
-       * tự khai là không kiểm được, ngay trên dòng nó in ra.
-       */
-      tools: external_exports.array(zNonEmpty).default([])
-    }).strict();
-    zContextContract = external_exports.object({
-      must_read: external_exports.array(
-        external_exports.object({
-          path: zNonEmpty,
-          /** Bắt buộc: một danh sách file không có lý do thì phiên sau đọc mò. */
-          why: zNonEmpty
-        })
-      ).default([]),
-      /** Fact phải còn FRESH mới được dùng; brief cảnh báo nếu STALE. */
-      facts: external_exports.array(zFactId).default([]),
-      open_questions: external_exports.array(zNonEmpty).default([])
-    });
-    zExitCommand = external_exports.object({
-      kind: external_exports.literal("command"),
-      run: zNonEmpty,
-      expect: zExpect
-    });
-    zExitArtifact = external_exports.object({
-      kind: external_exports.literal("artifact"),
-      path: zNonEmpty,
-      must_contain: external_exports.string().optional()
-    });
-    zExitHandoff = external_exports.object({
-      kind: external_exports.literal("handoff"),
-      required: external_exports.boolean().default(true)
-    });
-    zExitManual = external_exports.object({
-      kind: external_exports.literal("manual"),
-      check: zNonEmpty
-    });
-    zExitVerification = external_exports.object({
-      kind: external_exports.literal("verification"),
-      target: zNonEmpty.describe(
-        "id target trong s\u1ED5 c\xE1i, vd `M-intent/V-intent-eval` (b\u1EB1ng ch\u1EE9ng c\u1EE7a kh\u1ED1i) ho\u1EB7c `F-ACC-001` (fact)"
-      )
-    });
-    zExitCriterion = external_exports.discriminatedUnion("kind", [
-      zExitCommand,
-      zExitArtifact,
-      zExitHandoff,
-      zExitManual,
-      zExitVerification
-    ]);
-    zTask = external_exports.object({
-      id: zTaskId,
-      title: zNonEmpty,
-      serves: external_exports.array(zGoalId, { required_error: "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?" }).min(1, "task ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o?"),
-      implements: zDesignId.describe("design m\xE0 task n\xE0y hi\u1EC7n th\u1EF1c"),
-      /**
-       * Phạm vi công việc chứa task. Bắt buộc: task không thuộc phạm vi nào thì
-       * không ai nghiệm thu được nó, và tri thức nó sinh ra không biết neo vào đâu.
-       */
-      scope: zScopeId,
-      status: external_exports.enum(TASK_STATUS).default("todo"),
-      estimated_context: external_exports.enum(ESTIMATED_CONTEXT).default("medium"),
-      context_contract: zContextContract.default({ must_read: [], facts: [], open_questions: [] }),
-      /** Kỹ năng cần cho task — brief liệt kê để phiên mới biết nạp gì. */
-      skills: external_exports.array(zNonEmpty).default([]),
-      /**
-       * Tier model nên dùng khi giao task này (cho sub-agent hoặc phiên mới).
-       * Gán lúc chẻ task từ plan — quyết định của người/agent thiết kế, KHÔNG
-       * suy tự động từ module.nature (heuristic không đáng tin bằng người biết rõ
-       * việc). Không gán thì brief không gợi ý model nào — không đoán bừa.
-       */
-      model: external_exports.enum(MODEL_TIER).optional(),
-      /**
-       * Vai của task: `design` (vẽ bản thiết kế) hay `build` (hiện thực code
-       * theo bản vẽ). Gán lúc chẻ task — quyết định của NGƯỜI, không suy tự
-       * động, đúng lý lẽ đã áp cho `model` ngay phía trên: heuristic (vd "task
-       * không có `touches` thì chắc là design") không đáng tin bằng người biết
-       * rõ việc, và đoán sai thì không lỗi nào nổi lên.
-       *
-       * Mặc định `build`: toàn bộ task khai từ trước khi trường này ra đời là
-       * hiện thực code, và phần lớn task tương lai cũng vậy — coi "build" là
-       * ngầm định để 49 task cũ adopt được mà không phải sửa file nào, thay vì
-       * bắt mọi task khai tay một trường vốn hầu như luôn cùng một giá trị.
-       * Đây KHÔNG phải suy luận: mặc định chỉ chọn giá trị PHỔ BIẾN NHẤT, còn
-       * `design` vẫn phải khai tay — không có tín hiệu nào (kể cả `touches`
-       * rỗng, vốn có nhiều lý do khác) tự động biến một task thành design.
-       */
-      role: external_exports.enum(TASK_ROLE).default("build"),
-      /**
-       * Bản vẽ mà task này CẦN — hợp đồng vào (input_contract).
-       *
-       * Đây là thứ thay `context_contract.must_read` cho phần hợp đồng: brief bơm
-       * thẳng `shape` của đúng những bản vẽ này, thay vì đưa một danh sách ĐƯỜNG
-       * DẪN rồi bắt agent mở cả kho. Một design mười bản vẽ mà task chỉ dùng hai
-       * thì tám cái còn lại là nhiễu — và agent vẫn sẽ suy diễn theo nhiễu đó.
-       *
-       * `.default([])`: mọi task khai trước khi trường này ra đời phải adopt được
-       * mà không phải sửa file nào.
-       */
-      consumes: external_exports.array(zArtifactRef).default([]),
-      /**
-       * Bản vẽ mà task này SINH RA — vế ngược của `consumes`.
-       *
-       * Nhờ hai trường đó, câu "bước sau là task nào" SUY ĐƯỢC: task nào
-       * `consumes` thứ task này `produces` thì đó là bước sau. Vì vậy KHÔNG có
-       * trường `next`: hai câu trả lời cho một câu hỏi thì có ngày lệch nhau —
-       * đúng lý lẽ đã dùng cho `blocked_by` so với một `status: blocked` (xem
-       * docstring `TASK_STATUS` đầu file).
-       *
-       * Khai `produces` thì `exit_contract` phải có tiêu chí `verification` trỏ
-       * vào chính bản vẽ đó — luật `spine/task-produces-without-verification`,
-       * đúng khuôn `touches` → `spine/task-missing-verification`.
-       */
-      produces: external_exports.array(zArtifactRef).default([]),
-      /**
-       * Bản giao việc cho sub-agent. TUỲ CHỌN — chỉ điền khi task thật sự sẽ được
-       * giao đi. Điền cho đủ lệ vào mọi task đang mở là đưa văn xuôi chết vào
-       * đường nóng của `loadGraph`, chạy lại mỗi lần hook chạy.
-       */
-      agent: zAgentSpec.optional(),
-      /**
-       * Khối trong sơ đồ mà task này chạm tới.
-       *
-       * Đây là điểm nối giữa trục VIỆC và trục HỆ THỐNG: chạm khối nào thì phải để
-       * lại bằng chứng cho khối đó (luật `spine/task-missing-verification`).
-       */
-      touches: external_exports.array(zModuleId).default([]),
-      exit_contract: external_exports.array(zExitCriterion, {
-        required_error: 'task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong? Kh\xF4ng c\xF3 ti\xEAu ch\xED ki\u1EC3m ch\u1EE9ng \u0111\u01B0\u1EE3c th\xEC Stop hook kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c, v\xE0 "xong" tr\u1EDF th\xE0nh \xFD ki\u1EBFn.'
-      }).min(1, "task ph\u1EA3i c\xF3 `exit_contract` \u2014 l\xE0m sao bi\u1EBFt n\xF3 xong?"),
-      blocked_by: external_exports.array(zTaskId).default([]),
-      created_at: zIsoDate.optional(),
-      done_at: zIsoDate.optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((t, ctx) => {
-      if (t.blocked_by.includes(t.id)) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["blocked_by"],
-          message: `task ${t.id} kh\xF4ng th\u1EC3 t\u1EF1 ch\u1EB7n ch\xEDnh n\xF3`
-        });
-      }
-      if (t.status === "done" && !t.done_at) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["done_at"],
-          message: `task ${t.id} \u0111\xE1nh d\u1EA5u done nh\u01B0ng thi\u1EBFu done_at`
-        });
-      }
-      const dupServes = t.serves.find((g, i) => t.serves.indexOf(g) !== i);
-      if (dupServes) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["serves"],
-          message: `task ${t.id} li\u1EC7t k\xEA goal ${dupServes} hai l\u1EA7n`
-        });
-      }
-    });
-  }
-});
-
-// src/model/design.ts
-function artifactStatement(design, artifact) {
-  return `${design.id}/${artifact.id} (${artifact.kind}) trong ${artifact.module ?? artifact.path}: ${artifact.shape}`;
-}
-function artifactIssues(design, lookupModule) {
-  const issues = [];
-  design.artifacts.forEach((a, index) => {
-    const add = (code, message, hint) => {
-      issues.push({ artifactId: a.id, index, code, message, hint });
-    };
-    if (!a.module) {
-      if (!a.probe) {
-        add(
-          "missing-probe",
-          `b\u1EA3n v\u1EBD ${design.id}/${a.id} ch\u01B0a c\xF3 \`probe\` \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1ED1i chi\u1EBFu n\xF3 v\u1EDBi file th\u1EADt`,
-          'Th\xEAm `probe: { run: "...", expect: exit_zero }`. B\u1EA3n v\u1EBD kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c th\xEC n\xF3 l\xE0 v\u0103n xu\xF4i, ch\u1EC9 kh\xE1c ch\u1ED7 \u0111\u1EB7t.'
-        );
-      }
-      return;
-    }
-    const mod = lookupModule(a.module);
-    if (!mod) {
-      add(
-        "missing-module",
-        `b\u1EA3n v\u1EBD ${design.id}/${a.id} thu\u1ED9c kh\u1ED1i \`${a.module}\` nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng t\u1ED3n t\u1EA1i`,
-        `T\u1EA1o .ganas/modules/${a.module}.yaml, ho\u1EB7c s\u1EEDa \`module\` c\u1EE7a b\u1EA3n v\u1EBD. B\u1EA3n v\u1EBD kh\xF4ng neo \u0111\u01B0\u1EE3c v\xE0o kh\u1ED1i th\xEC kh\xF4ng c\xF3 file n\xE0o \u0111\u1EC3 t\xEDnh STALE \u2014 n\xF3 s\u1EBD xanh v\u0129nh vi\u1EC5n.`
-      );
-      return;
-    }
-    if (!a.probe) {
-      add(
-        "missing-probe",
-        `b\u1EA3n v\u1EBD ${design.id}/${a.id} ch\u01B0a c\xF3 \`probe\` \u2014 kh\xF4ng c\xF3 g\xEC \u0111\u1ED1i chi\u1EBFu n\xF3 v\u1EDBi code th\u1EADt`,
-        'Th\xEAm `probe: { run: "...", expect: exit_zero }`. B\u1EA3n v\u1EBD kh\xF4ng ch\u1EA5m \u0111\u01B0\u1EE3c th\xEC n\xF3 l\xE0 v\u0103n xu\xF4i, ch\u1EC9 kh\xE1c ch\u1ED7 \u0111\u1EB7t.'
-      );
-    }
-    if (!a.port) return;
-    const ports = a.port.side === "out" ? mod.contract.outputs : mod.contract.inputs;
-    const sideLabel = a.port.side === "out" ? "c\u1ED5ng ra" : "c\u1ED5ng v\xE0o";
-    const port = ports.find((p) => p.name === a.port?.name);
-    if (!port) {
-      add(
-        "port-not-found",
-        `b\u1EA3n v\u1EBD ${design.id}/${a.id} neo v\xE0o ${sideLabel} \`${a.port.name}\` c\u1EE7a kh\u1ED1i ${a.module}, nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng khai c\u1ED5ng n\xE0o t\xEAn v\u1EADy`,
-        `Th\xEAm c\u1ED5ng v\xE0o \`contract.${a.port.side === "out" ? "outputs" : "inputs"}\` c\u1EE7a ${a.module}, ho\u1EB7c b\u1ECF \`port\` kh\u1ECFi b\u1EA3n v\u1EBD.`
-      );
-      return;
-    }
-    if (port.shape.trim() !== a.shape.trim()) {
-      add(
-        "shape-drift",
-        `b\u1EA3n v\u1EBD ${design.id}/${a.id} khai shape \`${a.shape.trim()}\` nh\u01B0ng ${sideLabel} \`${port.name}\` c\u1EE7a ${a.module} khai \`${port.shape.trim()}\` \u2014 hai b\u1EA3n v\u1EBD c\u1EE7a c\xF9ng m\u1ED9t th\u1EE9`,
-        "S\u1EEDa m\u1ED9t trong hai cho kh\u1EDBp. Ph\xE9p so l\xE0 `.trim()` r\u1ED3i so t\u1EEBng k\xFD t\u1EF1, \u0111\xFAng nh\u01B0 `portIssues()` \u2014 kho\u1EA3ng tr\u1EAFng \u0111\u1EA7u/cu\u1ED1i kh\xF4ng t\xEDnh, c\xF2n l\u1EA1i t\xEDnh h\u1EBFt."
-      );
-    }
-  });
-  return issues;
-}
-var DESIGN_STATUS, ARTIFACT_KIND, zArtifactId, zArtifactPort, zDesignArtifact, zDesign;
-var init_design = __esm({
-  "src/model/design.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    init_task();
-    DESIGN_STATUS = ["draft", "active", "superseded", "archived", "done"];
-    ARTIFACT_KIND = ["schema", "migration", "function", "api", "type", "doc"];
-    zArtifactId = external_exports.string().regex(/^A-[a-z0-9][a-z0-9-]*$/i, "ID b\u1EA3n v\u1EBD ph\u1EA3i d\u1EA1ng A-users-table");
-    zArtifactPort = external_exports.object({
-      side: external_exports.enum(["in", "out"]),
-      name: zNonEmpty
-    }).strict();
-    zDesignArtifact = external_exports.object({
-      id: zArtifactId,
-      kind: external_exports.enum(ARTIFACT_KIND),
-      /**
-       * Khối chứa code mà bản vẽ này mô tả. Cũng là nguồn tính STALE.
-       *
-       * `.optional()` chỉ vì `kind: doc` neo bằng `path` thay vì bằng khối — với
-       * mọi kind khác nó vẫn BẮT BUỘC, và `superRefine` bên dưới ép điều đó thành
-       * lỗi PARSE.
-       */
-      module: zModuleId.optional(),
-      /**
-       * File tài liệu mà bản vẽ `doc` mô tả — nguồn tính STALE thay cho
-       * `module.paths`.
-       *
-       * Phải là ĐƯỜNG DẪN có thư mục (`docs/CONCEPTS.md`), không phải một tên
-       * file trần: `globsOf()` (`src/graph/freshness.ts`) chỉ nhận phần tử có
-       * `*` hoặc `/`, nên một `path` trần khiến context rỗng và bản vẽ XANH VĨNH
-       * VIỄN — đúng cái bẫy mà docstring `scopeTargets()` (`src/verify/run.ts`)
-       * đã trả giá một lần.
-       */
-      path: zNonEmpty.optional(),
-      shape: zNonEmpty.describe('h\xECnh d\u1EA1ng, vd "(userId: string) => Date | null"'),
-      port: zArtifactPort.optional(),
-      probe: zProbe.optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((a, ctx) => {
-      if (a.kind === "doc") {
-        if (!a.path) {
-          ctx.addIssue({
-            code: external_exports.ZodIssueCode.custom,
-            path: ["path"],
-            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc n\xEAn ph\u1EA3i c\xF3 \`path\` \u2014 t\xE0i li\u1EC7u neo v\xE0o m\u1ED9t file, kh\xF4ng v\xE0o kh\u1ED1i`
-          });
-        }
-        if (a.module) {
-          ctx.addIssue({
-            code: external_exports.ZodIssueCode.custom,
-            path: ["module"],
-            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc th\xEC kh\xF4ng \u0111\u01B0\u1EE3c khai \`module\` \u2014 ch\u1ECDn m\u1ED9t trong hai, \`path\` cho t\xE0i li\u1EC7u`
-          });
-        }
-        if (a.path && !a.path.includes("/")) {
-          ctx.addIssue({
-            code: external_exports.ZodIssueCode.custom,
-            path: ["path"],
-            message: `b\u1EA3n v\u1EBD ${a.id} khai \`path: ${a.path}\` \u2014 t\xEAn file tr\u1EA7n kh\xF4ng t\xEDnh \u0111\u01B0\u1EE3c \u0111\u1ED9 t\u01B0\u01A1i, b\u1EA3n v\u1EBD s\u1EBD xanh v\u0129nh vi\u1EC5n d\xF9 t\xE0i li\u1EC7u \u0111\xE3 \u0111\u1ED5i. \u0110\u1EB7t t\xE0i li\u1EC7u trong m\u1ED9t th\u01B0 m\u1EE5c, vd \`docs/${a.path}\`.`
-          });
-        }
-        if (a.port) {
-          ctx.addIssue({
-            code: external_exports.ZodIssueCode.custom,
-            path: ["port"],
-            message: `b\u1EA3n v\u1EBD ${a.id} khai kind: doc th\xEC kh\xF4ng \u0111\u01B0\u1EE3c khai \`port\` \u2014 c\u1ED5ng l\xE0 c\u1EE7a kh\u1ED1i, m\xE0 b\u1EA3n v\u1EBD doc kh\xF4ng neo v\xE0o kh\u1ED1i n\xE0o`
-          });
-        }
-        return;
-      }
-      if (!a.module) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["module"],
-          message: `b\u1EA3n v\u1EBD ${a.id} (kind: ${a.kind}) ph\u1EA3i khai \`module\` \u2014 ch\u1EC9 kind: doc m\u1EDBi neo b\u1EB1ng \`path\``
-        });
-      }
-      if (a.path) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["path"],
-          message: `b\u1EA3n v\u1EBD ${a.id} (kind: ${a.kind}) m\xF4 t\u1EA3 CODE n\xEAn neo b\u1EB1ng \`module\`, kh\xF4ng b\u1EB1ng \`path\``
-        });
-      }
-    });
-    zDesign = external_exports.object({
-      id: zDesignId,
-      title: zNonEmpty,
-      serves: external_exports.array(zGoalId, {
-        required_error: "design ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o? Kh\xF4ng c\xF3 goal th\xEC kh\xF4ng c\u1EA7n design.",
-        invalid_type_error: "`serves` ph\u1EA3i l\xE0 danh s\xE1ch ID goal, vd:\n  serves:\n    - G-001"
-      }).min(
-        1,
-        "design ph\u1EA3i khai `serves` \u2014 n\xF3 ph\u1EE5c v\u1EE5 goal n\xE0o? Kh\xF4ng c\xF3 goal th\xEC kh\xF4ng c\u1EA7n design."
-      ),
-      summary: zNonEmpty.describe("m\u1ED9t \u0111o\u1EA1n: c\xE1ch ti\u1EBFp c\u1EADn v\xE0 v\xEC sao ch\u1ECDn n\xF3"),
-      status: external_exports.enum(DESIGN_STATUS).default("draft"),
-      /** Các quyết định người đã chốt mà design này dựa vào. */
-      decisions: external_exports.array(zDecisionId).default([]),
-      supersedes: external_exports.array(zDesignId).default([]),
-      /**
-       * Hợp đồng ra của CHẶNG — dùng chung `zExitCriterion` với task, cố ý.
-       *
-       * Task trả lời "bước này xong chưa"; design trả lời "chặng này đóng được
-       * chưa". Hai câu hỏi khác nhau nhưng cùng một loại bằng chứng, nên loại
-       * tiêu chí thứ hai chỉ làm hai bảng trôi khỏi nhau.
-       *
-       * Đây cũng là chỗ nợ tiếp nối phải sống. Trước đó nó sống trong `notes`
-       * văn xuôi — không schema, không validator — và T-039 (xem
-       * `.ganas/tasks/T-048.yaml`) bay hơi đúng vì thế.
-       *
-       * `.default([])` chứ không `.min(1)`: bảy design đã có phải adopt được.
-       * Chỗ ép là luật `spine/design-missing-exit-contract`, ở mức warning.
-       */
-      /**
-       * Bản vẽ của chặng — hình dạng dữ liệu và chữ ký mà code phải khớp.
-       *
-       * Đây là cạnh Design → Module mà xương sống vốn thiếu: trước đây đường duy
-       * nhất từ design xuống code là `task.implements` (ngược chiều) rồi mới
-       * `task.touches`. Nghĩa là design không nói được nó CHỐT cái gì, chỉ nói
-       * được ai đang làm nó.
-       *
-       * `.default([])` chứ không `.min(1)`: chín design đã có phải adopt được.
-       */
-      artifacts: external_exports.array(zDesignArtifact).default([]),
-      exit_contract: external_exports.array(zExitCriterion).default([]),
-      created_at: zIsoDate.optional(),
-      done_at: zIsoDate.optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((d, ctx) => {
-      const dup = d.serves.find((g, i) => d.serves.indexOf(g) !== i);
-      if (dup) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["serves"],
-          message: `design ${d.id} li\u1EC7t k\xEA goal ${dup} hai l\u1EA7n`
-        });
-      }
-      if (d.status === "done" && !d.done_at) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["done_at"],
-          message: `design ${d.id} \u0111\xE1nh d\u1EA5u done nh\u01B0ng thi\u1EBFu done_at`
-        });
-      }
-      const artifactIds = d.artifacts.map((a) => a.id);
-      const dupArtifact = artifactIds.find((id, i) => artifactIds.indexOf(id) !== i);
-      if (dupArtifact) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["artifacts"],
-          message: `design ${d.id} c\xF3 hai b\u1EA3n v\u1EBD tr\xF9ng id "${dupArtifact}"`
-        });
-      }
-      if (d.supersedes.includes(d.id)) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["supersedes"],
-          message: `design ${d.id} kh\xF4ng th\u1EC3 thay th\u1EBF ch\xEDnh n\xF3`
-        });
-      }
-    });
-  }
-});
-
-// src/model/goal.ts
-var zAcceptanceCommand, zAcceptanceManual, zAcceptance, GOAL_STATUS, zGoal;
-var init_goal = __esm({
-  "src/model/goal.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    zAcceptanceCommand = external_exports.object({
-      id: zNonEmpty,
-      kind: external_exports.literal("command"),
-      run: zNonEmpty.describe("l\u1EC7nh shell ch\u1EA1y \u0111\u01B0\u1EE3c, kh\xF4ng t\u01B0\u01A1ng t\xE1c"),
-      expect: zExpect
-    });
-    zAcceptanceManual = external_exports.object({
-      id: zNonEmpty,
-      kind: external_exports.literal("manual"),
-      check: zNonEmpty.describe("\u0111i\u1EC1u ng\u01B0\u1EDDi ph\u1EA3i x\xE1c nh\u1EADn, vi\u1EBFt \u0111\u1EE7 c\u1EE5 th\u1EC3 \u0111\u1EC3 tr\u1EA3 l\u1EDDi c\xF3/kh\xF4ng"),
-      /** Bắt buộc: tiêu chí thủ công không có người ký thì không ai nghiệm thu. */
-      owner: zHandle
-    });
-    zAcceptance = external_exports.discriminatedUnion("kind", [zAcceptanceCommand, zAcceptanceManual]);
-    GOAL_STATUS = ["draft", "active", "closed"];
-    zGoal = external_exports.object({
-      id: zGoalId,
-      title: zNonEmpty,
-      /** Kết quả người dùng cảm nhận được, không phải việc phải làm. */
-      outcome: zNonEmpty,
-      acceptance: external_exports.array(zAcceptance, {
-        required_error: "goal ph\u1EA3i c\xF3 `acceptance` \u2014 l\xE0m sao bi\u1EBFt m\u1EE5c ti\xEAu \u0111\xE3 \u0111\u1EA1t? Kh\xF4ng \u0111o \u0111\u01B0\u1EE3c th\xEC \u0111\xF3 l\xE0 nguy\u1EC7n v\u1ECDng, kh\xF4ng ph\u1EA3i m\u1EE5c ti\xEAu."
-      }).min(
-        1,
-        "goal ph\u1EA3i c\xF3 \xEDt nh\u1EA5t m\u1ED9t ti\xEAu ch\xED nghi\u1EC7m thu \u2014 kh\xF4ng \u0111o \u0111\u01B0\u1EE3c th\xEC kh\xF4ng bao gi\u1EDD \u0111\xF3ng \u0111\u01B0\u1EE3c"
-      ),
-      status: external_exports.enum(GOAL_STATUS).default("draft"),
-      /** Chữ ký người. Model không được tự đặt mục tiêu — xem luật trong plan. */
-      approved_by: zHandle.optional(),
-      approved_at: zIsoDate.optional(),
-      created_at: zIsoDate.optional(),
-      closed_at: zIsoDate.optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((g, ctx) => {
-      if (g.status === "active" && !g.approved_by) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["approved_by"],
-          message: `goal ${g.id} \u1EDF tr\u1EA1ng th\xE1i "active" nh\u01B0ng ch\u01B0a c\xF3 approved_by. M\u1EE5c ti\xEAu ph\u1EA3i do ng\u01B0\u1EDDi ch\u1ED1t, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 model t\u1EF1 \u0111\u1EB7t. Gi\u1EEF \u1EDF "draft" cho t\u1EDBi khi c\xF3 ng\u01B0\u1EDDi duy\u1EC7t.`
-        });
-      }
-      if (g.approved_by && !g.approved_at) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["approved_at"],
-          message: `goal ${g.id} c\xF3 approved_by nh\u01B0ng thi\u1EBFu approved_at`
-        });
-      }
-      const ids = g.acceptance.map((a) => a.id);
-      const dup = ids.find((id, i) => ids.indexOf(id) !== i);
-      if (dup) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["acceptance"],
-          message: `goal ${g.id} c\xF3 ti\xEAu ch\xED nghi\u1EC7m thu tr\xF9ng id "${dup}"`
-        });
-      }
-    });
-  }
-});
-
-// src/model/knowledge.ts
-function freshnessOf({ fact, depsChangedAt, now = Date.now() }) {
-  if (!fact.last_verified_at) return "never_verified";
-  if (fact.last_result === "fail") return "failing";
-  const verifiedAt = Date.parse(fact.last_verified_at);
-  if (Number.isNaN(verifiedAt)) return "never_verified";
-  if (depsChangedAt !== void 0 && depsChangedAt > verifiedAt) return "stale";
-  if (fact.ttl_days > 0 && now - verifiedAt > fact.ttl_days * 864e5) return "stale";
-  return "fresh";
-}
-var VERIFY_RESULT, CLOCK_SKEW_MS, zFact, PROVENANCE, TRUST, zClaim, zDecision;
-var init_knowledge = __esm({
-  "src/model/knowledge.ts"() {
-    "use strict";
-    init_zod();
-    init_anchor();
-    init_common();
-    VERIFY_RESULT = ["pass", "fail", "unknown"];
-    CLOCK_SKEW_MS = 5 * 6e4;
-    zFact = external_exports.object({
-      id: zFactId,
-      statement: zNonEmpty,
-      /**
-       * Phạm vi mà phát biểu này đúng. Bắt buộc, và KHÔNG suy tự động từ
-       * `depends_on` ∩ `module.paths`: fact không có `depends_on` sẽ mất phạm vi,
-       * fact chạm hai khối sẽ có hai phạm vi — đúng thứ mush cần tránh. Công cụ
-       * chỉ GỢI Ý (`ganas scope assign`), người quyết.
-       */
-      scope: zScopeId,
-      verify: zProbe,
-      /** Glob các file mà fact này phụ thuộc. Đổi file ⇒ fact thành STALE. */
-      depends_on: external_exports.array(zGlob).default([]),
-      /** Hết hạn theo thời gian, kể cả khi không file nào đổi. 0 = không hết hạn. */
-      ttl_days: external_exports.number().int().min(0).default(0),
-      last_verified_at: zIsoDate.optional(),
-      verified_by: external_exports.string().optional().describe("session id ho\u1EB7c @handle"),
-      last_result: external_exports.enum(VERIFY_RESULT).default("unknown"),
-      anchors: external_exports.array(zAnchor).default([]),
-      /** Nếu fact này được thăng cấp từ một claim kế thừa, giữ lại vết. */
-      promoted_from: external_exports.union([zClaimId, zLegacyClaimId]).optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((f, ctx) => {
-      if (f.last_verified_at) {
-        const t = Date.parse(f.last_verified_at);
-        if (t > Date.now() + CLOCK_SKEW_MS) {
-          ctx.addIssue({
-            code: external_exports.ZodIssueCode.custom,
-            path: ["last_verified_at"],
-            message: `fact ${f.id} c\xF3 last_verified_at \u1EDF t\u01B0\u01A1ng lai (${f.last_verified_at}). Ch\u1EC9 \u0111\u1EB7t tr\u01B0\u1EDDng n\xE0y b\u1EB1ng c\xE1ch ch\u1EA1y \`ganas verify\` th\u1EADt, kh\xF4ng \u0111i\u1EC1n tay.`
-          });
-        }
-      }
-      if (f.last_result !== "unknown" && !f.last_verified_at) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["last_result"],
-          message: `fact ${f.id} khai last_result="${f.last_result}" nh\u01B0ng kh\xF4ng c\xF3 last_verified_at`
-        });
-      }
-    });
-    PROVENANCE = ["session", "human", "imported"];
-    TRUST = ["unverified", "confirmed", "refuted", "unprovable"];
-    zClaim = external_exports.object({
-      id: external_exports.union([zClaimId, zLegacyClaimId]),
-      statement: zNonEmpty,
-      /** Phạm vi mà giả thuyết này nói về. Bắt buộc, như fact. */
-      scope: zScopeId,
-      anchors: zAnchors,
-      provenance: external_exports.enum(PROVENANCE),
-      trust: external_exports.enum(TRUST).default("unverified"),
-      /** Phiên nào sinh ra claim này (nếu do phiên ghi). */
-      source_session: external_exports.string().optional(),
-      /** Kết quả đối chất: probe đã sinh ra, và vì sao kết luận vậy. */
-      verdict: external_exports.object({
-        at: zIsoDate,
-        probe: zProbe.optional(),
-        evidence: zNonEmpty.describe("b\u1EB1ng ch\u1EE9ng d\u1EABn t\u1EDBi k\u1EBFt lu\u1EADn, c\xF3 anchor"),
-        /** Fact được tạo ra nếu claim này confirmed. */
-        promoted_to: zFactId.optional()
-      }).optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((c, ctx) => {
-      const isLegacy = c.id.startsWith("LC-");
-      if (isLegacy && c.provenance !== "imported") {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["provenance"],
-          message: `claim ${c.id} d\xF9ng ti\u1EC1n t\u1ED1 LC- n\xEAn provenance ph\u1EA3i l\xE0 "imported"`
-        });
-      }
-      if (!isLegacy && c.provenance === "imported") {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["id"],
-          message: `claim import t\u1EEB t\xE0i li\u1EC7u c\u0169 ph\u1EA3i d\xF9ng ti\u1EC1n t\u1ED1 LC- (hi\u1EC7n l\xE0 ${c.id})`
-        });
-      }
-      if (c.trust !== "unverified" && !c.verdict) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["verdict"],
-          message: `claim ${c.id} c\xF3 trust="${c.trust}" nh\u01B0ng thi\u1EBFu verdict. \u0110\u1ED5i m\u1EE9c tin c\u1EADy ph\u1EA3i k\xE8m b\u1EB1ng ch\u1EE9ng, kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1ED5i tr\u1EA7n.`
-        });
-      }
-      if (c.verdict?.promoted_to && c.trust !== "confirmed") {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["verdict", "promoted_to"],
-          message: `claim ${c.id} ch\u1EC9 \u0111\u01B0\u1EE3c th\u0103ng c\u1EA5p th\xE0nh fact khi trust="confirmed"`
-        });
-      }
-    });
-    zDecision = external_exports.object({
-      id: zDecisionId,
-      statement: zNonEmpty,
-      /**
-       * Phạm vi áp dụng. **Tuỳ chọn, thiếu = áp cho toàn dự án** — ngược với
-       * fact/claim, và có lý do: fact ngoài phạm vi mà được tin ⇒ ảo giác; còn
-       * decision bị thu hẹp nhầm ⇒ model vi phạm một ràng buộc người đã chốt,
-       * tệ hơn. Mặc định an toàn của mỗi loại nằm ở hai phía đối nhau.
-       */
-      scope: zScopeId.optional(),
-      /** Bắt buộc. Không có người ký thì không phải quyết định. */
-      decided_by: zHandle,
-      decided_at: zIsoDate,
-      link: external_exports.string().optional().describe("ticket / bi\xEAn b\u1EA3n / link chat"),
-      /** Điều gì buộc phải chọn — bối cảnh, ràng buộc, lựa chọn khác đã cân nhắc. */
-      context: external_exports.string().optional(),
-      /** Phải sống với gì sau khi chọn — đánh đổi, rủi ro chấp nhận, việc kéo theo. */
-      consequence: external_exports.string().optional(),
-      supersedes: external_exports.array(zDecisionId).default([]),
-      notes: external_exports.string().optional()
-    }).strict();
-  }
-});
-
-// src/model/icebox.ts
-var ICEBOX_STATUS, zIcebox;
-var init_icebox = __esm({
-  "src/model/icebox.ts"() {
-    "use strict";
-    init_zod();
-    init_anchor();
-    init_common();
-    init_knowledge();
-    ICEBOX_STATUS = ["open", "closed", "promoted"];
-    zIcebox = external_exports.object({
-      id: zIceboxId,
-      title: zNonEmpty,
-      /** Thời điểm phát hiện. KHÔNG default `now` — lệnh `add` sẽ điền. */
-      found_at: zIsoDate,
-      /**
-       * Per-record, không per-project: "sửa kiến trúc khi rảnh" và "kiểm lại
-       * sau sprint" là hai chân trời khác nhau. Cùng khuôn `Fact.ttl_days`.
-       */
-      review_after_days: external_exports.number().int().min(1).default(30),
-      /** Quan trọng đến đâu nếu bỏ qua. Cùng thang với `DebtScore.weight`. */
-      weight: zScoreValue,
-      /** Dễ sửa đến đâu. Cùng thang với `DebtScore.ease`. */
-      ease: zScoreValue,
-      /**
-       * Lý do hoãn, bắt buộc, không rỗng. Trường giữ sổ này trung thực — sáu
-       * tháng sau không ai biết lý do hoãn còn đúng không nếu không ghi. Đây là
-       * thứ phân biệt "hoãn có ý thức" với "quên".
-       */
-      why_deferred: zNonEmpty,
-      anchors: zAnchors,
-      /**
-       * Tuỳ chọn CÓ CHỦ ĐÍCH, khác `Module.scope` bắt buộc: phát hiện giữa
-       * phiên thường chưa biết thuộc phạm vi nào, bắt buộc = ép bịa. Luật
-       * validate ở bước sau sẽ nhắc khi thiếu, không phải schema này.
-       */
-      scope: zScopeId.optional(),
-      status: external_exports.enum(ICEBOX_STATUS).default("open"),
-      closed_at: zIsoDate.optional(),
-      closed_reason: zNonEmpty.optional(),
-      promoted_to: zTaskId.optional(),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((i, ctx) => {
-      if (i.status !== "open" && !i.closed_at) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["closed_at"],
-          message: `icebox ${i.id} c\xF3 status="${i.status}" nh\u01B0ng thi\u1EBFu closed_at`
-        });
-      }
-      if (i.status === "closed" && !i.closed_reason) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["closed_reason"],
-          message: `icebox ${i.id} \u0111\xF3ng (status="closed") nh\u01B0ng thi\u1EBFu closed_reason. \u0110\xF3ng m\xE0 kh\xF4ng n\xF3i v\xEC sao th\xEC phi\xEAn sau \u0111\u1EC1 xu\u1EA5t l\u1EA1i \u0111\xFAng th\u1EE9 v\u1EEBa b\u1ECB lo\u1EA1i.`
-        });
-      }
-      if (i.status === "promoted" && !i.promoted_to) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["promoted_to"],
-          message: `icebox ${i.id} c\xF3 status="promoted" nh\u01B0ng thi\u1EBFu promoted_to`
-        });
-      }
-      if (i.promoted_to && i.status !== "promoted") {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["promoted_to"],
-          message: `icebox ${i.id} ch\u1EC9 \u0111\u01B0\u1EE3c c\xF3 promoted_to khi status="promoted"`
-        });
-      }
-      if (i.status === "open" && (i.closed_at !== void 0 || i.closed_reason !== void 0)) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["status"],
-          message: `icebox ${i.id} status="open" nh\u01B0ng c\xF3 closed_at/closed_reason \u2014 \u0111\xF3ng ch\u01B0a x\u1EA3y ra nh\u01B0ng l\u1EA1i c\xF3 d\u1EA5u v\u1EBFt \u0111\xE3 \u0111\xF3ng`
-        });
-      }
-      const t = Date.parse(i.found_at);
-      if (t > Date.now() + CLOCK_SKEW_MS) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["found_at"],
-          message: `icebox ${i.id} c\xF3 found_at \u1EDF t\u01B0\u01A1ng lai (${i.found_at}). Ch\u1EC9 \u0111\u1EB7t tr\u01B0\u1EDDng n\xE0y b\u1EB1ng th\u1EDDi \u0111i\u1EC3m ph\xE1t hi\u1EC7n th\u1EADt.`
-        });
-      }
-    });
-  }
-});
-
-// src/model/verification.ts
-function evalWeakness(v) {
-  if (v.threshold <= 0.5) {
-    return {
-      reason: `ng\u01B0\u1EE1ng ${v.threshold} qu\xE1 th\u1EA5p \u2014 \u0111o\xE1n b\u1EEBa c\u0169ng qua \u0111\u01B0\u1EE3c. Ng\u01B0\u1EE1ng d\u01B0\u1EDBi 0.5 th\xEC "pass" kh\xF4ng mang th\xF4ng tin.`
-    };
-  }
-  return null;
-}
-var VERIFICATION_TIER, EVAL_ADAPTER, zVerificationId, base, zProbeVerification, zEvalVerification, zContractVerification, zVerification;
-var init_verification = __esm({
-  "src/model/verification.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    VERIFICATION_TIER = ["smoke", "full"];
-    EVAL_ADAPTER = ["json", "promptfoo"];
-    zVerificationId = external_exports.string().regex(/^V-[a-z0-9][a-z0-9-]*$/i, "ID verification ph\u1EA3i d\u1EA1ng V-intent-smoke");
-    base = {
-      id: zVerificationId,
-      /**
-       * `smoke` rẻ, chạy thường xuyên; `full` tốn tiền, chạy khi cần.
-       * Eval gọi LLM tốn tiền thật — mặc định `ganas verify` chỉ chạy smoke.
-       */
-      tier: external_exports.enum(VERIFICATION_TIER).default("smoke"),
-      /** Hết hạn theo thời gian kể cả khi không có gì đổi. 0 = không hết hạn. */
-      ttl_days: external_exports.number().int().min(0).default(0),
-      /**
-       * Lệnh thoát 0 ⇒ bỏ qua, đánh dấu `unavailable`, **KHÔNG phải `failing`**.
-       *
-       * Báo fail sai độc ngang báo fresh sai: một khối cần DB sẽ báo động giả mỗi
-       * phiên, và sau vài lần người ta học cách phớt lờ toàn bộ mục cảnh báo —
-       * lúc đó cơ chế còn nguyên nhưng đã chết.
-       */
-      skip_if: external_exports.string().optional(),
-      notes: external_exports.string().optional()
-    };
-    zProbeVerification = external_exports.object({
-      ...base,
-      kind: external_exports.literal("probe"),
-      run: zNonEmpty.describe("l\u1EC7nh shell ch\u1EA1y \u0111\u01B0\u1EE3c, kh\xF4ng t\u01B0\u01A1ng t\xE1c"),
-      expect: zExpect,
-      timeout_ms: external_exports.number().int().positive().max(6e5).optional()
-    });
-    zEvalVerification = external_exports.object({
-      ...base,
-      kind: external_exports.literal("eval"),
-      /** ganas gọi lệnh này và đọc kết quả — nó KHÔNG tự chạy eval. */
-      run: zNonEmpty.describe("l\u1EC7nh ch\u1EA1y b\u1ED9 eval, ghi k\u1EBFt qu\u1EA3 ra $GANAS_EVAL_OUT"),
-      adapter: external_exports.enum(EVAL_ADAPTER).default("json"),
-      threshold: external_exports.number().min(0).max(1),
-      /**
-       * Vùng đệm quanh ngưỡng. Điểm rơi vào [threshold, threshold+margin) là
-       * `marginal` — không phải pass. Eval có nhiễu; coi 0.901 là "đạt" trong khi
-       * ngưỡng là 0.9 chỉ là tự lừa mình.
-       */
-      margin: external_exports.number().min(0).max(0.5).default(0),
-      timeout_ms: external_exports.number().int().positive().max(36e5).optional(),
-      /* --- Dấu vân tay: kết quả eval chỉ đúng với đúng bộ này ----------------- */
-      /** File dataset. Đổi dataset ⇒ kết quả cũ vô nghĩa. */
-      dataset: external_exports.string().optional(),
-      /** File prompt/template. Sửa một dòng ⇒ kết quả cũ vô nghĩa. */
-      prompt: external_exports.string().optional(),
-      /** Model đã dùng. Provider đổi model dưới chân bạn ⇒ kết quả cũ vô nghĩa. */
-      model: external_exports.string().optional()
-    });
-    zContractVerification = external_exports.object({
-      ...base,
-      kind: external_exports.literal("contract"),
-      /** Khối phía sau trong sơ đồ mà cạnh này nối tới. */
-      to: zNonEmpty.describe("id kh\u1ED1i \u0111\xEDch"),
-      /** Lệnh kiểm bổ sung (typecheck, schema check). Thiếu thì chỉ so contract khai báo. */
-      run: external_exports.string().optional()
-    });
-    zVerification = external_exports.discriminatedUnion("kind", [
-      zProbeVerification,
-      zEvalVerification,
-      zContractVerification
-    ]);
-  }
-});
-
-// src/model/module.ts
-function subtreeClaim(glob) {
-  const normalized = glob.split("\\").join("/").replace(/^\.\//, "");
-  const m = /^([^*?[{]+)\/\*\*(\/.*)?$/.exec(normalized);
-  const dir = m?.[1]?.replace(/\/+$/, "");
-  return dir ? dir : void 0;
-}
-function moduleGuideDir(paths) {
-  const claims = /* @__PURE__ */ new Set();
-  for (const p of paths) {
-    const dir = subtreeClaim(p);
-    if (dir !== void 0) claims.add(dir);
-  }
-  return claims.size === 1 ? [...claims][0] : void 0;
-}
-function claimsOf(paths) {
-  return paths.map((raw) => {
-    const normalized = raw.split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
-    const cut = normalized.search(/[*?[{]/);
-    if (cut === -1) return { kind: "file", value: normalized };
-    const head = normalized.slice(0, cut);
-    const slash = head.lastIndexOf("/");
-    return { kind: "subtree", value: slash === -1 ? "" : head.slice(0, slash) };
-  });
-}
-function inside(file, dir) {
-  return dir === "" || file === dir || file.startsWith(`${dir}/`);
-}
-function claimsTouch(a, b) {
-  if (a.kind === "file" && b.kind === "file") return a.value === b.value;
-  if (a.kind === "file") return inside(a.value, b.value);
-  if (b.kind === "file") return inside(b.value, a.value);
-  return inside(a.value, b.value) || inside(b.value, a.value);
-}
-function modulePathsOverlap(a, b) {
-  const ca = claimsOf(a);
-  const cb = claimsOf(b);
-  return ca.some((x) => cb.some((y) => claimsTouch(x, y)));
-}
-var MODULE_NATURE, MODULE_STATUS, zPort, zContract, zModule;
-var init_module = __esm({
-  "src/model/module.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    init_verification();
-    MODULE_NATURE = ["llm", "code", "data", "io"];
-    MODULE_STATUS = ["unmapped", "surveyed", "implemented", "verified"];
-    zPort = external_exports.object({
-      name: zNonEmpty,
-      shape: zNonEmpty.describe('m\xF4 t\u1EA3 ki\u1EC3u, vd "string" ho\u1EB7c "{ intent: string, score: number }"'),
-      /** Cổng không bắt buộc — khối phía sau không đòi thì vẫn tương thích. */
-      optional: external_exports.boolean().default(false),
-      notes: external_exports.string().optional()
-    });
-    zContract = external_exports.object({
-      inputs: external_exports.array(zPort).default([]),
-      outputs: external_exports.array(zPort).default([])
-    });
-    zModule = external_exports.object({
-      id: zModuleId,
-      title: zNonEmpty,
-      scope: zScopeId.optional().describe("ph\u1EA1m vi c\xF4ng vi\u1EC7c ch\u1EE9a kh\u1ED1i n\xE0y; thi\u1EBFu = kh\u1ED1i l\u1EBB, s\u1EBD b\u1ECB c\u1EA3nh b\xE1o"),
-      nature: external_exports.enum(MODULE_NATURE),
-      /** Code của khối nằm ở đâu. Cũng là căn cứ tính STALE khi file đổi. */
-      paths: external_exports.array(zGlob).default([]),
-      entrypoints: external_exports.array(zNonEmpty).default([]),
-      contract: zContract.default({ inputs: [], outputs: [] }),
-      /** Cạnh của sơ đồ: khối này cần khối nào chạy trước. */
-      depends_on: external_exports.array(zModuleId).default([]),
-      status: external_exports.enum(MODULE_STATUS).default("unmapped"),
-      owner: zHandle.optional(),
-      /** Rỗng ⇒ khối `unverified` ⇒ mọi luồng đi qua nó đều không tin được. */
-      verify: external_exports.array(zVerification).default([]),
-      /**
-       * Kỹ năng gắn với khối — mô tả cách làm việc trong vùng code này (quy ước
-       * riêng, cách chunking riêng, v.v.). Gán một lần khi khảo sát/định nghĩa
-       * khối, không phải lúc chẻ task — mọi task chạm khối này tự động thấy skill
-       * qua brief, không cần khai lại.
-       */
-      skills: external_exports.array(zNonEmpty).default([]),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((m, ctx) => {
-      if (m.depends_on.includes(m.id)) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["depends_on"],
-          message: `kh\u1ED1i ${m.id} kh\xF4ng th\u1EC3 ph\u1EE5 thu\u1ED9c ch\xEDnh n\xF3`
-        });
-      }
-      const dup = m.depends_on.find((d, i) => m.depends_on.indexOf(d) !== i);
-      if (dup) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["depends_on"],
-          message: `kh\u1ED1i ${m.id} li\u1EC7t k\xEA ${dup} hai l\u1EA7n`
-        });
-      }
-      const vids = m.verify.map((v) => v.id);
-      const dupV = vids.find((v, i) => vids.indexOf(v) !== i);
-      if (dupV) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["verify"],
-          message: `kh\u1ED1i ${m.id} c\xF3 hai b\u1EB1ng ch\u1EE9ng tr\xF9ng id "${dupV}"`
-        });
-      }
-      if (m.status === "verified" && m.verify.length === 0) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["status"],
-          message: `kh\u1ED1i ${m.id} khai status "verified" nh\u01B0ng \`verify\` r\u1ED7ng \u2014 kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng n\xE0o th\xEC d\u1EF1a v\xE0o \u0111\xE2u m\xE0 n\xF3i \u0111\xE3 verify?`
-        });
-      }
-      if (m.nature === "llm" && m.verify.length > 0 && !m.verify.some((v) => v.kind === "eval")) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["verify"],
-          message: `kh\u1ED1i ${m.id} c\xF3 nature "llm" nh\u01B0ng kh\xF4ng c\xF3 b\u1EB1ng ch\u1EE9ng n\xE0o kind "eval". Probe ki\u1EC3m \u0111\u01B0\u1EE3c c\u1EA5u tr\xFAc, kh\xF4ng ki\u1EC3m \u0111\u01B0\u1EE3c h\xE0nh vi c\u1EE7a LLM.`
-        });
-      }
-      if (m.status !== "unmapped" && m.paths.length === 0) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["paths"],
-          message: `kh\u1ED1i ${m.id} \u0111\xE3 ${m.status} nh\u01B0ng ch\u01B0a khai \`paths\` \u2014 code c\u1EE7a n\xF3 n\u1EB1m \u1EDF \u0111\xE2u?`
-        });
-      }
-    });
-  }
-});
-
-// src/model/proposal.ts
-var PROPOSAL_STATUS, zPromotedTarget, zProposal;
-var init_proposal = __esm({
-  "src/model/proposal.ts"() {
-    "use strict";
-    init_zod();
-    init_anchor();
-    init_common();
-    init_knowledge();
-    PROPOSAL_STATUS = ["pending", "approved", "rejected", "superseded"];
-    zPromotedTarget = external_exports.union([zDesignId, zTaskId, zIceboxId], {
-      errorMap: () => ({
-        message: "`promoted_to` ph\u1EA3i l\xE0 ID design (D-001), task (T-001) ho\u1EB7c icebox (ICE-001)"
-      })
-    });
-    zProposal = external_exports.object({
-      id: zProposalId,
-      title: zNonEmpty,
-      /** Bắt buộc — xem docstring trên. */
-      scope: zScopeId,
-      /**
-       * Chỗ lệch là gì. Tách khỏi `proposed_change` có chủ đích: người duyệt phải
-       * đọc được vấn đề trước khi đọc giải pháp, nếu không thì mọi đề xuất đều
-       * "nghe hợp lý" — đó là cách một refactor không cần thiết được duyệt.
-       */
-      problem: zNonEmpty,
-      proposed_change: zNonEmpty,
-      /**
-       * Bằng chứng, không rỗng. Cùng luật đã áp cho fact/claim
-       * (`.claude/rules/ganas-knowledge.md`): không chỉ được nguồn thì không phải
-       * phát hiện, chỉ là ý kiến — và ý kiến thì không đáng để người bỏ thời gian
-       * duyệt.
-       */
-      anchors: zAnchors,
-      /** Quan trọng đến đâu nếu bỏ qua. Cùng thang `DebtScore.weight`. */
-      weight: zScoreValue,
-      /** Dễ sửa đến đâu. Cùng thang `DebtScore.ease`. */
-      ease: zScoreValue,
-      /** Thời điểm phát hiện. KHÔNG default `now` — lệnh `new` sẽ điền. */
-      found_at: zIsoDate,
-      status: external_exports.enum(PROPOSAL_STATUS).default("pending"),
-      /**
-       * Ai đã trả lời, và lúc nào. Người, luôn luôn: duyệt là việc của người,
-       * cùng luật đã áp cho `Decision.decided_by`. Model tự điền hai trường này
-       * là giả mạo một quyết định chưa xảy ra — hook chặn ở tầng ghi file.
-       */
-      decided_by: zHandle.optional(),
-      decided_at: zIsoDate.optional(),
-      /**
-       * Bắt buộc khi từ chối. "Không refactor" mà không nói vì sao thì phiên sau
-       * đề xuất lại đúng thứ vừa bị loại, và người duyệt phải trả lời hai lần.
-       */
-      why_rejected: zNonEmpty.optional(),
-      /** Cạnh MỘT CHIỀU tới thứ sinh ra từ đề xuất này. */
-      promoted_to: zPromotedTarget.optional(),
-      /** Đề xuất cũ mà bản này thay thế. Cùng khuôn `Design.supersedes`. */
-      supersedes: external_exports.array(zProposalId).default([]),
-      notes: external_exports.string().optional()
-    }).strict().superRefine((p, ctx) => {
-      const decided = p.status === "approved" || p.status === "rejected";
-      if (decided && !p.decided_by) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["decided_by"],
-          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 status="${p.status}" nh\u01B0ng thi\u1EBFu decided_by \u2014 duy\u1EC7t hay t\u1EEB ch\u1ED1i \u0111\u1EC1u l\xE0 vi\u1EC7c c\u1EE7a ng\u01B0\u1EDDi, ph\u1EA3i ghi t\xEAn ng\u01B0\u1EDDi \u0111\xF3.`
-        });
-      }
-      if (decided && !p.decided_at) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["decided_at"],
-          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 status="${p.status}" nh\u01B0ng thi\u1EBFu decided_at`
-        });
-      }
-      if (p.status === "rejected" && !p.why_rejected) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["why_rejected"],
-          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} b\u1ECB t\u1EEB ch\u1ED1i nh\u01B0ng thi\u1EBFu why_rejected. T\u1EEB ch\u1ED1i kh\xF4ng n\xF3i l\xFD do th\xEC phi\xEAn sau \u0111\u1EC1 xu\u1EA5t l\u1EA1i \u0111\xFAng th\u1EE9 v\u1EEBa b\u1ECB lo\u1EA1i.`
-        });
-      }
-      if (p.status === "pending") {
-        for (const [field, value] of [
-          ["decided_by", p.decided_by],
-          ["decided_at", p.decided_at],
-          ["why_rejected", p.why_rejected]
-        ]) {
-          if (value !== void 0) {
-            ctx.addIssue({
-              code: external_exports.ZodIssueCode.custom,
-              path: [field],
-              message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF2n status="pending" nh\u01B0ng \u0111\xE3 c\xF3 ${field} \u2014 ch\u01B0a ai tr\u1EA3 l\u1EDDi m\xE0 \u0111\xE3 c\xF3 d\u1EA5u v\u1EBFt \u0111\xE3 tr\u1EA3 l\u1EDDi.`
-            });
-          }
-        }
-      }
-      if (p.promoted_to && p.status !== "approved") {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["promoted_to"],
-          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} ch\u1EC9 \u0111\u01B0\u1EE3c c\xF3 promoted_to khi status="approved"`
-        });
-      }
-      if (p.supersedes.includes(p.id)) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["supersedes"],
-          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} kh\xF4ng th\u1EC3 thay th\u1EBF ch\xEDnh n\xF3`
-        });
-      }
-      const dup = p.supersedes.find((x, i) => p.supersedes.indexOf(x) !== i);
-      if (dup) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["supersedes"],
-          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} li\u1EC7t k\xEA ${dup} hai l\u1EA7n`
-        });
-      }
-      if (Date.parse(p.found_at) > Date.now() + CLOCK_SKEW_MS) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["found_at"],
-          message: `\u0111\u1EC1 xu\u1EA5t ${p.id} c\xF3 found_at \u1EDF t\u01B0\u01A1ng lai (${p.found_at})`
-        });
-      }
-    });
-  }
-});
-
-// src/model/scope.ts
-var SEMVER, SCOPE_STATUS, zScope;
-var init_scope = __esm({
-  "src/model/scope.ts"() {
-    "use strict";
-    init_zod();
-    init_common();
-    init_verification();
-    SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
-    SCOPE_STATUS = ["draft", "active", "delivered"];
-    zScope = external_exports.object({
-      id: zScopeId,
-      title: zNonEmpty,
-      version: external_exports.string().regex(SEMVER, "version ph\u1EA3i theo semver, vd 0.3.0"),
-      /**
-       * Người ký nghiệm thu. Không ai ký thì không ai nghiệm thu được — luật
-       * `scope/without-owner` cảnh báo khi phạm vi `active` mà thiếu.
-       */
-      owner: zHandle.optional(),
-      status: external_exports.enum(SCOPE_STATUS).default("draft"),
-      /** Ranh giới code của phạm vi, gián tiếp qua `module.paths`. */
-      modules: external_exports.array(zModuleId).min(1, "ph\u1EA1m vi ph\u1EA3i ch\u1EE9a \xEDt nh\u1EA5t m\u1ED9t kh\u1ED1i"),
-      /** Khối đầu luồng — dùng để phát hiện khối mồ côi. */
-      entry: zModuleId,
-      /** Nghiệm thu ở mức phạm vi — chạy trên luồng ghép, không phải từng khối. */
-      acceptance: external_exports.array(zVerification).default([]),
-      /**
-       * Bối cảnh của phạm vi: cái gì TRONG, cái gì NGOÀI, đã hỏi ai.
-       *
-       * Mọi record khác (module, task, fact, claim, decision, goal, design,
-       * verification) đều nhận `notes`; scope là ngoại lệ duy nhất, nên phần
-       * đáng ghi nhất của một phạm vi phải nhét vào comment YAML — mà comment
-       * thì `ganas brief` không đọc được.
-       */
-      notes: external_exports.string().optional()
-    }).strict().superRefine((s, ctx) => {
-      const dup = s.modules.find((m, i) => s.modules.indexOf(m) !== i);
-      if (dup) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["modules"],
-          message: `ph\u1EA1m vi ${s.id} li\u1EC7t k\xEA kh\u1ED1i ${dup} hai l\u1EA7n`
-        });
-      }
-      if (!s.modules.includes(s.entry)) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["entry"],
-          message: `ph\u1EA1m vi ${s.id} khai entry: ${s.entry} nh\u01B0ng kh\u1ED1i \u0111\xF3 kh\xF4ng n\u1EB1m trong \`modules\``
-        });
-      }
-      const ids = s.acceptance.map((a) => a.id);
-      const dupA = ids.find((a, i) => ids.indexOf(a) !== i);
-      if (dupA) {
-        ctx.addIssue({
-          code: external_exports.ZodIssueCode.custom,
-          path: ["acceptance"],
-          message: `ph\u1EA1m vi ${s.id} c\xF3 hai ti\xEAu ch\xED nghi\u1EC7m thu tr\xF9ng id "${dupA}"`
-        });
-      }
-    });
-  }
-});
-
-// src/model/index.ts
-var init_model = __esm({
-  "src/model/index.ts"() {
-    "use strict";
-    init_anchor();
-    init_common();
-    init_config();
-    init_design();
-    init_goal();
-    init_icebox();
-    init_knowledge();
-    init_module();
-    init_proposal();
-    init_scope();
-    init_task();
-    init_verification();
-  }
-});
-
 // src/verify/adapters.ts
 import { readFile as readFile4 } from "node:fs/promises";
 function num(value) {
@@ -27015,7 +27132,17 @@ function freshnessMark(state) {
   return `\u26A0 [${state.freshness.toUpperCase()}]`;
 }
 function decide(args) {
-  const { entry, currentDef, current, ttlDays, depsChangedAt, changedFile, depsNow, now } = args;
+  const {
+    entry,
+    currentDef,
+    current,
+    ttlDays,
+    depsChangedAt,
+    changedFile,
+    depsNow,
+    entryCommitStatus,
+    now
+  } = args;
   if (!entry) {
     return {
       freshness: "never_verified",
@@ -27078,6 +27205,13 @@ function decide(args) {
       };
   }
   const verifiedAt = Date.parse(entry.at);
+  if (entryCommitStatus === "rewritten") {
+    return {
+      freshness: "stale",
+      reason: `b\u1EB1ng ch\u1EE9ng ch\u1EE9ng t\u1EA1i commit \`${entry.git}\` \u2014 commit \u0111\xF3 kh\xF4ng c\xF2n n\u1EB1m trong l\u1ECBch s\u1EED c\u1EE7a HEAD (rebase/amend/\u0111\u1ED5i nh\xE1nh)`,
+      action: "ch\u1EA1y l\u1EA1i `ganas verify`"
+    };
+  }
   if (entry.deps !== void 0 && depsNow !== void 0) {
     if (entry.deps !== depsNow) {
       return {
@@ -27125,6 +27259,14 @@ async function computeFreshness(graph, opts = {}) {
     mtimeCache.set(rel, value);
     return value;
   };
+  const commitCache = /* @__PURE__ */ new Map();
+  const commitStatusOf = (sha) => {
+    const cached2 = commitCache.get(sha);
+    if (cached2) return cached2;
+    const value = commitStatus(graph.root, sha);
+    commitCache.set(sha, value);
+    return value;
+  };
   for (const target of targets) {
     const entry = lastFor(graph.ledger, target.id);
     const globs = globsOf(target);
@@ -27148,6 +27290,7 @@ async function computeFreshness(graph, opts = {}) {
       ttlDays: target.ttlDays,
       depsChangedAt,
       changedFile,
+      entryCommitStatus: entry?.git !== void 0 ? await commitStatusOf(entry.git) : void 0,
       now
     });
     const history = historyFor(graph.ledger, target.id, 5).map((e) => e.score).filter((s) => s !== void 0);
@@ -37889,10 +38032,11 @@ async function evaluateTreeCriteria(root, criteria) {
 }
 
 // src/commit.ts
+init_model();
 init_exec();
 init_fsprobe();
 function buildCommitMessage(graph, task, gate) {
-  const lines = [`${task.id}: ${task.title}`, "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
+  const lines = [commitSubject(task, task.implements), "", "\u0110i\u1EC1u ki\u1EC7n ho\xE0n th\xE0nh:"];
   for (const r of gate.results) {
     const mark = r.status === "pass" ? "\u2713" : r.status === "pending_human" ? "\u2026" : "\u2717";
     lines.push(`  ${mark} ${r.label}`);
@@ -38833,14 +38977,14 @@ function validateGraph(graph, opts = {}) {
       }
     });
     const allClosed = d.serves.length > 0 && d.serves.every((g) => graph.goals.get(g)?.value.status === "closed");
-    if (allClosed && d.status !== "archived" && d.status !== "superseded") {
+    if (allClosed && d.status !== "archived" && d.status !== "superseded" && d.status !== "done") {
       diags.push({
         severity: "warning",
         code: "spine/design-orphaned",
         message: `design ${d.id} m\u1ED3 c\xF4i: m\u1ECDi goal n\xF3 ph\u1EE5c v\u1EE5 \u0111\xE3 closed`,
         file: design.file,
         line: at(graph, design, "status"),
-        hint: `\u0110\u1EB7t status: archived, ho\u1EB7c tr\u1ECF serves sang goal \u0111ang active.`
+        hint: `Ch\u1EB7ng c\xF2n dang d\u1EDF d\u01B0\u1EDBi goal \u0111\xE3 \u0111\xF3ng: \u0111\xF3ng n\xF3 (status: done + done_at), ho\u1EB7c tr\u1ECF serves sang goal \u0111ang active.`
       });
     }
     d.decisions.forEach((decId, i) => {
@@ -39811,6 +39955,11 @@ Kh\xF4ng c\xF3 n\u1EE3 trong ph\u1EA1m vi ${scopeId}. Ngo\xE0i ph\u1EA1m vi n\xE
 function quote(p) {
   return `'${p.replace(/'/g, `'\\''`)}'`;
 }
+async function resetStagedPaths(root, paths) {
+  for (const p of paths) {
+    await runShell(`git reset -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
+  }
+}
 function notFullyStaged(e) {
   return e.x === "?" || e.y !== " ";
 }
@@ -39897,7 +40046,8 @@ ${message2}`
   const ganasChanged = allGanas ? [] : await gitChangedPaths(root, [GANAS_DIR]);
   const owned = ownedPaths(task, ganasChanged);
   const foreign = foreignPaths(task, ganasChanged);
-  for (const p of [...allGanas ? [GANAS_DIR] : owned, ...codePaths]) {
+  const addedPaths = [...allGanas ? [GANAS_DIR] : owned, ...codePaths];
+  for (const p of addedPaths) {
     await runShell(`git add -- ${quote(p)}`, { cwd: root, timeoutMs: 15e3 });
   }
   const staged = await runShell("git diff --cached --quiet", { cwd: root, timeoutMs: 1e4 });
@@ -39922,6 +40072,7 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
       if (originalTaskFile !== null) {
         await writeFile4(join10(root, sourced.file), originalTaskFile, "utf8");
       }
+      await resetStagedPaths(root, addedPaths);
       throw new GanasError(
         report.trimStart() + `
   Th\u1EADt s\u1EF1 c\u1EA7n b\u1ECF qua th\xEC \`ganas commit ${taskId} --no-recheck\` \u2014 nh\u01B0ng bi\u1EBFt r\xF5 l\xE0 \u0111ang commit m\u1ED9t c\xE2y ch\u01B0a ai ki\u1EC3m.
@@ -39946,6 +40097,7 @@ Commit ch\xFAng c\xF9ng task s\u1EDF h\u1EEFu, ho\u1EB7c \`git add\` tay n\u1EBF
       throw new GanasError(`git commit th\u1EA5t b\u1EA1i:
 ${result.stderr || result.stdout}`);
     }
+    if (willClose && sessionId) await releaseSession(root, sessionId);
     process.stdout.write(
       `\u2713 \u0110\xE3 commit cho ${taskId}.
 
@@ -40672,6 +40824,11 @@ ch\u01B0a bi\u1EBFt v\xE0 \u0111\u01B0a v\xE0o \`open_questions\`.
 Kh\xF4ng n\xE2ng claim th\xE0nh fact n\u1EBFu ch\u01B0a ch\u1EA1y probe. Kh\xF4ng s\u1EEDa \`last_verified_at\`
 b\u1EB1ng tay.`;
 var BRIEF_LENGTH_WARNING_CHARS = 14e3;
+var REPORT_SECTIONS = [
+  "L\u1EC7ch so v\u1EDBi \u0111\u1EB7c t\u1EA3",
+  "Quy\u1EBFt \u0111\u1ECBnh t\u1EF1 \xFD",
+  "Ph\xE1t hi\u1EC7n / nghi ng\u1EDD"
+];
 function relevantLegacyClaims(graph, task) {
   const paths = new Set(task.context_contract.must_read.map((m) => m.path));
   const out = [];
@@ -40871,8 +41028,33 @@ Phi\xEAn ch\xEDnh l\xE0 ng\u01B0\u1EDDi \u0110I\u1EC0U PH\u1ED0I: ch\u1ECDn task
 
 Hai l\xFD do, kh\xF4ng ph\u1EA3i m\u1ED9t: context phi\xEAn ch\xEDnh kh\xF4ng b\u1ECB chi ti\u1EBFt th\u1EF1c thi nu\u1ED1t m\u1EA5t, v\xE0 tier th\u1EA5p kh\xF4ng ngh\u0129 qu\xE1 tay cho vi\u1EC7c c\u01A1 h\u1ECDc.
 
-` + parallelBlock(graph, t) + `> N\u1EBFu B\u1EA0N \u0110ANG L\xC0 sub-agent nh\u1EADn ch\xEDnh task n\xE0y: l\xE0m lu\xF4n, \u0111\u1EEBng giao ti\u1EBFp n\u1EEFa.`
+` + reportTemplateBlock() + autoLoopBlock(graph, t) + parallelBlock(graph, t) + `> N\u1EBFu B\u1EA0N \u0110ANG L\xC0 sub-agent nh\u1EADn ch\xEDnh task n\xE0y: l\xE0m lu\xF4n, \u0111\u1EEBng giao ti\u1EBFp n\u1EEFa.`
   );
+}
+function reportTemplateBlock() {
+  return `K\u1EBFt th\xFAc l\u01B0\u1EE3t tr\u1EA3 l\u1EDDi b\u1EB1ng \u0111\xFAng m\u1EABu b\xE1o c\xE1o d\u01B0\u1EDBi \u0111\xE2y \u2014 hook \`SubagentStop\` \u0111\u1ED1i chi\u1EBFu b\u1EB1ng \u0110\xDANG ba ti\xEAu \u0111\u1EC1 n\xE0y (heading Markdown), kh\xF4ng \u0111\u1ECDc n\u1ED9i dung b\xEAn d\u01B0\u1EDBi:
+
+` + bullet(REPORT_SECTIONS.map((s) => `\`## ${s}\``)) + `
+
+R\u1ED3i m\u1ED9t d\xF2ng k\u1EBFt lu\u1EADn: \`K\u1EBFt lu\u1EADn: XONG\` ho\u1EB7c \`K\u1EBFt lu\u1EADn: CH\u1EB6N: <l\xFD do m\u1ED9t d\xF2ng>\`.
+
+`;
+}
+function autoLoopBlock(graph, t) {
+  const loop = autoLoopFor2(graph.config);
+  if (!loop.enabled) return "";
+  return `**V\xF2ng l\u1EB7p t\u1EF1 \u0111\u1ED9ng \u0111ang B\u1EACT** (\`auto_loop.enabled: true\`) \u2014 sau khi \`ganas gate\` b\xE1o \`${t.id}\` \u0111\xE3 xanh, \u0110\u1EEANG d\u1EEBng l\u1EA1i ch\u1EDD ng\u01B0\u1EDDi, t\u1EF1 l\xE0m ti\u1EBFp:
+
+` + bullet([
+    `\`ganas commit\` \u2014 commit task v\u1EEBa xong.`,
+    `\`ganas next\` \u2014 l\u1EA5y task k\u1EBF ti\u1EBFp.`,
+    `Giao sub-agent k\u1EBF \u0111\xFAng nh\u01B0 m\u1EE5c "Giao vi\u1EC7c" \u1EDF tr\xEAn, cho task m\u1EDBi \u0111\xF3.`,
+    `D\u1EEBng l\u1EA1i, kh\xF4ng g\u1ECDi \`ganas next\` n\u1EEFa, khi: h\u1EBFt task ch\u01B0a \`done\` trong c\xF9ng design \`${t.implements}\`; ho\u1EB7c m\u1ED9t ti\xEAu ch\xED \`kind: manual\` \u0111\xF2i ng\u01B0\u1EDDi x\xE1c nh\u1EADn; ho\u1EB7c b\xE1o c\xE1o c\u1EE7a sub-agent t\u1EF1 khai \`K\u1EBFt lu\u1EADn: CH\u1EB6N:\`.`
+  ]) + `
+
+Tr\u1EA7n \`${loop.max_iterations}\` v\xF2ng li\xEAn ti\u1EBFp trong c\xF9ng m\u1ED9t task \u2014 ch\u1EA1m tr\u1EA7n th\xEC d\u1EEBng l\u1EA1i v\xE0 b\xE1o ng\u01B0\u1EDDi, \u0111\u1EEBng t\u1EF1 n\u1EDBi tr\u1EA7n l\xEAn.
+
+`;
 }
 function parallelBlock(graph, t) {
   const others = parallelCandidates(graph, t);
